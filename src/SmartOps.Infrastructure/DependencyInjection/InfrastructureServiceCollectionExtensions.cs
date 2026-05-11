@@ -14,6 +14,8 @@ using SmartOps.Infrastructure.Modules.Identity.Stores;
 using SmartOps.Infrastructure.MultiTenancy;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence.Factories;
+using SmartOps.Domain.Modules.Student.Interfaces;
+using SmartOps.Infrastructure.Persistence.Repositories;
 
 namespace SmartOps.Infrastructure.DependencyInjection;
 
@@ -31,6 +33,8 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
         services.AddScoped<DapperContext>();
+        
+        services.AddScoped<IStudentRepository, StudentRepository>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))

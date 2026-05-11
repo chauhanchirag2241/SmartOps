@@ -14,4 +14,11 @@ public static class DatabaseConfig
     public const string TableSchools = "schools";
     public const string TableUserSchoolMappings = "userschoolmappings";
     public const string TableRefreshTokens = "refreshtokens";
+    
+    // Students Module
+    public const string TableStudents = "students";
+    public const string TableStudentParents = "studentparents";
+    public const string TableStudentAcademics = "studentacademics";
+    public const string TableStudentPreviousSchools = "studentpreviousschools";
+    public const string TableStudentFeeConfigs = "studentfeeconfigs";
 }

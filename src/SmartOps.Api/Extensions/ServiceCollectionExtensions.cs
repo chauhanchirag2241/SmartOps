@@ -140,4 +140,20 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddSmartOpsCors(this IServiceCollection services, IConfiguration configuration)
+    {
+        string[] origins = configuration.GetSection("CorsList").Get<string[]>() ?? Array.Empty<string>();
+
+        services.AddCors(options =>
+        {
+            options.AddPolicy("DefaultPolicy", builder =>
+            {
+                builder.WithOrigins(origins)
+                       .AllowAnyMethod()
+                       .AllowAnyHeader();
+            });
+        });
+        return services;
+    }
 }

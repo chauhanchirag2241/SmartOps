@@ -13,6 +13,7 @@ builder.Services.AddFluentValidation();
 builder.Services.AddSwaggerWithJwt();
 builder.Services.AddMultiTenancy();
 builder.Services.AddSerilog(builder.Configuration);
+builder.Services.AddSmartOpsCors(builder.Configuration);
 
 builder.Host.UseSerilog(Log.Logger, dispose: true);
 
@@ -31,6 +32,8 @@ app.UseRequestLoggingMiddleware();
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+app.UseCors("DefaultPolicy");
 
 app.UseTenantResolver();
 

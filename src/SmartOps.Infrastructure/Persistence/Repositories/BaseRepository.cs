@@ -100,7 +100,7 @@ public abstract class BaseRepository
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Soft-deletes a record by setting isactive = false.
+    /// Soft-deletes a record by setting isactive = false and updating audit fields.
     /// </summary>
     protected async Task SoftDeleteAsync(
         IDbConnection connection,
@@ -109,8 +109,43 @@ public abstract class BaseRepository
         Guid id,
         IDbTransaction? transaction = null)
     {
-        string sql = $"UPDATE {schema}.{tableName} SET isactive = false WHERE id = @Id;";
-        await connection.ExecuteAsync(sql, new { Id = id }, transaction);
+        var utcNow = DateTime.UtcNow;
+        var actorId = ResolveInsertActor();
+
+        string sql = $@"
+            UPDATE {schema}.{tableName} 
+            SET isactive = false, 
+                updatedby = @ActorId, 
+                updatedon = @UtcNow,
+                versionno = versionno + 1
+            WHERE id = @Id AND isactive = true;";
+
+        await connection.ExecuteAsync(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, transaction);
+    }
+
+    /// <summary>
+    /// Soft-deletes related records by a specific column (e.g., studentid).
+    /// </summary>
+    protected async Task SoftDeleteRelatedAsync(
+        IDbConnection connection,
+        string schema,
+        string tableName,
+        string foreignKeyColumn,
+        Guid foreignKeyId,
+        IDbTransaction? transaction = null)
+    {
+        var utcNow = DateTime.UtcNow;
+        var actorId = ResolveInsertActor();
+
+        string sql = $@"
+            UPDATE {schema}.{tableName} 
+            SET isactive = false, 
+                updatedby = @ActorId, 
+                updatedon = @UtcNow,
+                versionno = versionno + 1
+            WHERE {foreignKeyColumn.ToLowerInvariant()} = @Id AND isactive = true;";
+
+        await connection.ExecuteAsync(sql, new { Id = foreignKeyId, ActorId = actorId, UtcNow = utcNow }, transaction);
     }
 
     // ════════════════════════════════════════════════════════════

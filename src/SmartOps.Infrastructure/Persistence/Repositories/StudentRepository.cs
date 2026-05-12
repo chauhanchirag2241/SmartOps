@@ -284,6 +284,33 @@ public class StudentRepository : BaseRepository, IStudentRepository
     public async Task DeleteStudentAsync(Guid id)
     {
         var connection = await Context.GetGlobalConnectionAsync();
-        await SoftDeleteAsync(connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, id);
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // 1. Soft delete the main student record
+            await SoftDeleteAsync(connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, id, transaction);
+
+            // 2. Soft delete related records (Cascade Soft Delete)
+            var relatedTables = new[]
+            {
+                DatabaseConfig.TableStudentParents,
+                DatabaseConfig.TableStudentAcademics,
+                DatabaseConfig.TableStudentPreviousSchools,
+                DatabaseConfig.TableStudentFeeConfigs
+            };
+
+            foreach (var table in relatedTables)
+            {
+                await SoftDeleteRelatedAsync(connection, DatabaseConfig.Schema_Global, table, "StudentId", id, transaction);
+            }
+
+            transaction.Commit();
+        }
+        catch (Exception)
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 }

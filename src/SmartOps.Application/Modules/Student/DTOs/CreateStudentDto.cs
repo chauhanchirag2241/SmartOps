@@ -80,7 +80,7 @@ public static class StudentMappingExtensions
             Address = dto.Address,
             PhotoUrl = dto.PhotoUrl,
             Remarks = dto.Remarks,
-            Status = "Active",
+            //Status = "Active",
             Parents = dto.Parents.Select(p => new StudentParentEntity
             {
                 RelationType = p.RelationType,
@@ -115,3 +115,6 @@ public static class StudentMappingExtensions
         };
     }
 }
+
+/// <summary>Standard API payload after creating a student record.</summary>
+public sealed record CreateStudentResponse(string Message, Guid StudentId);

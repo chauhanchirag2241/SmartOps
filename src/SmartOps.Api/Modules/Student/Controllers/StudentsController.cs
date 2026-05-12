@@ -1,77 +1,97 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Student.DTOs;
 using SmartOps.Domain.Common.Enums;
+using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
+using SmartOps.Domain.Modules.Student.Models;
 
 namespace SmartOps.Api.Modules.Student.Controllers;
 
+/// <summary>
+/// Student CRUD + list. Pattern: thin controller → <see cref="IStudentRepository"/> (copy for other modules).
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class StudentsController : ControllerBase
+public sealed class StudentsController(IStudentRepository studentRepository) : ControllerBase
 {
-    private readonly IStudentRepository _studentRepository;
-
-    public StudentsController(IStudentRepository studentRepository)
-    {
-        _studentRepository = studentRepository;
-    }
-
+    /// <summary>Create a student and related rows (parents, academics, etc.).</summary>
     [HttpPost]
     [AllowAnonymous]
-    public async Task<IActionResult> CreateStudent([FromBody] CreateStudentDto request)
+    [ProducesResponseType(typeof(CreateStudentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateStudentResponse>> CreateStudent(
+        [FromBody] CreateStudentDto request,
+        CancellationToken cancellationToken)
     {
-        if (request == null)
+        if (request is null)
         {
             return BadRequest("Student data is required.");
         }
 
         var entity = request.ToEntity();
-        
-        var studentId = await _studentRepository.CreateStudentAsync(entity);
+        var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
-        return Ok(new { Message = "Student created successfully", StudentId = studentId });
+        return Ok(new CreateStudentResponse("Student created successfully", studentId));
     }
 
+    /// <summary>Paged list with optional search, sort, and status filter.</summary>
     [HttpGet]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(PagedResult<StudentListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllStudents(
-        [FromQuery] int pageIndex = 1, 
-        [FromQuery] int pageSize = 10, 
-        [FromQuery] string? searchTerm = null, 
-        [FromQuery] string? sortColumn = null, 
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? sortColumn = null,
         [FromQuery] string? sortDirection = null,
-        [FromQuery] StudentFilter filter = StudentFilter.Active)
+        [FromQuery] StudentFilter filter = StudentFilter.Active,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _studentRepository.GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter);
+        var result = await studentRepository
+            .GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, cancellationToken)
+            .ConfigureAwait(false);
+
         return Ok(result);
     }
 
-    [HttpGet("{id}")]
+    /// <summary>Full student graph by id (active only).</summary>
+    [HttpGet("{id:guid}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetStudentById(Guid id)
+    [ProducesResponseType(typeof(StudentEntity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StudentEntity>> GetStudentById(Guid id, CancellationToken cancellationToken)
     {
-        var student = await _studentRepository.GetStudentByIdAsync(id);
-        if (student == null) return NotFound();
-        return Ok(student);
+        var student = await studentRepository.GetStudentByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        return student is null ? NotFound() : Ok(student);
     }
 
-    [HttpPut("{id}")]
+    /// <summary>Replace student aggregate (body <see cref="StudentEntity.Id"/> must match route).</summary>
+    [HttpPut("{id:guid}")]
     [AllowAnonymous]
-    public async Task<IActionResult> UpdateStudent(Guid id, [FromBody] StudentEntity student)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateStudent(Guid id, [FromBody] StudentEntity student, CancellationToken cancellationToken)
     {
-        if (id != student.Id) return BadRequest();
-        await _studentRepository.UpdateStudentAsync(student);
+        if (id != student.Id)
+        {
+            return BadRequest("Route id and payload id must match.");
+        }
+
+        await studentRepository.UpdateStudentAsync(student, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
 
-    [HttpDelete("{id}")]
+    /// <summary>Soft-delete student and related rows.</summary>
+    [HttpDelete("{id:guid}")]
     [AllowAnonymous]
-    public async Task<IActionResult> DeleteStudent(Guid id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteStudent(Guid id, CancellationToken cancellationToken)
     {
-        await _studentRepository.DeleteStudentAsync(id);
+        await studentRepository.DeleteStudentAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
 }

@@ -18,7 +18,7 @@ public class StudentEntity : AuditableEntity
     public string? AadhaarNo { get; set; }
     public string? Address { get; set; }
     public string? PhotoUrl { get; set; }
-    public string Status { get; set; } = "Active";
+    //public string Status { get; set; } = "Active";
     public string? Remarks { get; set; }
     
     // Navigation Properties

@@ -1,5 +1,4 @@
 using Dapper;
-
 using SmartOps.Application.Common.Abstractions;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
@@ -8,327 +7,430 @@ using SmartOps.Domain.Modules.Student.Interfaces;
 using SmartOps.Domain.Modules.Student.Models;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Shared.Configuration;
-
 using System.Data;
 
 namespace SmartOps.Infrastructure.Persistence.Repositories;
 
-public class StudentRepository : BaseRepository, IStudentRepository
+/// <summary>
+/// Student aggregate persistence. Pattern: connection → <see cref="BaseRepository"/> transaction helpers for writes;
+/// list query split into filter / order / SQL builders as a template for other modules.
+/// </summary>
+public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
-    public StudentRepository(DapperContext context, ICurrentUserService currentUser) : base(context, currentUser)
+    private static readonly string[] RelatedTablesForSoftDelete =
+    {
+        DatabaseConfig.TableStudentParents,
+        DatabaseConfig.TableStudentAcademics,
+        DatabaseConfig.TableStudentPreviousSchools,
+        DatabaseConfig.TableStudentFeeConfigs,
+    };
+
+    public StudentRepository(DapperContext context, ICurrentUserService currentUser)
+        : base(context, currentUser)
     {
     }
 
-    public async Task<Guid> CreateStudentAsync(StudentEntity student)
+    /// <inheritdoc />
+    public async Task<Guid> CreateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;
-        if (student.Id == Guid.Empty) student.Id = Guid.NewGuid();
+        if (student.Id == Guid.Empty)
+        {
+            student.Id = Guid.NewGuid();
+        }
+
         EnsureInsertAudit(student, utcNow);
 
-        var connection = await Context.GetGlobalConnectionAsync();
-        using var transaction = connection.BeginTransaction();
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        try
+        return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var studentId = await InsertAsync<StudentEntity>(
-                connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, transaction);
+            var studentId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx)
+                .ConfigureAwait(false);
             student.Id = studentId;
 
-            if (student.Parents != null && student.Parents.Any())
-            {
-                foreach (var parent in student.Parents)
-                {
-                    parent.Id = Guid.NewGuid();
-                    parent.StudentId = studentId;
-                    EnsureInsertAudit(parent, utcNow);
-                    await InsertWithoutReturnAsync<StudentParentEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentParents, parent, transaction);
-                }
-            }
+            await InsertChildCollectionsAsync(conn, tx, studentId, student, utcNow).ConfigureAwait(false);
 
-            if (student.Academics != null && student.Academics.Any())
-            {
-                foreach (var academic in student.Academics)
-                {
-                    academic.Id = Guid.NewGuid();
-                    academic.StudentId = studentId;
-                    EnsureInsertAudit(academic, utcNow);
-                    await InsertWithoutReturnAsync<StudentAcademicEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentAcademics, academic, transaction);
-                }
-            }
-
-            if (student.PreviousSchools != null && student.PreviousSchools.Any())
-            {
-                foreach (var prevSchool in student.PreviousSchools)
-                {
-                    prevSchool.Id = Guid.NewGuid();
-                    prevSchool.StudentId = studentId;
-                    EnsureInsertAudit(prevSchool, utcNow);
-                    await InsertWithoutReturnAsync<StudentPreviousSchoolEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentPreviousSchools, prevSchool, transaction);
-                }
-            }
-
-            if (student.FeeConfigs != null && student.FeeConfigs.Any())
-            {
-                foreach (var feeConfig in student.FeeConfigs)
-                {
-                    feeConfig.Id = Guid.NewGuid();
-                    feeConfig.StudentId = studentId;
-                    EnsureInsertAudit(feeConfig, utcNow);
-                    await InsertWithoutReturnAsync<StudentFeeConfigEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentFeeConfigs, feeConfig, transaction);
-                }
-            }
-
-            transaction.Commit();
             return studentId;
-        }
-        catch (Exception)
-        {
-            transaction.Rollback();
-            throw;
-        }
+        }).ConfigureAwait(false);
     }
 
-    public async Task<StudentEntity?> GetStudentByIdAsync(Guid id)
+    /// <inheritdoc />
+    public async Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        try
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sql = BuildStudentDetailSql();
+
+        using var multi = await connection.QueryMultipleAsync(sql, new { Id = id }).ConfigureAwait(false);
+        var student = await multi.ReadSingleOrDefaultAsync<StudentEntity>().ConfigureAwait(false);
+
+        if (student is null)
         {
-            var connection = await Context.GetGlobalConnectionAsync();
-
-            string sql = $@"
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudents} WHERE id = @Id AND isactive = true;
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentFeeConfigs} WHERE studentid = @Id;
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
-        ";
-
-            using var multi = await connection.QueryMultipleAsync(sql, new { Id = id });
-            var student = await multi.ReadSingleOrDefaultAsync<StudentEntity>();
-
-            if (student != null)
-            {
-                student.Parents = (await multi.ReadAsync<StudentParentEntity>()).ToList();
-                student.Academics = (await multi.ReadAsync<StudentAcademicEntity>()).ToList();
-                student.FeeConfigs = (await multi.ReadAsync<StudentFeeConfigEntity>()).ToList();
-                student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>()).ToList();
-            }
-            return student;
+            return null;
         }
-        catch (Exception)
-        {
-            throw;
-        }
+
+        student.Parents = (await multi.ReadAsync<StudentParentEntity>().ConfigureAwait(false)).ToList();
+        student.Academics = (await multi.ReadAsync<StudentAcademicEntity>().ConfigureAwait(false)).ToList();
+        student.FeeConfigs = (await multi.ReadAsync<StudentFeeConfigEntity>().ConfigureAwait(false)).ToList();
+        student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
+
+        return student;
     }
 
-    public async Task<PagedResult<StudentListModel>> GetAllStudentsAsync(int pageIndex, int pageSize, string? searchTerm = null, string? sortColumn = null, string? sortDirection = null, StudentFilter filter = StudentFilter.All)
+    /// <inheritdoc />
+    public async Task<PagedResult<StudentListModel>> GetAllStudentsAsync(
+        int pageIndex,
+        int pageSize,
+        string? searchTerm = null,
+        string? sortColumn = null,
+        string? sortDirection = null,
+        StudentFilter filter = StudentFilter.Active,
+        CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var connection = await Context.GetGlobalConnectionAsync();
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            string whereClause = "WHERE 1 = 1";
+        var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-            // Apply Enum Filters
-            switch (filter)
-            {
-                case StudentFilter.Active:
-                    whereClause += " AND s.isactive = true";
-                    break;
-                case StudentFilter.Inactive:
-                    whereClause += " AND s.isactive = false";
-                    break;
-                case StudentFilter.FeeOverdue:
-                    // Example logic for fee overdue: join with configs or check a flag
-                    whereClause += " AND s.id IN (SELECT studentid FROM global.studentfeeconfigs WHERE status = 'Overdue' AND isactive = true)";
-                    break;
-            }
+        var schema = DatabaseConfig.Schema_Global;
+        var students = DatabaseConfig.TableStudents;
+        var academics = DatabaseConfig.TableStudentAcademics;
 
-            if (!string.IsNullOrEmpty(searchTerm))
-            {
-                whereClause += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
-                searchTerm = $"%{searchTerm}%";
-            }
-
-            string orderBy = "s.createdon DESC, s.id ASC";
-            if (!string.IsNullOrEmpty(sortColumn))
-            {
-                string direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
-                if (string.Equals(sortColumn, "student", StringComparison.OrdinalIgnoreCase) || string.Equals(sortColumn, "name", StringComparison.OrdinalIgnoreCase))
-                {
-                    orderBy = $"s.firstname {direction}, s.lastname {direction}, s.id ASC";
-                }
-                else if (string.Equals(sortColumn, "admNo", StringComparison.OrdinalIgnoreCase))
-                {
-                    orderBy = $"s.admissionno {direction}, s.id ASC";
-                }
-                else if (string.Equals(sortColumn, "class", StringComparison.OrdinalIgnoreCase))
-                {
-                    orderBy = $"a.class {direction}, a.section {direction}, s.id ASC";
-                }
-                //else if (string.Equals(sortColumn, "status", StringComparison.OrdinalIgnoreCase))
-                //{
-                //    orderBy = $"s.status {direction}, s.id ASC";
-                //}
-            }
-
-            string countSql = $@"
-            SELECT COUNT(*) 
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudents} s
+        var countSql = $@"
+            SELECT COUNT(*)
+            FROM {schema}.{students} s
             {whereClause};";
 
-            string querySql = $@"
-            SELECT 
+        var querySql = $@"
+            SELECT
                 s.id AS Id,
                 TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
                 COALESCE(s.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
-                CASE 
+                CASE
                     WHEN a.class IS NOT NULL AND a.section IS NOT NULL THEN a.class || ' — ' || a.section
                     WHEN a.class IS NOT NULL THEN a.class
-                    ELSE 'N/A' 
+                    ELSE 'N/A'
                 END AS Class,
-                s.status AS Status,
                 s.isactive AS IsActive
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudents} s
+            FROM {schema}.{students} s
             LEFT JOIN (
-                SELECT studentid, class, section, 
-                       ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) as rn
-                FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentAcademics}
+                SELECT studentid, class, section,
+                       ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) AS rn
+                FROM {schema}.{academics}
                 WHERE isactive = true
             ) a ON s.id = a.studentid AND a.rn = 1
             {whereClause}
             ORDER BY {orderBy}";
 
-            var result = await GetPagedResultAsync<StudentListModel>(
+        var result = await GetPagedResultAsync<StudentListModel>(
                 connection,
                 querySql,
                 countSql,
                 new { SearchTerm = searchTerm },
                 pageIndex,
-                pageSize);
+                pageSize)
+            .ConfigureAwait(false);
 
-            var random = new Random();
-
-            var items = result.Items.ToList();
-            foreach (var student in items)
-            {
-                student.Attendance = random.Next(80, 100);
-                student.Fees = "Paid";
-
-                if (string.IsNullOrEmpty(student.Status)) student.Status = "Active";
-                if (string.IsNullOrEmpty(student.AdmNo)) student.AdmNo = "N/A";
-            }
-
-            result.Items = items;
-            return result;
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+        var items = result.Items.ToList();
+        ApplyListDemoProjection(items);
+        result.Items = items;
+        return result;
     }
 
-    public async Task UpdateStudentAsync(StudentEntity student)
+    /// <inheritdoc />
+    public async Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(student, actorId, utcNow);
 
-        var connection = await Context.GetGlobalConnectionAsync();
-        using var transaction = connection.BeginTransaction();
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        try
+        await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync<StudentEntity>(
-                connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, transaction, "Id");
+            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx, "Id")
+                .ConfigureAwait(false);
 
-            if (student.Parents != null)
-            {
-                foreach (var parent in student.Parents)
-                {
-                    parent.StudentId = student.Id;
-                    ApplyUpdateAudit(parent, actorId, utcNow);
-                    await UpdateAsync<StudentParentEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentParents, parent, transaction, "StudentId", "RelationType");
-                }
-            }
-
-            if (student.Academics != null)
-            {
-                foreach (var academic in student.Academics)
-                {
-                    academic.StudentId = student.Id;
-                    ApplyUpdateAudit(academic, actorId, utcNow);
-                    await UpdateAsync<StudentAcademicEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentAcademics, academic, transaction, "StudentId");
-                }
-            }
-
-            if (student.PreviousSchools != null)
-            {
-                foreach (var prev in student.PreviousSchools)
-                {
-                    prev.StudentId = student.Id;
-                    ApplyUpdateAudit(prev, actorId, utcNow);
-                    await UpdateAsync<StudentPreviousSchoolEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentPreviousSchools, prev, transaction, "StudentId");
-                }
-            }
-
-            if (student.FeeConfigs != null)
-            {
-                foreach (var fee in student.FeeConfigs)
-                {
-                    fee.StudentId = student.Id;
-                    ApplyUpdateAudit(fee, actorId, utcNow);
-                    await UpdateAsync<StudentFeeConfigEntity>(
-                        connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudentFeeConfigs, fee, transaction, "StudentId");
-                }
-            }
-
-            transaction.Commit();
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
+            await UpdateChildCollectionsAsync(conn, tx, student, actorId, utcNow).ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 
-    public async Task DeleteStudentAsync(Guid id)
+    /// <inheritdoc />
+    public async Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var connection = await Context.GetGlobalConnectionAsync();
-        using var transaction = connection.BeginTransaction();
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        try
+        await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            // 1. Soft delete the main student record
-            await SoftDeleteAsync(connection, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, id, transaction);
+            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, id, tx)
+                .ConfigureAwait(false);
 
-            // 2. Soft delete related records (Cascade Soft Delete)
-            var relatedTables = new[]
+            foreach (var table in RelatedTablesForSoftDelete)
             {
-                DatabaseConfig.TableStudentParents,
-                DatabaseConfig.TableStudentAcademics,
-                DatabaseConfig.TableStudentPreviousSchools,
-                DatabaseConfig.TableStudentFeeConfigs
-            };
+                await SoftDeleteRelatedAsync(conn, DatabaseConfig.Schema_Global, table, "StudentId", id, tx)
+                    .ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
 
-            foreach (var table in relatedTables)
+    #region List query helpers
+
+    private static string BuildListWhereClause(StudentFilter filter, ref string? searchTerm)
+    {
+        var where = "WHERE 1 = 1";
+
+        switch (filter)
+        {
+            case StudentFilter.Active:
+                where += " AND s.isactive = true";
+                break;
+            case StudentFilter.Inactive:
+                where += " AND s.isactive = false";
+                break;
+            case StudentFilter.FeeOverdue:
+                var feeTable = $"{DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentFeeConfigs}";
+                where += $" AND s.id IN (SELECT studentid FROM {feeTable} WHERE status = 'Overdue' AND isactive = true)";
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            where += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
+            searchTerm = $"%{searchTerm}%";
+        }
+
+        return where;
+    }
+
+    private static string ResolveListOrderBy(string? sortColumn, string? sortDirection)
+    {
+        var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+
+        if (string.IsNullOrWhiteSpace(sortColumn))
+        {
+            return "s.createdon DESC, s.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "student", "name"))
+        {
+            return $"s.firstname {direction}, s.lastname {direction}, s.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "admNo"))
+        {
+            return $"s.admissionno {direction}, s.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "class"))
+        {
+            return $"a.class {direction}, a.section {direction}, s.id ASC";
+        }
+
+        return "s.createdon DESC, s.id ASC";
+    }
+
+    private static bool IsSortKey(string sortColumn, params string[] keys)
+    {
+        return keys.Any(k => string.Equals(sortColumn, k, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// TEMP: attendance / fees / status until sourced from DB joins. Remove when real columns exist.
+    /// </summary>
+    private static void ApplyListDemoProjection(IList<StudentListModel> items)
+    {
+        var random = new Random();
+        foreach (var student in items)
+        {
+            student.Attendance = random.Next(80, 100);
+            student.Fees = "Paid";
+
+            if (string.IsNullOrEmpty(student.Status))
             {
-                await SoftDeleteRelatedAsync(connection, DatabaseConfig.Schema_Global, table, "StudentId", id, transaction);
+                student.Status = "Active";
             }
 
-            transaction.Commit();
-        }
-        catch (Exception)
-        {
-            transaction.Rollback();
-            throw;
+            if (string.IsNullOrEmpty(student.AdmNo))
+            {
+                student.AdmNo = "N/A";
+            }
         }
     }
+
+    #endregion
+
+    #region Detail SQL
+
+    private static string BuildStudentDetailSql()
+    {
+        var g = DatabaseConfig.Schema_Global;
+        return $@"
+            SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id AND isactive = true;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeConfigs} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
+        ";
+    }
+
+    #endregion
+
+    #region Child rows (create / update)
+
+    private async Task InsertChildCollectionsAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid studentId,
+        StudentEntity student,
+        DateTime utcNow)
+    {
+        if (student.Parents is { Count: > 0 })
+        {
+            foreach (var parent in student.Parents)
+            {
+                parent.Id = Guid.NewGuid();
+                parent.StudentId = studentId;
+                EnsureInsertAudit(parent, utcNow);
+                await InsertWithoutReturnAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentParents,
+                        parent,
+                        transaction)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.Academics is { Count: > 0 })
+        {
+            foreach (var academic in student.Academics)
+            {
+                academic.Id = Guid.NewGuid();
+                academic.StudentId = studentId;
+                EnsureInsertAudit(academic, utcNow);
+                await InsertWithoutReturnAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentAcademics,
+                        academic,
+                        transaction)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.PreviousSchools is { Count: > 0 })
+        {
+            foreach (var prevSchool in student.PreviousSchools)
+            {
+                prevSchool.Id = Guid.NewGuid();
+                prevSchool.StudentId = studentId;
+                EnsureInsertAudit(prevSchool, utcNow);
+                await InsertWithoutReturnAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentPreviousSchools,
+                        prevSchool,
+                        transaction)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.FeeConfigs is { Count: > 0 })
+        {
+            foreach (var feeConfig in student.FeeConfigs)
+            {
+                feeConfig.Id = Guid.NewGuid();
+                feeConfig.StudentId = studentId;
+                EnsureInsertAudit(feeConfig, utcNow);
+                await InsertWithoutReturnAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentFeeConfigs,
+                        feeConfig,
+                        transaction)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task UpdateChildCollectionsAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        StudentEntity student,
+        Guid actorId,
+        DateTime utcNow)
+    {
+        if (student.Parents is not null)
+        {
+            foreach (var parent in student.Parents)
+            {
+                parent.StudentId = student.Id;
+                ApplyUpdateAudit(parent, actorId, utcNow);
+                await UpdateAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentParents,
+                        parent,
+                        transaction,
+                        "StudentId",
+                        "RelationType")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.Academics is not null)
+        {
+            foreach (var academic in student.Academics)
+            {
+                academic.StudentId = student.Id;
+                ApplyUpdateAudit(academic, actorId, utcNow);
+                await UpdateAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentAcademics,
+                        academic,
+                        transaction,
+                        "StudentId")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.PreviousSchools is not null)
+        {
+            foreach (var prev in student.PreviousSchools)
+            {
+                prev.StudentId = student.Id;
+                ApplyUpdateAudit(prev, actorId, utcNow);
+                await UpdateAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentPreviousSchools,
+                        prev,
+                        transaction,
+                        "StudentId")
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (student.FeeConfigs is not null)
+        {
+            foreach (var fee in student.FeeConfigs)
+            {
+                fee.StudentId = student.Id;
+                ApplyUpdateAudit(fee, actorId, utcNow);
+                await UpdateAsync(
+                        connection,
+                        DatabaseConfig.Schema_Global,
+                        DatabaseConfig.TableStudentFeeConfigs,
+                        fee,
+                        transaction,
+                        "StudentId")
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    #endregion
 }

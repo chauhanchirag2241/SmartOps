@@ -31,7 +31,7 @@ public sealed class M012_CreateStudentsTables : Migration
                 .WithColumn("aadhaarno").AsString(20).Nullable()
                 .WithColumn("address").AsString(1000).Nullable()
                 .WithColumn("photourl").AsString(1000).Nullable()
-                .WithColumn("status").AsString(50).NotNullable().WithDefaultValue("Draft")
+                //.WithColumn("status").AsString(50).NotNullable().WithDefaultValue("Draft")
                 .WithColumn("remarks").AsString(1000).Nullable()
                 .WithAuditColumns();
         }

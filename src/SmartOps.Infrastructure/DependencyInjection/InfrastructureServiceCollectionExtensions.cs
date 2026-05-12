@@ -14,8 +14,10 @@ using SmartOps.Infrastructure.Modules.Identity.Stores;
 using SmartOps.Infrastructure.MultiTenancy;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence.Factories;
+using SmartOps.Infrastructure.Persistence.TypeHandlers;
 using SmartOps.Domain.Modules.Student.Interfaces;
 using SmartOps.Infrastructure.Persistence.Repositories;
+using Dapper;
 
 namespace SmartOps.Infrastructure.DependencyInjection;
 
@@ -31,6 +33,8 @@ public static class InfrastructureServiceCollectionExtensions
 
     public static IServiceCollection AddSmartOpsDatabaseInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+
         services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
         services.AddScoped<DapperContext>();
         

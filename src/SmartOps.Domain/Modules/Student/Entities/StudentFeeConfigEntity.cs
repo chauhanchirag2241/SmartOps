@@ -11,5 +11,5 @@ public class StudentFeeConfigEntity : AuditableEntity
     public bool? IsPercentage { get; set; }
     public string? DiscountRemarks { get; set; }
     public string? PaymentMode { get; set; }
-    public DateTime? FirstDueDate { get; set; }
+    public DateOnly? FirstDueDate { get; set; }
 }

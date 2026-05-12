@@ -9,7 +9,7 @@ public class CreateStudentDto
     public string FirstName { get; set; } = null!;
     public string? MiddleName { get; set; }
     public string LastName { get; set; } = null!;
-    public DateTime? Dob { get; set; }
+    public DateOnly? Dob { get; set; }
     public string? Gender { get; set; }
     public string? BloodGroup { get; set; }
     public string? Mobile { get; set; }
@@ -36,7 +36,7 @@ public class CreateStudentParentDto
 
 public class CreateStudentAcademicDto
 {
-    public DateTime? AdmissionDate { get; set; }
+    public DateOnly? AdmissionDate { get; set; }
     public string AcademicYear { get; set; } = null!;
     public string Class { get; set; } = null!;
     public string Section { get; set; } = null!;
@@ -58,7 +58,7 @@ public class CreateStudentFeeConfigDto
     public bool? IsPercentage { get; set; }
     public string? DiscountRemarks { get; set; }
     public string? PaymentMode { get; set; }
-    public DateTime? FirstDueDate { get; set; }
+    public DateOnly? FirstDueDate { get; set; }
 }
 
 public static class StudentMappingExtensions

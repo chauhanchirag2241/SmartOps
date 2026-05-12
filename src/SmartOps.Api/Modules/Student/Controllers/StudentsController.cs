@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Student.DTOs;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
 
@@ -36,9 +37,15 @@ public class StudentsController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAllStudents([FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 10, [FromQuery] string? searchTerm = null, [FromQuery] string? sortColumn = null, [FromQuery] string? sortDirection = null)
+    public async Task<IActionResult> GetAllStudents(
+        [FromQuery] int pageIndex = 1, 
+        [FromQuery] int pageSize = 10, 
+        [FromQuery] string? searchTerm = null, 
+        [FromQuery] string? sortColumn = null, 
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] StudentFilter filter = StudentFilter.Active)
     {
-        var result = await _studentRepository.GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection);
+        var result = await _studentRepository.GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter);
         return Ok(result);
     }
 

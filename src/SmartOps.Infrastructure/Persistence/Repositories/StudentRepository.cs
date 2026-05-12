@@ -1,6 +1,7 @@
 using Dapper;
 
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
@@ -123,13 +124,29 @@ public class StudentRepository : BaseRepository, IStudentRepository
         }
     }
 
-    public async Task<PagedResult<StudentListModel>> GetAllStudentsAsync(int pageIndex, int pageSize, string? searchTerm = null, string? sortColumn = null, string? sortDirection = null)
+    public async Task<PagedResult<StudentListModel>> GetAllStudentsAsync(int pageIndex, int pageSize, string? searchTerm = null, string? sortColumn = null, string? sortDirection = null, StudentFilter filter = StudentFilter.All)
     {
         try
         {
             var connection = await Context.GetGlobalConnectionAsync();
 
-            string whereClause = "WHERE s.isactive = true";
+            string whereClause = "WHERE 1 = 1";
+
+            // Apply Enum Filters
+            switch (filter)
+            {
+                case StudentFilter.Active:
+                    whereClause += " AND s.isactive = true";
+                    break;
+                case StudentFilter.Inactive:
+                    whereClause += " AND s.isactive = false";
+                    break;
+                case StudentFilter.FeeOverdue:
+                    // Example logic for fee overdue: join with configs or check a flag
+                    whereClause += " AND s.id IN (SELECT studentid FROM global.studentfeeconfigs WHERE status = 'Overdue' AND isactive = true)";
+                    break;
+            }
+
             if (!string.IsNullOrEmpty(searchTerm))
             {
                 whereClause += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
@@ -152,10 +169,10 @@ public class StudentRepository : BaseRepository, IStudentRepository
                 {
                     orderBy = $"a.class {direction}, a.section {direction}, s.id ASC";
                 }
-                else if (string.Equals(sortColumn, "status", StringComparison.OrdinalIgnoreCase))
-                {
-                    orderBy = $"s.status {direction}, s.id ASC";
-                }
+                //else if (string.Equals(sortColumn, "status", StringComparison.OrdinalIgnoreCase))
+                //{
+                //    orderBy = $"s.status {direction}, s.id ASC";
+                //}
             }
 
             string countSql = $@"
@@ -174,7 +191,8 @@ public class StudentRepository : BaseRepository, IStudentRepository
                     WHEN a.class IS NOT NULL THEN a.class
                     ELSE 'N/A' 
                 END AS Class,
-                s.status AS Status
+                s.status AS Status,
+                s.isactive AS IsActive
             FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudents} s
             LEFT JOIN (
                 SELECT studentid, class, section, 

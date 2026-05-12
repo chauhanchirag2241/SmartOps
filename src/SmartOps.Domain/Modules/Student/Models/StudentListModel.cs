@@ -12,4 +12,5 @@ public class StudentListModel
     public int Attendance { get; set; }
     public string Fees { get; set; } = null!;
     public string Status { get; set; } = null!;
+    public bool IsActive { get; set; }
 }

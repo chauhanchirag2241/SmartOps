@@ -125,43 +125,45 @@ public class StudentRepository : BaseRepository, IStudentRepository
 
     public async Task<PagedResult<StudentListModel>> GetAllStudentsAsync(int pageIndex, int pageSize, string? searchTerm = null, string? sortColumn = null, string? sortDirection = null)
     {
-        var connection = await Context.GetGlobalConnectionAsync();
-
-        string whereClause = "WHERE s.isactive = true";
-        if (!string.IsNullOrEmpty(searchTerm))
+        try
         {
-            whereClause += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
-            searchTerm = $"%{searchTerm}%";
-        }
+            var connection = await Context.GetGlobalConnectionAsync();
 
-        string orderBy = "s.createdon DESC, s.id ASC";
-        if (!string.IsNullOrEmpty(sortColumn))
-        {
-            string direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
-            if (string.Equals(sortColumn, "student", StringComparison.OrdinalIgnoreCase) || string.Equals(sortColumn, "name", StringComparison.OrdinalIgnoreCase))
+            string whereClause = "WHERE s.isactive = true";
+            if (!string.IsNullOrEmpty(searchTerm))
             {
-                orderBy = $"s.firstname {direction}, s.lastname {direction}, s.id ASC";
+                whereClause += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
+                searchTerm = $"%{searchTerm}%";
             }
-            else if (string.Equals(sortColumn, "admNo", StringComparison.OrdinalIgnoreCase))
-            {
-                orderBy = $"s.admissionno {direction}, s.id ASC";
-            }
-            else if (string.Equals(sortColumn, "class", StringComparison.OrdinalIgnoreCase))
-            {
-                orderBy = $"a.class {direction}, a.section {direction}, s.id ASC";
-            }
-            else if (string.Equals(sortColumn, "status", StringComparison.OrdinalIgnoreCase))
-            {
-                orderBy = $"s.status {direction}, s.id ASC";
-            }
-        }
 
-        string countSql = $@"
+            string orderBy = "s.createdon DESC, s.id ASC";
+            if (!string.IsNullOrEmpty(sortColumn))
+            {
+                string direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+                if (string.Equals(sortColumn, "student", StringComparison.OrdinalIgnoreCase) || string.Equals(sortColumn, "name", StringComparison.OrdinalIgnoreCase))
+                {
+                    orderBy = $"s.firstname {direction}, s.lastname {direction}, s.id ASC";
+                }
+                else if (string.Equals(sortColumn, "admNo", StringComparison.OrdinalIgnoreCase))
+                {
+                    orderBy = $"s.admissionno {direction}, s.id ASC";
+                }
+                else if (string.Equals(sortColumn, "class", StringComparison.OrdinalIgnoreCase))
+                {
+                    orderBy = $"a.class {direction}, a.section {direction}, s.id ASC";
+                }
+                else if (string.Equals(sortColumn, "status", StringComparison.OrdinalIgnoreCase))
+                {
+                    orderBy = $"s.status {direction}, s.id ASC";
+                }
+            }
+
+            string countSql = $@"
             SELECT COUNT(*) 
             FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudents} s
             {whereClause};";
 
-        string querySql = $@"
+            string querySql = $@"
             SELECT 
                 s.id AS Id,
                 TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
@@ -183,28 +185,33 @@ public class StudentRepository : BaseRepository, IStudentRepository
             {whereClause}
             ORDER BY {orderBy}";
 
-        var result = await GetPagedResultAsync<StudentListModel>(
-            connection,
-            querySql,
-            countSql,
-            new { SearchTerm = searchTerm },
-            pageIndex,
-            pageSize);
+            var result = await GetPagedResultAsync<StudentListModel>(
+                connection,
+                querySql,
+                countSql,
+                new { SearchTerm = searchTerm },
+                pageIndex,
+                pageSize);
 
-        var random = new Random();
+            var random = new Random();
 
-        var items = result.Items.ToList();
-        foreach (var student in items)
-        {
-            student.Attendance = random.Next(80, 100);
-            student.Fees = "Paid";
+            var items = result.Items.ToList();
+            foreach (var student in items)
+            {
+                student.Attendance = random.Next(80, 100);
+                student.Fees = "Paid";
 
-            if (string.IsNullOrEmpty(student.Status)) student.Status = "Active";
-            if (string.IsNullOrEmpty(student.AdmNo)) student.AdmNo = "N/A";
+                if (string.IsNullOrEmpty(student.Status)) student.Status = "Active";
+                if (string.IsNullOrEmpty(student.AdmNo)) student.AdmNo = "N/A";
+            }
+
+            result.Items = items;
+            return result;
         }
-
-        result.Items = items;
-        return result;
+        catch (Exception)
+        {
+            throw;
+        }
     }
 
     public async Task UpdateStudentAsync(StudentEntity student)

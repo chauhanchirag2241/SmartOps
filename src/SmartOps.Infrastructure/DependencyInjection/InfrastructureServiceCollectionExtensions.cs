@@ -18,6 +18,7 @@ using SmartOps.Infrastructure.Persistence.TypeHandlers;
 using SmartOps.Domain.Modules.Student.Interfaces;
 using SmartOps.Domain.Modules.Class.Interfaces;
 using SmartOps.Domain.Modules.Subject.Interfaces;
+using SmartOps.Domain.Modules.AcademicYear.Interfaces;
 using SmartOps.Infrastructure.Persistence.Repositories;
 using Dapper;
 
@@ -43,6 +44,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IStudentRepository, StudentRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<ISubjectRepository, SubjectRepository>();
+        services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))

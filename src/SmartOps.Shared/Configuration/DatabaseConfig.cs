@@ -23,6 +23,7 @@ public static class DatabaseConfig
     public const string TableStudentFeeConfigs = "studentfeeconfigs";
 
     // Class Module
+    public const string TableAcademicYears = "academicyears";
     public const string TableClasses = "classes";
 
     // Subject Module

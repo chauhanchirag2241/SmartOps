@@ -35,6 +35,27 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        var existingSql = $@"
+            SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses}
+            WHERE classname = @ClassName 
+            AND section = @Section 
+            AND streamgroup = @StreamGroup 
+            AND academicyearid = @AcademicYearId 
+            AND isactive = true;";
+
+        var exists = await connection.ExecuteScalarAsync<int?>(existingSql, new 
+        { 
+            classEntity.ClassName, 
+            classEntity.Section, 
+            classEntity.StreamGroup, 
+            classEntity.AcademicYearId 
+        }).ConfigureAwait(false);
+
+        if (exists.HasValue)
+        {
+            throw new InvalidOperationException("A class with the same name, section, stream/group and academic year already exists.");
+        }
+
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
             var classId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, classEntity, tx)
@@ -76,6 +97,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var countSql = $@"
             SELECT COUNT(*)
             FROM {schema}.{table} c
+            INNER JOIN {schema}.{DatabaseConfig.TableAcademicYears} ay ON c.academicyearid = ay.id
             {whereClause};";
 
         var querySql = $@"
@@ -97,13 +119,14 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     WHEN 5 THEN 'Regional'
                     ELSE 'N/A'
                 END AS StreamGroup,
-                c.academicyear AS AcademicYear,
+                ay.title AS AcademicYear,
                 c.capacity AS Capacity,
                 COALESCE(c.classteacher, 'Not assigned') AS ClassTeacher,
                 COALESCE(c.roomnumber, 'N/A') AS RoomNumber,
                 CASE WHEN c.isactive THEN 'Active' ELSE 'Inactive' END AS Status,
                 c.isactive AS IsActive
             FROM {schema}.{table} c
+            INNER JOIN {schema}.{DatabaseConfig.TableAcademicYears} ay ON c.academicyearid = ay.id
             {whereClause}
             ORDER BY {orderBy}";
 
@@ -127,6 +150,29 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         ApplyUpdateAudit(classEntity, actorId, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var existingSql = $@"
+            SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses}
+            WHERE classname = @ClassName 
+            AND section = @Section 
+            AND streamgroup = @StreamGroup 
+            AND academicyearid = @AcademicYearId 
+            AND id != @Id
+            AND isactive = true;";
+
+        var exists = await connection.ExecuteScalarAsync<int?>(existingSql, new 
+        { 
+            classEntity.ClassName, 
+            classEntity.Section, 
+            classEntity.StreamGroup, 
+            classEntity.AcademicYearId,
+            classEntity.Id
+        }).ConfigureAwait(false);
+
+        if (exists.HasValue)
+        {
+            throw new InvalidOperationException("Another class with the same name, section, stream/group and academic year already exists.");
+        }
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -165,7 +211,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            where += " AND (c.classname ILIKE @SearchTerm OR c.classteacher ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm OR c.academicyear ILIKE @SearchTerm)";
+            where += " AND (c.classname ILIKE @SearchTerm OR c.classteacher ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm OR ay.title ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 
@@ -198,7 +244,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (IsSortKey(sortColumn, "academicYear"))
         {
-            return $"c.academicyear {direction}, c.id ASC";
+            return $"ay.title {direction}, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "capacity"))

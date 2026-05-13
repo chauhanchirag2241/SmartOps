@@ -33,26 +33,33 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     /// <inheritdoc />
     public async Task<Guid> CreateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
-        if (student.Id == Guid.Empty)
+        try
         {
-            student.Id = Guid.NewGuid();
+            var utcNow = DateTime.UtcNow;
+            if (student.Id == Guid.Empty)
+            {
+                student.Id = Guid.NewGuid();
+            }
+
+            EnsureInsertAudit(student, utcNow);
+
+            var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            return await WithTransactionAsync(connection, async (conn, tx) =>
+            {
+                var studentId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx)
+                    .ConfigureAwait(false);
+                student.Id = studentId;
+
+                await InsertChildCollectionsAsync(conn, tx, studentId, student, utcNow).ConfigureAwait(false);
+
+                return studentId;
+            }).ConfigureAwait(false);
         }
-
-        EnsureInsertAudit(student, utcNow);
-
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        return await WithTransactionAsync(connection, async (conn, tx) =>
+        catch (Exception ex)
         {
-            var studentId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx)
-                .ConfigureAwait(false);
-            student.Id = studentId;
-
-            await InsertChildCollectionsAsync(conn, tx, studentId, student, utcNow).ConfigureAwait(false);
-
-            return studentId;
-        }).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -88,21 +95,23 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         StudentFilter filter = StudentFilter.Active,
         CancellationToken cancellationToken = default)
     {
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var whereClause = BuildListWhereClause(filter, ref searchTerm);
-        var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
+            var whereClause = BuildListWhereClause(filter, ref searchTerm);
+            var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-        var schema = DatabaseConfig.Schema_Global;
-        var students = DatabaseConfig.TableStudents;
-        var academics = DatabaseConfig.TableStudentAcademics;
+            var schema = DatabaseConfig.Schema_Global;
+            var students = DatabaseConfig.TableStudents;
+            var academics = DatabaseConfig.TableStudentAcademics;
 
-        var countSql = $@"
+            var countSql = $@"
             SELECT COUNT(*)
             FROM {schema}.{students} s
             {whereClause};";
 
-        var querySql = $@"
+            var querySql = $@"
             SELECT
                 s.id AS Id,
                 TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
@@ -128,19 +137,24 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             {whereClause}
             ORDER BY {orderBy}";
 
-        var result = await GetPagedResultAsync<StudentListModel>(
-                connection,
-                querySql,
-                countSql,
-                new { SearchTerm = searchTerm },
-                pageIndex,
-                pageSize)
-            .ConfigureAwait(false);
+            var result = await GetPagedResultAsync<StudentListModel>(
+                    connection,
+                    querySql,
+                    countSql,
+                    new { SearchTerm = searchTerm },
+                    pageIndex,
+                    pageSize)
+                .ConfigureAwait(false);
 
-        var items = result.Items.ToList();
-        ApplyListDemoProjection(items);
-        result.Items = items;
-        return result;
+            var items = result.Items.ToList();
+            ApplyListDemoProjection(items);
+            result.Items = items;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            throw;
+        }
     }
 
     /// <inheritdoc />

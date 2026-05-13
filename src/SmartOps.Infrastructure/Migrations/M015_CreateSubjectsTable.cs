@@ -4,8 +4,8 @@ using SmartOps.Shared.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations;
 
-[Migration(14)]
-public class M014_CreateSubjectsTable : Migration
+[Migration(015)]
+public class M015_CreateSubjectsTable : Migration
 {
     public override void Up()
     {

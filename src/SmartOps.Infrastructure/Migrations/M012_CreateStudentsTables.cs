@@ -55,10 +55,9 @@ public sealed class M012_CreateStudentsTables : Migration
             Create.Table(DatabaseConfig.TableStudentAcademics).InSchema(DatabaseConfig.Schema_Global)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("studentid").AsGuid().NotNullable().ForeignKey("fk_studentacademics_studentid", DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, "id").OnDelete(System.Data.Rule.Cascade)
+                .WithColumn("classid").AsGuid().NotNullable().ForeignKey("fk_studentacademics_classid", DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, "id")
                 .WithColumn("admissiondate").AsDate().Nullable()
                 .WithColumn("academicyear").AsString(50).NotNullable()
-                .WithColumn("class").AsString(50).NotNullable()
-                .WithColumn("section").AsString(50).NotNullable()
                 .WithColumn("rollnumber").AsString(50).Nullable()
                 .WithAuditColumns();
         }

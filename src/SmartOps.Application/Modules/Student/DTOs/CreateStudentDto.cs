@@ -38,8 +38,7 @@ public class CreateStudentAcademicDto
 {
     public DateOnly? AdmissionDate { get; set; }
     public string AcademicYear { get; set; } = null!;
-    public string Class { get; set; } = null!;
-    public string Section { get; set; } = null!;
+    public Guid ClassId { get; set; }
     public string? RollNumber { get; set; }
 }
 
@@ -92,8 +91,7 @@ public static class StudentMappingExtensions
             {
                 AdmissionDate = a.AdmissionDate,
                 AcademicYear = a.AcademicYear,
-                Class = a.Class,
-                Section = a.Section,
+                ClassId = a.ClassId,
                 RollNumber = a.RollNumber
             }).ToList(),
             PreviousSchools = dto.PreviousSchools.Select(ps => new StudentPreviousSchoolEntity

@@ -24,4 +24,7 @@ public static class DatabaseConfig
 
     // Class Module
     public const string TableClasses = "classes";
+
+    // Subject Module
+    public const string TableSubjects = "subjects";
 }

@@ -109,18 +109,22 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 COALESCE(s.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
                 CASE
-                    WHEN a.class IS NOT NULL AND a.section IS NOT NULL THEN a.class || ' — ' || a.section
-                    WHEN a.class IS NOT NULL THEN a.class
+                    WHEN c.classname IS NOT NULL THEN 
+                        c.classname || ' — ' || 
+                        CASE c.section 
+                            WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE 'N/A' 
+                        END
                     ELSE 'N/A'
                 END AS Class,
                 s.isactive AS IsActive
             FROM {schema}.{students} s
             LEFT JOIN (
-                SELECT studentid, class, section,
+                SELECT studentid, classid,
                        ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) AS rn
                 FROM {schema}.{academics}
                 WHERE isactive = true
             ) a ON s.id = a.studentid AND a.rn = 1
+            LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON a.classid = c.id
             {whereClause}
             ORDER BY {orderBy}";
 

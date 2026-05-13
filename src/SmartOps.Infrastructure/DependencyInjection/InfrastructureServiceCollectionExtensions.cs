@@ -16,6 +16,7 @@ using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence.Factories;
 using SmartOps.Infrastructure.Persistence.TypeHandlers;
 using SmartOps.Domain.Modules.Student.Interfaces;
+using SmartOps.Domain.Modules.Class.Interfaces;
 using SmartOps.Infrastructure.Persistence.Repositories;
 using Dapper;
 
@@ -39,6 +40,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<DapperContext>();
         
         services.AddScoped<IStudentRepository, StudentRepository>();
+        services.AddScoped<IClassRepository, ClassRepository>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))

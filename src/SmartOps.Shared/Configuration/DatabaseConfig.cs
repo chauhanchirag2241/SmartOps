@@ -21,4 +21,7 @@ public static class DatabaseConfig
     public const string TableStudentAcademics = "studentacademics";
     public const string TableStudentPreviousSchools = "studentpreviousschools";
     public const string TableStudentFeeConfigs = "studentfeeconfigs";
+
+    // Class Module
+    public const string TableClasses = "classes";
 }

@@ -32,3 +32,13 @@ public enum FeeFilter
     Pending = 2,
     Overdue = 3
 }
+
+/// <summary>
+/// Filters for Class Table
+/// </summary>
+public enum ClassFilter
+{
+    All = 0,
+    Active = 1,
+    Inactive = 2
+}

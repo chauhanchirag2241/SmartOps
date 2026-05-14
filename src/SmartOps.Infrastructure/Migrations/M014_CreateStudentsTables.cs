@@ -4,8 +4,8 @@ using SmartOps.Shared.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations;
 
-[Migration(012)]
-public sealed class M012_CreateStudentsTables : Migration
+[Migration(014)]
+public sealed class M014_CreateStudentsTables : Migration
 {
     public override void Up()
     {
@@ -57,7 +57,7 @@ public sealed class M012_CreateStudentsTables : Migration
                 .WithColumn("studentid").AsGuid().NotNullable().ForeignKey("fk_studentacademics_studentid", DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, "id").OnDelete(System.Data.Rule.Cascade)
                 .WithColumn("classid").AsGuid().NotNullable().ForeignKey("fk_studentacademics_classid", DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, "id")
                 .WithColumn("admissiondate").AsDate().Nullable()
-                .WithColumn("academicyear").AsString(50).NotNullable()
+                .WithColumn("academicyearid").AsGuid().NotNullable().ForeignKey("fk_studentacademics_academicyearid", DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("rollnumber").AsString(50).Nullable()
                 .WithAuditColumns();
         }

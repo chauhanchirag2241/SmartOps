@@ -16,7 +16,7 @@ public sealed class M013_CreateClassesTable : Migration
                 .WithColumn("classname").AsString(50).NotNullable()
                 .WithColumn("section").AsInt32().NotNullable().WithDefaultValue(1)
                 .WithColumn("streamgroup").AsInt32().NotNullable().WithDefaultValue(1)
-                .WithColumn("academicyear").AsString(50).NotNullable()
+                .WithColumn("academicyearid").AsGuid().NotNullable().ForeignKey("fk_classes_academicyearid", DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("capacity").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithColumn("classteacher").AsString(200).Nullable()  //change when add teacher screen
                 .WithColumn("roomnumber").AsString(50).Nullable()
@@ -24,6 +24,10 @@ public sealed class M013_CreateClassesTable : Migration
                 .WithColumn("medium").AsInt32().NotNullable().WithDefaultValue(1)
                 .WithColumn("description").AsString(1000).Nullable()
                 .WithAuditColumns();
+
+            Create.UniqueConstraint("uq_classes_identity")
+                .OnTable(DatabaseConfig.TableClasses).WithSchema(DatabaseConfig.Schema_Global)
+                .Columns("classname", "section", "streamgroup", "academicyearid");
         }
     }
 

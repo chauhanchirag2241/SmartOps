@@ -37,7 +37,7 @@ public class CreateStudentParentDto
 public class CreateStudentAcademicDto
 {
     public DateOnly? AdmissionDate { get; set; }
-    public string AcademicYear { get; set; } = null!;
+    public Guid AcademicYearId { get; set; }
     public Guid ClassId { get; set; }
     public string? RollNumber { get; set; }
 }
@@ -90,7 +90,7 @@ public static class StudentMappingExtensions
             Academics = dto.Academics.Select(a => new StudentAcademicEntity
             {
                 AdmissionDate = a.AdmissionDate,
-                AcademicYear = a.AcademicYear,
+                AcademicYearId = a.AcademicYearId,
                 ClassId = a.ClassId,
                 RollNumber = a.RollNumber
             }).ToList(),

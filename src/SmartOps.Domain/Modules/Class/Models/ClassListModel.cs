@@ -7,7 +7,7 @@ namespace SmartOps.Domain.Modules.Class.Models;
 public class ClassListModel
 {
     public Guid Id { get; set; }
-    public string ClassName { get; set; } = null!;
+    public string ClassName { get; set; } =  null!;
     public string Section { get; set; } = null!;
     public string StreamGroup { get; set; } = null!;
     public string AcademicYear { get; set; } = null!;

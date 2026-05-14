@@ -7,7 +7,7 @@ public class StudentAcademicEntity : AuditableEntity
     public Guid Id { get; set; }
     public Guid StudentId { get; set; }
     public DateOnly? AdmissionDate { get; set; }
-    public string AcademicYear { get; set; } = null!;
+    public Guid AcademicYearId { get; set; }
     public Guid ClassId { get; set; }
     public string? RollNumber { get; set; }
 }

@@ -9,7 +9,7 @@ public class ClassEntity : AuditableEntity
     public string ClassName { get; set; } = null!;
     public int Section { get; set; }
     public int StreamGroup { get; set; }
-    public string AcademicYear { get; set; } = null!;
+    public Guid AcademicYearId { get; set; }
     public int Capacity { get; set; }
     public string? ClassTeacher { get; set; }
     public string? RoomNumber { get; set; }

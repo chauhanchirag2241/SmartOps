@@ -31,4 +31,8 @@ public static class DatabaseConfig
 
     // Teacher Module
     public const string TableTeachers = "teachers";
+
+    // Attendance Module
+    public const string Schema_School = "school";
+    public const string TableAttendance = "attendance";
 }

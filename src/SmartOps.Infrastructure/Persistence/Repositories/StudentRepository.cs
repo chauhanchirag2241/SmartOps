@@ -93,13 +93,14 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         string? sortColumn = null,
         string? sortDirection = null,
         StudentFilter filter = StudentFilter.Active,
+        Guid? classId = null,
         CancellationToken cancellationToken = default)
     {
         try
         {
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            var whereClause = BuildListWhereClause(filter, ref searchTerm);
+            var whereClause = BuildListWhereClause(filter, classId, ref searchTerm);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
             var schema = DatabaseConfig.Schema_Global;
@@ -114,6 +115,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             var querySql = $@"
             SELECT
                 s.id AS Id,
+                a.classid AS ClassId,
                 TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
                 COALESCE(s.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
@@ -141,7 +143,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                     connection,
                     querySql,
                     countSql,
-                    new { SearchTerm = searchTerm },
+                    new { SearchTerm = searchTerm, ClassId = classId },
                     pageIndex,
                     pageSize)
                 .ConfigureAwait(false);
@@ -195,7 +197,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
     #region List query helpers
 
-    private static string BuildListWhereClause(StudentFilter filter, ref string? searchTerm)
+    private static string BuildListWhereClause(StudentFilter filter, Guid? classId, ref string? searchTerm)
     {
         var where = "WHERE 1 = 1";
 
@@ -217,6 +219,18 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         {
             where += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
+        }
+
+        if (classId.HasValue)
+        {
+            where += $@"
+                AND EXISTS (
+                    SELECT 1
+                    FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentAcademics} sa
+                    WHERE sa.studentid = s.id
+                      AND sa.classid = @ClassId
+                      AND sa.isactive = true
+                )";
         }
 
         return where;

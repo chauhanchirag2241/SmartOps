@@ -46,6 +46,14 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
         return Ok(result);
     }
 
+    [HttpGet("/api/teacher/class-teacher-dropdown")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClassTeacherDropdown(CancellationToken cancellationToken)
+    {
+        var result = await teacherRepository.GetClassTeacherDropdownAsync(cancellationToken).ConfigureAwait(false);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult<TeacherEntity>> GetTeacherById(Guid id, CancellationToken cancellationToken)

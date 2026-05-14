@@ -4,8 +4,8 @@ using SmartOps.Shared.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations;
 
-[Migration(014)]
-public sealed class M014_CreateTeachersTable : Migration
+[Migration(016)]
+public sealed class M016_CreateTeachersTable : Migration
 {
     public override void Up()
     {
@@ -41,7 +41,6 @@ public sealed class M014_CreateTeachersTable : Migration
                 .WithColumn("role").AsString(50).NotNullable().WithDefaultValue("Teacher")
                 .WithColumn("portalaccess").AsBoolean().WithDefaultValue(true)
                 .WithColumn("username").AsString(100).Nullable().Unique()
-                .WithColumn("isactive").AsBoolean().NotNullable().WithDefaultValue(true)
                 .WithAuditColumns();
         }
     }

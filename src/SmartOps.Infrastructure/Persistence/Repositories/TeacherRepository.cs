@@ -86,6 +86,22 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
             pageSize).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sql = $@"
+            SELECT
+                id AS Id,
+                TRIM(firstname || ' ' || lastname) AS Name
+            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableTeachers}
+            WHERE isactive = true
+            ORDER BY firstname ASC, lastname ASC;";
+
+        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        return items.ToList();
+    }
+
     public async Task UpdateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;

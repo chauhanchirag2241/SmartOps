@@ -12,7 +12,7 @@ public class M015_CreateSubjectsTable : Migration
         if (!Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableSubjects).Exists())
         {
             Create.Table(DatabaseConfig.TableSubjects).InSchema(DatabaseConfig.Schema_Global)
-                .WithColumn("id").AsGuid().PrimaryKey()
+                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("subjectname").AsString(100).NotNullable()
                 .WithColumn("subjectcode").AsString(50).NotNullable()
                 .WithColumn("subjecttype").AsInt32().NotNullable()

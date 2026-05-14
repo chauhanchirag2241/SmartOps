@@ -35,6 +35,7 @@ public class CreateTeacherDto
             BankIfscCode = Professional.BankDetails?.IfscCode,
             BankName = Professional.BankDetails?.BankName,
             // Schedule
+            ClassId = Schedule.ClassId,
             Shift = Schedule.Shift,
             WeeklyPeriods = Schedule.WeeklyPeriods,
             MaxPeriodsPerDay = Schedule.MaxPeriodsPerDay,
@@ -82,6 +83,7 @@ public class TeacherBankDetails
 
 public class TeacherScheduleInfo
 {
+    public Guid? ClassId { get; set; }
     public string? Shift { get; set; }
     public int WeeklyPeriods { get; set; }
     public int MaxPeriodsPerDay { get; set; }

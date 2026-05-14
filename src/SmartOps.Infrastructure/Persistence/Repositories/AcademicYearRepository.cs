@@ -93,6 +93,22 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         return result;
     }
 
+    public async Task<IReadOnlyList<DropdownDto>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sql = $@"
+            SELECT
+                ay.id AS Id,
+                ay.title AS Name
+            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableAcademicYears} ay
+            WHERE ay.isactive = true
+            ORDER BY ay.title ASC;";
+
+        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        return items.ToList();
+    }
+
     public async Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;

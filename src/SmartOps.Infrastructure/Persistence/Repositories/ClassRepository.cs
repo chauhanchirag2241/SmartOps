@@ -143,6 +143,30 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sql = $@"
+            SELECT
+                c.id AS Id,
+                c.classname ||
+                    CASE c.section
+                        WHEN 1 THEN ' - A'
+                        WHEN 2 THEN ' - B'
+                        WHEN 3 THEN ' - C'
+                        WHEN 4 THEN ' - D'
+                        ELSE ''
+                    END AS Name
+            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses} c
+            WHERE c.isactive = true
+            ORDER BY c.classname ASC, c.section ASC;";
+
+        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        return items.ToList();
+    }
+
+    /// <inheritdoc />
     public async Task UpdateClassAsync(ClassEntity classEntity, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;

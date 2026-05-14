@@ -52,6 +52,15 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
         return Ok(result);
     }
 
+    [HttpGet("/api/academic-year/dropdown")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAcademicYearDropdown(CancellationToken cancellationToken)
+    {
+        var result = await academicYearRepository.GetAcademicYearDropdownAsync(cancellationToken).ConfigureAwait(false);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AcademicYearEntity), StatusCodes.Status200OK)]

@@ -16,6 +16,7 @@ public interface IAcademicYearRepository
         string? sortDirection = null,
         AcademicYearFilter filter = AcademicYearFilter.Active,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DropdownDto>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default);
     Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default);
     Task DeleteAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
 }

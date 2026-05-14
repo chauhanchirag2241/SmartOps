@@ -15,6 +15,7 @@ public interface ITeacherRepository
         string? sortColumn = null,
         string? sortDirection = null,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default);
     Task UpdateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default);
     Task DeleteTeacherAsync(Guid id, CancellationToken cancellationToken = default);
 }

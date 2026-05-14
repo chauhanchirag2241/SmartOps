@@ -93,6 +93,22 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<DropdownDto>> GetSubjectDropdownAsync(CancellationToken cancellationToken)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sql = $@"
+            SELECT
+                s.id AS Id,
+                s.subjectname AS Name
+            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSubjects} s
+            WHERE s.isactive = true
+            ORDER BY s.subjectname ASC;";
+
+        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        return items.ToList();
+    }
+
     public async Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);

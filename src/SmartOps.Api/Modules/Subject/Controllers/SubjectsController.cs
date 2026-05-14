@@ -42,6 +42,15 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
         return Ok(result);
     }
 
+    [HttpGet("/api/subject/dropdown")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSubjectDropdown(CancellationToken ct)
+    {
+        var result = await subjectRepository.GetSubjectDropdownAsync(ct).ConfigureAwait(false);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(SubjectEntity), StatusCodes.Status200OK)]

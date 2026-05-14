@@ -27,6 +27,7 @@ public class TeacherEntity : AuditableEntity
     public string? BankAccountNumber { get; set; }
     public string? BankIfscCode { get; set; }
     public string? BankName { get; set; }
+    public Guid? ClassId { get; set; }
     public string? Shift { get; set; }
     public int WeeklyPeriods { get; set; }
     public int MaxPeriodsPerDay { get; set; }

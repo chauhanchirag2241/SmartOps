@@ -58,6 +58,16 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
         return Ok(result);
     }
 
+    /// <summary>Active class dropdown data without pagination.</summary>
+    [HttpGet("/api/class/dropdown")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetClassDropdown(CancellationToken cancellationToken)
+    {
+        var result = await classRepository.GetClassDropdownAsync(cancellationToken).ConfigureAwait(false);
+        return Ok(result);
+    }
+
     /// <summary>Full class record by id (active only).</summary>
     [HttpGet("{id:guid}")]
     [AllowAnonymous]

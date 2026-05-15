@@ -158,7 +158,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         EnsureInsertAudit(attendance, now, Guid.Parse(DatabaseConfig.SystemUserId));
 
         const string sql = $"""
-            INSERT INTO {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}
+            INSERT INTO {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance} AS a
                 (id, classid, studentid, teacherid,
                  attendancedate, status, remarks,
                  isactive, versionno,
@@ -176,8 +176,14 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
                 isactive = true,
                 updatedby = EXCLUDED.updatedby,
                 updatedon = EXCLUDED.updatedon,
-                versionno = {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}.versionno + 1;
+                versionno = a.versionno + 1
+            WHERE a.status IS DISTINCT FROM EXCLUDED.status
+               OR a.remarks IS DISTINCT FROM EXCLUDED.remarks
+               OR a.teacherid IS DISTINCT FROM EXCLUDED.teacherid
+               OR a.isactive = false;
             """;
+
+
 
         await connection.ExecuteAsync(
             new CommandDefinition(sql, attendance, transaction, cancellationToken: ct))

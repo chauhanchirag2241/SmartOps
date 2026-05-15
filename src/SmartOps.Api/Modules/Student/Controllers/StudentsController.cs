@@ -8,6 +8,9 @@ using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
 using SmartOps.Domain.Modules.Student.Models;
 
+using SmartOps.Domain.Modules.Setting.Interfaces;
+using SmartOps.Domain.Modules.AcademicYear.Interfaces;
+
 namespace SmartOps.Api.Modules.Student.Controllers;
 
 /// <summary>
@@ -16,9 +19,48 @@ namespace SmartOps.Api.Modules.Student.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class StudentsController(IStudentRepository studentRepository) : ControllerBase
+public sealed class StudentsController(
+    IStudentRepository studentRepository, 
+    ISettingRepository settingRepository,
+    IAcademicYearRepository academicYearRepository) : ControllerBase
 {
+    /// <summary>Generates the next admission number based on settings and year.</summary>
+    [HttpGet("next-admission-no")]
+    [AllowAnonymous]
+    public async Task<ActionResult<object>> GetNextAdmissionNo(
+        [FromQuery] Guid? academicYearId,
+        CancellationToken cancellationToken)
+    {
+        int sequence = await settingRepository.GetNextSequenceAsync("Student_AdmissionNo_Sequence", cancellationToken);
+        
+        int year = DateTime.Now.Year;
+        if (academicYearId.HasValue)
+        {
+            var academicYear = await academicYearRepository.GetAcademicYearByIdAsync(academicYearId.Value, cancellationToken);
+            if (academicYear != null)
+            {
+                year = academicYear.StartDate.Year;
+            }
+        }
+
+        string admissionNo = $"STU-{year}-{sequence:D4}";
+        return Ok(new { AdmissionNo = admissionNo });
+    }
+
+    /// <summary>Generates the next roll number class-wise for a given academic year.</summary>
+    [HttpGet("next-roll-number")]
+    [AllowAnonymous]
+    public async Task<ActionResult<object>> GetNextRollNumber(
+        [FromQuery] Guid academicYearId,
+        [FromQuery] Guid classId,
+        CancellationToken cancellationToken)
+    {
+        int maxRoll = await studentRepository.GetMaxRollNumberAsync(academicYearId, classId, cancellationToken);
+        return Ok(new { RollNumber = (maxRoll + 1).ToString() });
+    }
+
     /// <summary>Create a student and related rows (parents, academics, etc.).</summary>
+
     [HttpPost]
     [AllowAnonymous]
     [ProducesResponseType(typeof(CreateStudentResponse), StatusCodes.Status200OK)]

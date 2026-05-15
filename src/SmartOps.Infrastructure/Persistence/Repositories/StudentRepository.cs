@@ -464,5 +464,23 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         }
     }
 
+    public async Task<int> GetMaxRollNumberAsync(Guid academicYearId, Guid classId, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = DatabaseConfig.Schema_Global;
+        var table = DatabaseConfig.TableStudentAcademics;
+
+        var sql = $@"
+            SELECT COALESCE(MAX(CAST(NULLIF(rollnumber, '') AS INTEGER)), 0)
+            FROM {schema}.{table}
+            WHERE academicyearid = @AcademicYearId 
+              AND classid = @ClassId 
+              AND isactive = true";
+
+        return await connection.QuerySingleAsync<int>(sql, new { AcademicYearId = academicYearId, ClassId = classId })
+            .ConfigureAwait(false);
+    }
+
     #endregion
 }
+

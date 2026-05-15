@@ -24,6 +24,8 @@ using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Infrastructure.Modules.Attendance.Repositories;
 using SmartOps.Infrastructure.Modules.Attendance.Services;
 using SmartOps.Infrastructure.Persistence.Repositories;
+using SmartOps.Domain.Modules.Setting.Interfaces;
+using SmartOps.Infrastructure.Modules.Setting.Repositories;
 using Dapper;
 
 namespace SmartOps.Infrastructure.DependencyInjection;
@@ -52,6 +54,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<IAttendanceService, AttendanceService>();
+        services.AddScoped<ISettingRepository, SettingRepository>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))

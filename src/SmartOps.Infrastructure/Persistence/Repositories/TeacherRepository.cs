@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Domain.Modules.Teacher.Interfaces;
@@ -50,14 +51,26 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
         string? searchTerm = null,
         string? sortColumn = null,
         string? sortDirection = null,
+        StaffFilter filter = StaffFilter.All,
         CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var whereClause = "WHERE isactive = true";
+        var whereClause = "WHERE 1 = 1";
+        
+        switch (filter)
+        {
+            case StaffFilter.Active:
+                whereClause += " AND isactive = true";
+                break;
+            case StaffFilter.Inactive:
+                whereClause += " AND isactive = false";
+                break;
+        }
+
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            whereClause += " AND (firstname ILIKE @SearchTerm OR lastname ILIKE @SearchTerm OR employeeid ILIKE @SearchTerm)";
+            whereClause += " AND (firstname ILIKE @SearchTerm OR lastname ILIKE @SearchTerm OR employeeid ILIKE @SearchTerm OR email ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 

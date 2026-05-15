@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Domain.Modules.Teacher.Interfaces;
@@ -34,13 +35,14 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
     public async Task<IActionResult> GetAllTeachers(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? searchQuery = null,
         [FromQuery] string? sortColumn = null,
         [FromQuery] string? sortDirection = null,
+        [FromQuery] StaffFilter filter = StaffFilter.All,
         CancellationToken cancellationToken = default)
     {
         var result = await teacherRepository
-            .GetAllTeachersAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, cancellationToken)
+            .GetAllTeachersAsync(pageIndex, pageSize, searchQuery, sortColumn, sortDirection, filter, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(result);

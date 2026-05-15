@@ -1,3 +1,4 @@
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Domain.Modules.Teacher.Models;
@@ -14,6 +15,7 @@ public interface ITeacherRepository
         string? searchTerm = null,
         string? sortColumn = null,
         string? sortDirection = null,
+        StaffFilter filter = StaffFilter.All,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default);
     Task UpdateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default);

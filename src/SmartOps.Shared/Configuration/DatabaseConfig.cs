@@ -12,6 +12,7 @@ public static class DatabaseConfig
     public const string TableUserRoles = "userroles";
     public const string TableRolePermissions = "rolepermissions";
     public const string TableSchools = "schools";
+    public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserSchoolMappings = "userschoolmappings";
     public const string TableRefreshTokens = "refreshtokens";
     

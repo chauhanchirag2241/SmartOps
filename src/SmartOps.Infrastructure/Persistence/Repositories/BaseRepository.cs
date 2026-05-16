@@ -202,7 +202,7 @@ public abstract class BaseRepository
         {
             var columns = GetDbColumns<T>();
             var colNames = string.Join(", ", columns.Select(c => c.ToLowerInvariant()));
-            var paramNames = string.Join(", ", columns.Select(c => $"@{c}"));
+            var paramNames = string.Join(", ", columns.Select(c => GetParameterExpression<T>(c)));
             return $"INSERT INTO {schema}.{tableName} ({colNames}) VALUES ({paramNames}) RETURNING id;";
         });
     }
@@ -214,7 +214,7 @@ public abstract class BaseRepository
         {
             var columns = GetDbColumns<T>();
             var colNames = string.Join(", ", columns.Select(c => c.ToLowerInvariant()));
-            var paramNames = string.Join(", ", columns.Select(c => $"@{c}"));
+            var paramNames = string.Join(", ", columns.Select(c => GetParameterExpression<T>(c)));
             return $"INSERT INTO {schema}.{tableName} ({colNames}) VALUES ({paramNames});";
         });
     }
@@ -239,7 +239,7 @@ public abstract class BaseRepository
 
             var setCols = columns
                 .Where(c => !excludeFromSet.Contains(c))
-                .Select(c => $"{c.ToLowerInvariant()} = @{c}")
+                .Select(c => $"{c.ToLowerInvariant()} = {GetParameterExpression<T>(c)}")
                 .ToList();
 
             setCols.Add("versionno = versionno + 1");
@@ -258,6 +258,16 @@ public abstract class BaseRepository
             .Where(p => p.GetCustomAttribute<DbIgnoreAttribute>() == null)
             .Select(p => p.Name)
             .ToList();
+    }
+
+    private static string GetParameterExpression<T>(string columnName)
+    {
+        var property = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(p => p.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+
+        return property?.GetCustomAttribute<DbJsonbAttribute>() is not null
+            ? $"@{columnName}::jsonb"
+            : $"@{columnName}";
     }
 
     #endregion

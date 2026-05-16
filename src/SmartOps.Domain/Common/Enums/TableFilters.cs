@@ -42,3 +42,13 @@ public enum ClassFilter
     Active = 1,
     Inactive = 2
 }
+
+/// <summary>
+/// Filters for School configuration table.
+/// </summary>
+public enum SchoolFilter
+{
+    All = 0,
+    Active = 1,
+    Inactive = 2
+}

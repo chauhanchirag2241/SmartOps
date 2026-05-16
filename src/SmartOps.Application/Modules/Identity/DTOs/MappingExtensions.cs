@@ -1,6 +1,6 @@
 using SmartOps.Application.Modules.School.DTOs;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SchoolEntity = SmartOps.Domain.Modules.School.Entities.School;
+using SchoolEntity = SmartOps.Domain.Modules.School.Entities.SchoolEntity;
 
 namespace SmartOps.Application.Modules.Identity.DTOs;
 

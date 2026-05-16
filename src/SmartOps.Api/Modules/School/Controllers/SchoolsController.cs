@@ -51,6 +51,16 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
         return Ok(result);
     }
 
+    [HttpGet("by-subdomain/{subdomain}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(SchoolBootstrapDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SchoolBootstrapDto>> GetSchoolBySubdomain(string subdomain, CancellationToken cancellationToken)
+    {
+        var school = await schoolRepository.GetSchoolBySubdomainAsync(subdomain, cancellationToken).ConfigureAwait(false);
+        return school is null ? NotFound() : Ok(school.ToBootstrapDto());
+    }
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(SchoolEntity), StatusCodes.Status200OK)]

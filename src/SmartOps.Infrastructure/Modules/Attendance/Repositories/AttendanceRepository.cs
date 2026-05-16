@@ -11,10 +11,21 @@ namespace SmartOps.Infrastructure.Modules.Attendance.Repositories;
 
 public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
 {
-    public AttendanceRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly ITenantSchemaProvider _tenantSchema;
+
+    public AttendanceRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        ITenantSchemaProvider tenantSchema)
         : base(context, currentUser)
     {
+        _tenantSchema = tenantSchema;
     }
+
+    private string AttendanceSchema =>
+        _tenantSchema.IsTenantScoped
+            ? _tenantSchema.GetOperationalSchema()
+            : DatabaseConfig.Schema_School;
 
     public async Task<IList<AttendanceEntity>> GetByClassAndDateAsync(
         Guid classId,
@@ -23,12 +34,12 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
-        const string sql = $"""
+        var sql = $"""
             SELECT id, classid, studentid, teacherid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
-            FROM {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}
+            FROM {AttendanceSchema}.{DatabaseConfig.TableAttendance}
             WHERE classid = @ClassId
               AND attendancedate = @Date
               AND isactive = true
@@ -49,12 +60,12 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
-        const string sql = $"""
+        var sql = $"""
             SELECT id, classid, studentid, teacherid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
-            FROM {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}
+            FROM {AttendanceSchema}.{DatabaseConfig.TableAttendance}
             WHERE studentid = @StudentId
               AND attendancedate = @Date
               AND isactive = true;
@@ -73,12 +84,12 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
-        const string sql = $"""
+        var sql = $"""
             SELECT id, classid, studentid, teacherid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
-            FROM {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}
+            FROM {AttendanceSchema}.{DatabaseConfig.TableAttendance}
             WHERE studentid = @StudentId
               AND attendancedate >= @From
               AND attendancedate <= @To
@@ -128,9 +139,9 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
-        const string sql = $"""
+        var sql = $"""
             SELECT COUNT(1)
-            FROM {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance}
+            FROM {AttendanceSchema}.{DatabaseConfig.TableAttendance}
             WHERE classid = @ClassId
               AND attendancedate = @Date
               AND isactive = true;
@@ -157,8 +168,8 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
 
         EnsureInsertAudit(attendance, now, Guid.Parse(DatabaseConfig.SystemUserId));
 
-        const string sql = $"""
-            INSERT INTO {DatabaseConfig.Schema_School}.{DatabaseConfig.TableAttendance} AS a
+        var sql = $"""
+            INSERT INTO {AttendanceSchema}.{DatabaseConfig.TableAttendance} AS a
                 (id, classid, studentid, teacherid,
                  attendancedate, status, remarks,
                  isactive, versionno,

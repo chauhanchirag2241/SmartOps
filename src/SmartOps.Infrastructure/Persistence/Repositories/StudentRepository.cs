@@ -47,7 +47,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
             return await WithTransactionAsync(connection, async (conn, tx) =>
             {
-                var studentId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx)
+                var studentId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx)
                     .ConfigureAwait(false);
                 student.Id = studentId;
 
@@ -103,7 +103,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             var whereClause = BuildListWhereClause(filter, classId, ref searchTerm);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-            var schema = DatabaseConfig.Schema_Global;
+            var schema = Context.OperationalSchema;
             var students = DatabaseConfig.TableStudents;
             var academics = DatabaseConfig.TableStudentAcademics;
 
@@ -170,7 +170,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, student, tx, "Id")
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx, "Id")
                 .ConfigureAwait(false);
 
             await UpdateChildCollectionsAsync(conn, tx, student, actorId, utcNow).ConfigureAwait(false);
@@ -184,12 +184,12 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableStudents, id, tx)
+            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, id, tx)
                 .ConfigureAwait(false);
 
             foreach (var table in RelatedTablesForSoftDelete)
             {
-                await SoftDeleteRelatedAsync(conn, DatabaseConfig.Schema_Global, table, "StudentId", id, tx)
+                await SoftDeleteRelatedAsync(conn, Context.OperationalSchema, table, "StudentId", id, tx)
                     .ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
@@ -197,7 +197,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
     #region List query helpers
 
-    private static string BuildListWhereClause(StudentFilter filter, Guid? classId, ref string? searchTerm)
+    private string BuildListWhereClause(StudentFilter filter, Guid? classId, ref string? searchTerm)
     {
         var where = "WHERE 1 = 1";
 
@@ -210,7 +210,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 where += " AND s.isactive = false";
                 break;
             case StudentFilter.FeeOverdue:
-                var feeTable = $"{DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentFeeConfigs}";
+                var feeTable = $"{Context.OperationalSchema}.{DatabaseConfig.TableStudentFeeConfigs}";
                 where += $" AND s.id IN (SELECT studentid FROM {feeTable} WHERE status = 'Overdue' AND isactive = true)";
                 break;
         }
@@ -226,7 +226,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             where += $@"
                 AND EXISTS (
                     SELECT 1
-                    FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableStudentAcademics} sa
+                    FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa
                     WHERE sa.studentid = s.id
                       AND sa.classid = @ClassId
                       AND sa.isactive = true
@@ -295,9 +295,9 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
     #region Detail SQL
 
-    private static string BuildStudentDetailSql()
+    private string BuildStudentDetailSql()
     {
-        var g = DatabaseConfig.Schema_Global;
+        var g = Context.OperationalSchema;
         return $@"
             SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
@@ -327,7 +327,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 EnsureInsertAudit(parent, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentParents,
                         parent,
                         transaction)
@@ -344,7 +344,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 EnsureInsertAudit(academic, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentAcademics,
                         academic,
                         transaction)
@@ -361,7 +361,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 EnsureInsertAudit(prevSchool, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentPreviousSchools,
                         prevSchool,
                         transaction)
@@ -378,7 +378,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 EnsureInsertAudit(feeConfig, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentFeeConfigs,
                         feeConfig,
                         transaction)
@@ -402,7 +402,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 ApplyUpdateAudit(parent, actorId, utcNow);
                 await UpdateAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentParents,
                         parent,
                         transaction,
@@ -420,7 +420,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 ApplyUpdateAudit(academic, actorId, utcNow);
                 await UpdateAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentAcademics,
                         academic,
                         transaction,
@@ -437,7 +437,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 ApplyUpdateAudit(prev, actorId, utcNow);
                 await UpdateAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentPreviousSchools,
                         prev,
                         transaction,
@@ -454,7 +454,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 ApplyUpdateAudit(fee, actorId, utcNow);
                 await UpdateAsync(
                         connection,
-                        DatabaseConfig.Schema_Global,
+                        Context.OperationalSchema,
                         DatabaseConfig.TableStudentFeeConfigs,
                         fee,
                         transaction,
@@ -467,7 +467,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     public async Task<int> GetMaxRollNumberAsync(Guid academicYearId, Guid classId, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var schema = DatabaseConfig.Schema_Global;
+        var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableStudentAcademics;
 
         var sql = $@"

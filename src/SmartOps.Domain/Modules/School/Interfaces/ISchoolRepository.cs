@@ -11,6 +11,8 @@ public interface ISchoolRepository
 
     Task<SchoolEntity?> GetSchoolByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<SchoolEntity?> GetSchoolBySubdomainAsync(string subdomain, CancellationToken cancellationToken = default);
+
     Task<PagedResult<SchoolListModel>> GetAllSchoolsAsync(
         int pageIndex,
         int pageSize,

@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.School.DTOs;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.School.Entities;
@@ -14,9 +15,15 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 {
     private const string BranchesTable = DatabaseConfig.TableSchoolBranches;
 
-    public SchoolRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly ITenantProvisioningService _tenantProvisioning;
+
+    public SchoolRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        ITenantProvisioningService tenantProvisioning)
         : base(context, currentUser)
     {
+        _tenantProvisioning = tenantProvisioning;
     }
 
     public async Task<Guid> CreateSchoolAsync(SchoolEntity school, CancellationToken cancellationToken = default)
@@ -44,8 +51,35 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
                 await InsertAsync(conn, DatabaseConfig.Schema_Global, BranchesTable, branch, tx).ConfigureAwait(false);
             }
 
+            if (!string.IsNullOrWhiteSpace(school.SchemaName))
+            {
+                await _tenantProvisioning
+                    .ProvisionSchemaAsync(school.SchemaName, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             return school.Id;
         }).ConfigureAwait(false);
+    }
+
+    public async Task<SchoolEntity?> GetSchoolBySubdomainAsync(string subdomain, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain))
+        {
+            return null;
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $@"
+            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+            WHERE subdomain = @Subdomain AND isactive = true
+            LIMIT 1";
+
+        var school = await connection
+            .QuerySingleOrDefaultAsync<SchoolEntity>(sql, new { Subdomain = subdomain.Trim().ToLowerInvariant() })
+            .ConfigureAwait(false);
+
+        return school;
     }
 
     public async Task<SchoolEntity?> GetSchoolByIdAsync(Guid id, CancellationToken cancellationToken = default)

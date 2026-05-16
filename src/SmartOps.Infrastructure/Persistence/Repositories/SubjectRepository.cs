@@ -30,7 +30,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSubjects, subject, tx)
+            await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableSubjects, subject, tx)
                 .ConfigureAwait(false);
             return subject.Id;
         }).ConfigureAwait(false);
@@ -50,7 +50,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-        var schema = DatabaseConfig.Schema_Global;
+        var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableSubjects;
 
         var countSql = $@"SELECT COUNT(*) FROM {schema}.{table} s {whereClause};";
@@ -101,7 +101,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
             SELECT
                 s.id AS Id,
                 s.subjectname AS Name
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSubjects} s
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableSubjects} s
             WHERE s.isactive = true
             ORDER BY s.subjectname ASC;";
 
@@ -114,7 +114,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var sql = $@"
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSubjects}
+            SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableSubjects}
             WHERE id = @Id AND isactive = true;";
 
         return await connection.QuerySingleOrDefaultAsync<SubjectEntity>(sql, new { Id = id }).ConfigureAwait(false);
@@ -130,7 +130,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSubjects, subject, tx, "Id")
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableSubjects, subject, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -141,7 +141,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSubjects, id, tx)
+            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableSubjects, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

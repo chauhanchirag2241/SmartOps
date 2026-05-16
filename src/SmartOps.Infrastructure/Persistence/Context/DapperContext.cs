@@ -7,12 +7,16 @@ namespace SmartOps.Infrastructure.Persistence.Context;
 public sealed class DapperContext : IAsyncDisposable
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ITenantSchemaProvider _tenantSchemaProvider;
     private NpgsqlConnection? _connection;
 
-    public DapperContext(IDbConnectionFactory connectionFactory)
+    public DapperContext(IDbConnectionFactory connectionFactory, ITenantSchemaProvider tenantSchemaProvider)
     {
         _connectionFactory = connectionFactory;
+        _tenantSchemaProvider = tenantSchemaProvider;
     }
+
+    public string OperationalSchema => _tenantSchemaProvider.GetOperationalSchema();
 
     public async Task<IDbConnection> GetGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
@@ -24,6 +28,11 @@ public sealed class DapperContext : IAsyncDisposable
         }
 
         return _connection;
+    }
+
+    public Task<IDbConnection> GetOperationalConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        return GetGlobalConnectionAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()

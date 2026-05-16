@@ -111,6 +111,9 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddScoped<TenantContext>();
         services.AddScoped<ITenantProvider, TenantProvider>();
+        services.AddScoped<ITenantSchemaProvider, TenantSchemaProvider>();
+        services.AddScoped<ITenantSchoolResolver, TenantSchoolResolver>();
+        services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
         return services;
     }
 }

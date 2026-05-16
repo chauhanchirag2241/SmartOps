@@ -32,7 +32,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var teacherId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableTeachers, teacher, tx)
+            var teacherId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableTeachers, teacher, tx)
                 .ConfigureAwait(false);
             return teacherId;
         }).ConfigureAwait(false);
@@ -41,7 +41,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
     public async Task<TeacherEntity?> GetTeacherByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var sql = $"SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableTeachers} WHERE id = @Id AND isactive = true";
+        var sql = $"SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} WHERE id = @Id AND isactive = true";
         return await connection.QuerySingleOrDefaultAsync<TeacherEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }
 
@@ -77,7 +77,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
         var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
         var orderBy = string.IsNullOrWhiteSpace(sortColumn) ? "createdon DESC" : $"{sortColumn} {direction}";
 
-        var countSql = $"SELECT COUNT(*) FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableTeachers} {whereClause}";
+        var countSql = $"SELECT COUNT(*) FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} {whereClause}";
         var querySql = $@"
             SELECT 
                 id, 
@@ -86,7 +86,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
                 department AS Dept, 
                 designation, 
                 isactive 
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableTeachers} 
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} 
             {whereClause} 
             ORDER BY {orderBy}";
 
@@ -107,7 +107,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
             SELECT
                 id AS Id,
                 TRIM(firstname || ' ' || lastname) AS Name
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableTeachers}
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers}
             WHERE isactive = true
             ORDER BY firstname ASC, lastname ASC;";
 
@@ -125,7 +125,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableTeachers, teacher, tx, "Id")
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableTeachers, teacher, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -136,7 +136,7 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableTeachers, id, tx)
+            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableTeachers, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

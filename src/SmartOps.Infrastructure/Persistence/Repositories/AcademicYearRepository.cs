@@ -30,7 +30,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var id = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, academicYear, tx)
+            var id = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, academicYear, tx)
                 .ConfigureAwait(false);
             return id;
         }).ConfigureAwait(false);
@@ -41,7 +41,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var sql = $@"
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableAcademicYears}
+            SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
             WHERE id = @Id AND isactive = true;";
 
         return await connection.QuerySingleOrDefaultAsync<AcademicYearEntity>(sql, new { Id = id }).ConfigureAwait(false);
@@ -61,7 +61,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-        var schema = DatabaseConfig.Schema_Global;
+        var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableAcademicYears;
 
         var countSql = $@"
@@ -101,7 +101,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             SELECT
                 ay.id AS Id,
                 ay.title AS Name
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableAcademicYears} ay
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears} ay
             WHERE ay.isactive = true
             ORDER BY ay.title ASC;";
 
@@ -119,7 +119,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, academicYear, tx, "Id")
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, academicYear, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -130,7 +130,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, id, tx)
+            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

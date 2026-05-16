@@ -36,7 +36,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var existingSql = $@"
-            SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses}
+            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
             WHERE classname = @ClassName 
             AND section = @Section 
             AND streamgroup = @StreamGroup 
@@ -58,7 +58,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var classId = await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, classEntity, tx)
+            var classId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, classEntity, tx)
                 .ConfigureAwait(false);
             return classId;
         }).ConfigureAwait(false);
@@ -70,7 +70,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var sql = $@"
-            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses}
+            SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
             WHERE id = @Id AND isactive = true;";
 
         return await connection.QuerySingleOrDefaultAsync<ClassEntity>(sql, new { Id = id }).ConfigureAwait(false);
@@ -91,7 +91,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
-        var schema = DatabaseConfig.Schema_Global;
+        var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableClasses;
 
         var countSql = $@"
@@ -158,7 +158,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                         WHEN 4 THEN ' - D'
                         ELSE ''
                     END AS Name
-            FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses} c
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
             WHERE c.isactive = true
             ORDER BY c.classname ASC, c.section ASC;";
 
@@ -176,7 +176,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var existingSql = $@"
-            SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableClasses}
+            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
             WHERE classname = @ClassName 
             AND section = @Section 
             AND streamgroup = @StreamGroup 
@@ -200,7 +200,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, classEntity, tx, "Id")
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, classEntity, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -212,7 +212,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableClasses, id, tx)
+            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

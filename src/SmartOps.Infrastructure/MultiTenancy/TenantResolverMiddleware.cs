@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Http;
+using SmartOps.Application.Common.Abstractions;
+using SmartOps.Domain.Modules.School.Entities;
 using SmartOps.Shared.Constants;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
@@ -13,7 +15,10 @@ public sealed class TenantResolverMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, TenantContext tenantContext)
+    public async Task InvokeAsync(
+        HttpContext context,
+        TenantContext tenantContext,
+        ITenantSchoolResolver tenantSchoolResolver)
     {
         string? tenantId = null;
         string? schoolId = null;
@@ -49,6 +54,21 @@ public sealed class TenantResolverMiddleware
         tenantContext.TenantId = tenantId;
         tenantContext.SchoolId = schoolId;
 
+        if (!string.IsNullOrWhiteSpace(tenantId) &&
+            (string.IsNullOrWhiteSpace(schoolId) || string.IsNullOrWhiteSpace(tenantContext.SchemaName)))
+        {
+            SchoolEntity? school = await tenantSchoolResolver
+                .ResolveBySubdomainAsync(tenantId, context.RequestAborted)
+                .ConfigureAwait(false);
+
+            if (school is not null)
+            {
+                tenantContext.SchoolId = school.Id.ToString();
+                tenantContext.SchemaName = school.SchemaName
+                    ?? $"school_{school.Subdomain.Replace('-', '_')}";
+            }
+        }
+
         await _next(context).ConfigureAwait(false);
     }
 
@@ -59,10 +79,24 @@ public sealed class TenantResolverMiddleware
             return null;
         }
 
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith("localhost:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         string[] parts = host.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length >= 3)
         {
-            return parts[0];
+            string subdomain = parts[0];
+            if (subdomain.Equals("www", StringComparison.OrdinalIgnoreCase) ||
+                subdomain.Equals("admin", StringComparison.OrdinalIgnoreCase) ||
+                subdomain.Equals("api", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return subdomain;
         }
 
         return null;

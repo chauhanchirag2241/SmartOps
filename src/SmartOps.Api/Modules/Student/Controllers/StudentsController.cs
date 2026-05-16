@@ -30,7 +30,7 @@ public sealed class StudentsController(
 {
     /// <summary>Generates the next admission number based on settings and year.</summary>
     [HttpGet("next-admission-no")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentCreate)]
     public async Task<ActionResult<object>> GetNextAdmissionNo(
         [FromQuery] Guid? academicYearId,
         CancellationToken cancellationToken)
@@ -53,7 +53,7 @@ public sealed class StudentsController(
 
     /// <summary>Generates the next roll number class-wise for a given academic year.</summary>
     [HttpGet("next-roll-number")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentCreate)]
     public async Task<ActionResult<object>> GetNextRollNumber(
         [FromQuery] Guid academicYearId,
         [FromQuery] Guid classId,

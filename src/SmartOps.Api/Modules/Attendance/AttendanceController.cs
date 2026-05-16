@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Attendance.DTOs;
 using SmartOps.Application.Modules.Attendance.Interfaces;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Attendance;
 
@@ -26,7 +27,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AttendanceRead)]
     [ProducesResponseType(typeof(ClassAttendanceResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -49,7 +50,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpPost("submit")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AttendanceMark)]
     [ProducesResponseType(typeof(ClassAttendanceResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -82,7 +83,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpGet("student/{studentId:guid}/summary")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AttendanceRead)]
     [ProducesResponseType(typeof(StudentAttendanceSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetStudentSummary(

@@ -6,6 +6,7 @@ using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
 using SmartOps.Domain.Modules.AcademicYear.Interfaces;
 using SmartOps.Domain.Modules.AcademicYear.Models;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.AcademicYear.Controllers;
 
@@ -15,7 +16,7 @@ namespace SmartOps.Api.Modules.AcademicYear.Controllers;
 public sealed class AcademicYearsController(IAcademicYearRepository academicYearRepository) : ControllerBase
 {
     [HttpPost]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AdminFull)]
     [ProducesResponseType(typeof(CreateAcademicYearResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateAcademicYearResponse>> CreateAcademicYear(
@@ -34,7 +35,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     }
 
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AcademicYearRead)]
     [ProducesResponseType(typeof(PagedResult<AcademicYearListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllAcademicYears(
         [FromQuery] int pageIndex = 1,
@@ -53,7 +54,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     }
 
     [HttpGet("/api/academic-year/dropdown")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AcademicYearRead)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAcademicYearDropdown(CancellationToken cancellationToken)
     {
@@ -62,7 +63,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     }
 
     [HttpGet("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AcademicYearRead)]
     [ProducesResponseType(typeof(AcademicYearEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AcademicYearEntity>> GetAcademicYearById(Guid id, CancellationToken cancellationToken)
@@ -72,7 +73,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     }
 
     [HttpPut("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AdminFull)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateAcademicYear(Guid id, [FromBody] AcademicYearEntity entity, CancellationToken cancellationToken)
@@ -87,7 +88,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     }
 
     [HttpDelete("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.AdminFull)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteAcademicYear(Guid id, CancellationToken cancellationToken)
     {

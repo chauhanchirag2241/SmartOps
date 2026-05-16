@@ -100,7 +100,7 @@ public sealed class StudentsController(
 
     /// <summary>Paged list with optional search, sort, and status filter.</summary>
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.Students.View)]
+    [Authorize(Policy = MenuPolicies.Students.ListForAttendanceOrModule)]
     [ProducesResponseType(typeof(PagedResult<StudentListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllStudents(
         [FromQuery] int pageIndex = 1,

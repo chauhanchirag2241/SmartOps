@@ -66,6 +66,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:STUDENTS:Edit";
         public const string Delete = "Menu:STUDENTS:Delete";
         public const string Export = "Menu:STUDENTS:Export";
+
+        /// <summary>STUDENTS.View or ATTENDANCE.View — list/roster for attendance module.</summary>
+        public const string ListForAttendanceOrModule = "Menu:STUDENTS:ViewOrAttendanceView";
     }
 
     public static class Teachers
@@ -84,6 +87,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:CLASSES:Edit";
         public const string Delete = "Menu:CLASSES:Delete";
         public const string Export = "Menu:CLASSES:Export";
+
+        /// <summary>CLASSES.View or ATTENDANCE.View — class dropdown on attendance page.</summary>
+        public const string ListForAttendanceDropdown = "Menu:CLASSES:ViewOrAttendanceView";
     }
 
     public static class Subjects

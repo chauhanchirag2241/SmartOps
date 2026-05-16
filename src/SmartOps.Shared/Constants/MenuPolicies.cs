@@ -1,0 +1,115 @@
+namespace SmartOps.Shared.Constants;
+
+/// <summary>
+/// Compile-time policy names for [Authorize(Policy = ...)] attributes.
+/// </summary>
+public static class MenuPolicies
+{
+    public static class Dashboard
+    {
+        public const string View = "Menu:DASHBOARD:View";
+        public const string Add = "Menu:DASHBOARD:Add";
+        public const string Edit = "Menu:DASHBOARD:Edit";
+        public const string Delete = "Menu:DASHBOARD:Delete";
+        public const string Export = "Menu:DASHBOARD:Export";
+    }
+
+    public static class Schools
+    {
+        public const string View = "Menu:SCHOOLS:View";
+        public const string Add = "Menu:SCHOOLS:Add";
+        public const string Edit = "Menu:SCHOOLS:Edit";
+        public const string Delete = "Menu:SCHOOLS:Delete";
+        public const string Export = "Menu:SCHOOLS:Export";
+    }
+
+    public static class Users
+    {
+        public const string View = "Menu:USERS:View";
+        public const string Add = "Menu:USERS:Add";
+        public const string Edit = "Menu:USERS:Edit";
+        public const string Delete = "Menu:USERS:Delete";
+        public const string Export = "Menu:USERS:Export";
+    }
+
+    public static class Roles
+    {
+        public const string View = "Menu:ROLES:View";
+        public const string Add = "Menu:ROLES:Add";
+        public const string Edit = "Menu:ROLES:Edit";
+        public const string Delete = "Menu:ROLES:Delete";
+        public const string Export = "Menu:ROLES:Export";
+    }
+
+    public static class Settings
+    {
+        public const string View = "Menu:SETTINGS:View";
+        public const string Add = "Menu:SETTINGS:Add";
+        public const string Edit = "Menu:SETTINGS:Edit";
+        public const string Delete = "Menu:SETTINGS:Delete";
+        public const string Export = "Menu:SETTINGS:Export";
+    }
+
+    public static class Academics
+    {
+        public const string View = "Menu:ACADEMICS:View";
+        public const string Add = "Menu:ACADEMICS:Add";
+        public const string Edit = "Menu:ACADEMICS:Edit";
+        public const string Delete = "Menu:ACADEMICS:Delete";
+        public const string Export = "Menu:ACADEMICS:Export";
+    }
+
+    public static class Students
+    {
+        public const string View = "Menu:STUDENTS:View";
+        public const string Add = "Menu:STUDENTS:Add";
+        public const string Edit = "Menu:STUDENTS:Edit";
+        public const string Delete = "Menu:STUDENTS:Delete";
+        public const string Export = "Menu:STUDENTS:Export";
+    }
+
+    public static class Teachers
+    {
+        public const string View = "Menu:TEACHERS:View";
+        public const string Add = "Menu:TEACHERS:Add";
+        public const string Edit = "Menu:TEACHERS:Edit";
+        public const string Delete = "Menu:TEACHERS:Delete";
+        public const string Export = "Menu:TEACHERS:Export";
+    }
+
+    public static class Classes
+    {
+        public const string View = "Menu:CLASSES:View";
+        public const string Add = "Menu:CLASSES:Add";
+        public const string Edit = "Menu:CLASSES:Edit";
+        public const string Delete = "Menu:CLASSES:Delete";
+        public const string Export = "Menu:CLASSES:Export";
+    }
+
+    public static class Subjects
+    {
+        public const string View = "Menu:SUBJECTS:View";
+        public const string Add = "Menu:SUBJECTS:Add";
+        public const string Edit = "Menu:SUBJECTS:Edit";
+        public const string Delete = "Menu:SUBJECTS:Delete";
+        public const string Export = "Menu:SUBJECTS:Export";
+    }
+
+    public static class AcademicYears
+    {
+        public const string View = "Menu:ACADEMIC_YEARS:View";
+        public const string Add = "Menu:ACADEMIC_YEARS:Add";
+        public const string Edit = "Menu:ACADEMIC_YEARS:Edit";
+        public const string Delete = "Menu:ACADEMIC_YEARS:Delete";
+        public const string Export = "Menu:ACADEMIC_YEARS:Export";
+    }
+
+    public static class Attendance
+    {
+        public const string View = "Menu:ATTENDANCE:View";
+        public const string Add = "Menu:ATTENDANCE:Add";
+        public const string Edit = "Menu:ATTENDANCE:Edit";
+        public const string Delete = "Menu:ATTENDANCE:Delete";
+        public const string Export = "Menu:ATTENDANCE:Export";
+    }
+}

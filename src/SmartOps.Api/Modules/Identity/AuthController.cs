@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Identity.DTOs;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Shared.Common;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Identity;
 
@@ -101,5 +102,32 @@ public sealed class AuthController : ControllerBase
         return result.IsSuccess
             ? Ok(result.Value)
             : Unauthorized();
+    }
+
+    [HttpGet("permissions")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserPermissionResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Permissions(
+        [FromQuery] string app,
+        CancellationToken cancellationToken)
+    {
+        if (!MenuApplications.IsValid(app))
+        {
+            return BadRequest("Query parameter 'app' must be CONFIG or SCHOOL.");
+        }
+
+        string? sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out Guid userId))
+        {
+            return Unauthorized();
+        }
+
+        Result<UserPermissionResponseDto> result =
+            await _identityService.GetUserPermissionsAsync(userId, app, cancellationToken).ConfigureAwait(false);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : Unauthorized(result.Error);
     }
 }

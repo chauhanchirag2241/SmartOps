@@ -5,7 +5,7 @@ namespace SmartOps.Application.Modules.Identity.Interfaces;
 
 public interface IJwtService
 {
-    string GenerateAccessToken(ApplicationUser user, IList<string> roles, IList<string> permissions);
+    string GenerateAccessToken(ApplicationUser user, IList<string> roles);
 
     string GenerateRefreshToken();
 

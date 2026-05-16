@@ -11,20 +11,17 @@ namespace SmartOps.Infrastructure.Modules.Identity.Services;
 public sealed class IdentityService : IIdentityService
 {
     private readonly IUserRepository _userRepository;
-
     private readonly IRefreshTokenRepository _refreshTokenRepository;
-
+    private readonly IMenuRepository _menuRepository;
     private readonly IJwtService _jwtService;
-
     private readonly IUserCredentialValidator _credentialValidator;
-
     private readonly IOptions<JwtOptions> _jwtOptions;
-
     private readonly ILogger<IdentityService> _logger;
 
     public IdentityService(
         IUserRepository userRepository,
         IRefreshTokenRepository refreshTokenRepository,
+        IMenuRepository menuRepository,
         IJwtService jwtService,
         IUserCredentialValidator credentialValidator,
         IOptions<JwtOptions> jwtOptions,
@@ -32,6 +29,7 @@ public sealed class IdentityService : IIdentityService
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _menuRepository = menuRepository;
         _jwtService = jwtService;
         _credentialValidator = credentialValidator;
         _jwtOptions = jwtOptions;
@@ -59,9 +57,7 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        IList<string> permissions = await _userRepository.GetPermissionsAsync(user.Id, cancellationToken).ConfigureAwait(false);
-
-        string accessToken = _jwtService.GenerateAccessToken(user, roles, permissions);
+        string accessToken = _jwtService.GenerateAccessToken(user, roles);
         string refreshTokenValue = _jwtService.GenerateRefreshToken();
 
         JwtOptions jwt = _jwtOptions.Value;
@@ -120,9 +116,7 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        IList<string> permissions = await _userRepository.GetPermissionsAsync(user.Id, cancellationToken).ConfigureAwait(false);
-
-        string accessToken = _jwtService.GenerateAccessToken(user, roles, permissions);
+        string accessToken = _jwtService.GenerateAccessToken(user, roles);
         string refreshTokenValue = _jwtService.GenerateRefreshToken();
 
         JwtOptions jwt = _jwtOptions.Value;
@@ -174,12 +168,52 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        IList<string> permissions = await _userRepository.GetPermissionsAsync(user.Id, cancellationToken).ConfigureAwait(false);
+        (Guid RoleId, string RoleName, string RoleCode)? primaryRole =
+            await _userRepository.GetPrimaryRoleAsync(user.Id, cancellationToken).ConfigureAwait(false);
 
         UserDto dto = user.ToUserDto();
         dto.Roles = roles.ToList();
-        dto.Permissions = permissions.ToList();
+        if (primaryRole is not null)
+        {
+            dto.RoleId = primaryRole.Value.RoleId;
+            dto.RoleCode = primaryRole.Value.RoleCode;
+        }
 
         return Result<UserDto>.Success(dto);
+    }
+
+    public async Task<Result<UserPermissionResponseDto>> GetUserPermissionsAsync(
+        Guid userId,
+        string application,
+        CancellationToken cancellationToken = default)
+    {
+        ApplicationUser? user = await _userRepository.GetByIdAsync(userId, cancellationToken).ConfigureAwait(false);
+        if (user is null || !user.IsActive)
+        {
+            return Result<UserPermissionResponseDto>.Failure("User was not found.");
+        }
+
+        (Guid RoleId, string RoleName, string RoleCode)? primaryRole =
+            await _userRepository.GetPrimaryRoleAsync(userId, cancellationToken).ConfigureAwait(false);
+
+        if (primaryRole is null)
+        {
+            return Result<UserPermissionResponseDto>.Failure("User has no assigned role.");
+        }
+
+        IReadOnlyList<MenuPermissionDto> permissions = await _menuRepository
+            .GetUserMenuPermissionsForApplicationAsync(userId, application, cancellationToken)
+            .ConfigureAwait(false);
+
+        UserPermissionResponseDto response = new()
+        {
+            UserId = userId,
+            RoleId = primaryRole.Value.RoleId,
+            RoleName = primaryRole.Value.RoleName,
+            RoleCode = primaryRole.Value.RoleCode,
+            Permissions = permissions
+        };
+
+        return Result<UserPermissionResponseDto>.Success(response);
     }
 }

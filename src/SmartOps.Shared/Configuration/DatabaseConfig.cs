@@ -8,9 +8,9 @@ public static class DatabaseConfig
 
     public const string TableUsers = "users";
     public const string TableRoles = "roles";
-    public const string TablePermissions = "permissions";
+    public const string TableMenus = "menus";
     public const string TableUserRoles = "userroles";
-    public const string TableRolePermissions = "rolepermissions";
+    public const string TableRoleMenuPermissions = "rolemenupermissions";
     public const string TableSchools = "schools";
     public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserSchoolMappings = "userschoolmappings";

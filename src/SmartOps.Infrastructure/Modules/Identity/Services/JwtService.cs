@@ -23,7 +23,7 @@ public sealed class JwtService : IJwtService
         _tenantContext = tenantContext;
     }
 
-    public string GenerateAccessToken(ApplicationUser user, IList<string> roles, IList<string> permissions)
+    public string GenerateAccessToken(ApplicationUser user, IList<string> roles)
     {
         List<Claim> claims = new()
         {
@@ -42,12 +42,6 @@ public sealed class JwtService : IJwtService
         if (!string.IsNullOrWhiteSpace(schoolId))
         {
             claims.Add(new Claim(JwtCustomClaimNames.SchoolId, schoolId));
-        }
-
-        string permissionsValue = string.Join(',', permissions.Distinct(StringComparer.Ordinal));
-        if (!string.IsNullOrWhiteSpace(permissionsValue))
-        {
-            claims.Add(new Claim(JwtCustomClaimNames.Permissions, permissionsValue));
         }
 
         foreach (string role in roles.Distinct(StringComparer.Ordinal))

@@ -27,7 +27,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.AttendanceRead)]
+    [Authorize(Policy = MenuPolicies.Attendance.View)]
     [ProducesResponseType(typeof(ClassAttendanceResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -50,7 +50,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpPost("submit")]
-    [Authorize(Policy = PermissionNames.AttendanceMark)]
+    [Authorize(Policy = MenuPolicies.Attendance.Edit)]
     [ProducesResponseType(typeof(ClassAttendanceResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -83,7 +83,7 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpGet("student/{studentId:guid}/summary")]
-    [Authorize(Policy = PermissionNames.AttendanceRead)]
+    [Authorize(Policy = MenuPolicies.Attendance.View)]
     [ProducesResponseType(typeof(StudentAttendanceSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetStudentSummary(

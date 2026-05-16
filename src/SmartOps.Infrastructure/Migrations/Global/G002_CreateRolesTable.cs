@@ -14,6 +14,7 @@ public sealed class G002_CreateRolesTable : Migration
             Create.Table(DatabaseConfig.TableRoles).InSchema(DatabaseConfig.Schema_Global)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("name").AsString(100).NotNullable().Unique()
+                .WithColumn("code").AsString(50).NotNullable().Unique()
                 .WithColumn("description").AsCustom("text").Nullable()
                 .WithAuditColumns();
         }

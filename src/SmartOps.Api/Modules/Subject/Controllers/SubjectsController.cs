@@ -16,7 +16,7 @@ namespace SmartOps.Api.Modules.Subject.Controllers;
 public sealed class SubjectsController(ISubjectRepository subjectRepository) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Subjects.Add)]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateSubjectResponse>> CreateSubject([FromBody] CreateSubjectDto request, CancellationToken ct)
     {
@@ -26,7 +26,7 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.SubjectRead)]
+    [Authorize(Policy = MenuPolicies.Subjects.View)]
     [ProducesResponseType(typeof(PagedResult<SubjectListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllSubjects(
         [FromQuery] int pageIndex = 1,
@@ -44,7 +44,7 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     }
 
     [HttpGet("/api/subject/dropdown")]
-    [Authorize(Policy = PermissionNames.SubjectRead)]
+    [Authorize(Policy = MenuPolicies.Subjects.View)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSubjectDropdown(CancellationToken ct)
     {
@@ -53,7 +53,7 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.SubjectRead)]
+    [Authorize(Policy = MenuPolicies.Subjects.View)]
     [ProducesResponseType(typeof(SubjectEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SubjectEntity>> GetSubjectById(Guid id, CancellationToken ct)
@@ -63,7 +63,7 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Subjects.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> UpdateSubject(Guid id, [FromBody] SubjectEntity subject, CancellationToken ct)
     {
@@ -73,7 +73,7 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Subjects.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteSubject(Guid id, CancellationToken ct)
     {

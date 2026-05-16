@@ -21,7 +21,7 @@ public sealed class UsersController(
     private const string DefaultPassword = "ChangeMe@123";
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.HrRead)]
+    [Authorize(Policy = MenuPolicies.Users.View)]
     public async Task<ActionResult<IReadOnlyList<SchoolUserDto>>> GetSchoolUsers(CancellationToken cancellationToken)
     {
         if (!TryGetSchoolId(out Guid schoolId))
@@ -33,7 +33,7 @@ public sealed class UsersController(
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.HrRead)]
+    [Authorize(Policy = MenuPolicies.Users.View)]
     public async Task<ActionResult<SchoolUserDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetSchoolId(out Guid schoolId))
@@ -52,7 +52,7 @@ public sealed class UsersController(
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Users.Add)]
     public async Task<ActionResult<SchoolUserDto>> Create(
         [FromBody] CreateUserDto request,
         CancellationToken cancellationToken)
@@ -104,7 +104,7 @@ public sealed class UsersController(
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Users.Edit)]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateUserDto request,
@@ -131,7 +131,7 @@ public sealed class UsersController(
     }
 
     [HttpPut("{id:guid}/roles")]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Users.Edit)]
     public async Task<IActionResult> UpdateRoles(
         Guid id,
         [FromBody] UpdateUserRolesDto request,
@@ -161,7 +161,7 @@ public sealed class UsersController(
     }
 
     [HttpPut("{id:guid}/password")]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Users.Edit)]
     public async Task<IActionResult> ResetPassword(
         Guid id,
         [FromBody] ResetUserPasswordDto request,

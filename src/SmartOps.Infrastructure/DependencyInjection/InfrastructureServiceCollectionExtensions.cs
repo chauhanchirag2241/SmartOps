@@ -85,8 +85,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<RoleRepository>();
         services.AddScoped<IRoleRepository>(sp => sp.GetRequiredService<RoleRepository>());
 
-        services.AddScoped<PermissionRepository>();
-        services.AddScoped<IPermissionRepository>(sp => sp.GetRequiredService<PermissionRepository>());
+        services.AddScoped<MenuRepository>();
+        services.AddScoped<IMenuRepository>(sp => sp.GetRequiredService<MenuRepository>());
+
+        services.AddScoped<IPermissionService, PermissionService>();
 
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 

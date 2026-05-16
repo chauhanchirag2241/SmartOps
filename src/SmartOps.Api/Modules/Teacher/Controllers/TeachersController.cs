@@ -22,7 +22,7 @@ public sealed class TeachersController(
     ITenantProvider tenantProvider) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Teachers.Add)]
     [ProducesResponseType(typeof(CreateTeacherResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateTeacherResponse>> CreateTeacher(
         [FromBody] CreateTeacherDto request,
@@ -51,7 +51,7 @@ public sealed class TeachersController(
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.TeacherRead)]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
     public async Task<IActionResult> GetAllTeachers(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
@@ -69,7 +69,7 @@ public sealed class TeachersController(
     }
 
     [HttpGet("/api/teacher/class-teacher-dropdown")]
-    [Authorize(Policy = PermissionNames.TeacherRead)]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
     public async Task<IActionResult> GetClassTeacherDropdown(CancellationToken cancellationToken)
     {
         var result = await teacherRepository.GetClassTeacherDropdownAsync(cancellationToken).ConfigureAwait(false);
@@ -77,7 +77,7 @@ public sealed class TeachersController(
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.TeacherRead)]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
     public async Task<ActionResult<TeacherEntity>> GetTeacherById(Guid id, CancellationToken cancellationToken)
     {
         var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken).ConfigureAwait(false);
@@ -85,7 +85,7 @@ public sealed class TeachersController(
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
     public async Task<IActionResult> UpdateTeacher(Guid id, [FromBody] TeacherEntity teacher, CancellationToken cancellationToken)
     {
         if (id != teacher.Id) return BadRequest("Route id and payload id must match.");
@@ -95,7 +95,7 @@ public sealed class TeachersController(
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.HrManage)]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
     public async Task<IActionResult> DeleteTeacher(Guid id, CancellationToken cancellationToken)
     {
         await teacherRepository.DeleteTeacherAsync(id, cancellationToken).ConfigureAwait(false);

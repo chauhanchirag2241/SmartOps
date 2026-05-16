@@ -14,5 +14,7 @@ public sealed class UserDto
 
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
 
-    public IReadOnlyList<string> Permissions { get; set; } = Array.Empty<string>();
+    public Guid? RoleId { get; set; }
+
+    public string? RoleCode { get; set; }
 }

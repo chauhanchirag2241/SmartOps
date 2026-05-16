@@ -12,4 +12,9 @@ public interface IIdentityService
     Task<Result> LogoutAsync(string refreshToken, CancellationToken cancellationToken = default);
 
     Task<Result<UserDto>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<Result<UserPermissionResponseDto>> GetUserPermissionsAsync(
+        Guid userId,
+        string application,
+        CancellationToken cancellationToken = default);
 }

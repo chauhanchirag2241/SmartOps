@@ -17,7 +17,7 @@ namespace SmartOps.Api.Modules.Class.Controllers;
 public sealed class ClassesController(IClassRepository classRepository) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Classes.Add)]
     [ProducesResponseType(typeof(CreateClassResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateClassResponse>> CreateClass(
@@ -36,7 +36,7 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ClassRead)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     [ProducesResponseType(typeof(PagedResult<ClassListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllClasses(
         [FromQuery] int pageIndex = 1,
@@ -55,7 +55,7 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     }
 
     [HttpGet("/api/class/dropdown")]
-    [Authorize(Policy = PermissionNames.ClassRead)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetClassDropdown(CancellationToken cancellationToken)
     {
@@ -64,7 +64,7 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ClassRead)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     [ProducesResponseType(typeof(ClassEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClassEntity>> GetClassById(Guid id, CancellationToken cancellationToken)
@@ -74,7 +74,7 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateClass(Guid id, [FromBody] ClassEntity classEntity, CancellationToken cancellationToken)
@@ -89,7 +89,7 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Classes.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteClass(Guid id, CancellationToken cancellationToken)
     {

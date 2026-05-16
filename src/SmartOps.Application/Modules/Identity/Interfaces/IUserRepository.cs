@@ -14,15 +14,15 @@ public interface IUserRepository
 
     Task UpdateAsync(ApplicationUser user, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ApplicationUser>> GetUsersInRoleAsync(string roleName, CancellationToken cancellationToken = default);
+
     Task<IList<string>> GetRolesAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    Task<IList<string>> GetPermissionsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
 
     Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<ApplicationUser>> GetUsersInRoleAsync(string roleName, CancellationToken cancellationToken = default);
 
     Task AddUserToSchoolAsync(Guid userId, Guid schoolId, string schoolRole, CancellationToken cancellationToken = default);
 

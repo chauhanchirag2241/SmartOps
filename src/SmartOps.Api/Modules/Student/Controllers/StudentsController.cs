@@ -30,7 +30,7 @@ public sealed class StudentsController(
 {
     /// <summary>Generates the next admission number based on settings and year.</summary>
     [HttpGet("next-admission-no")]
-    [Authorize(Policy = PermissionNames.StudentCreate)]
+    [Authorize(Policy = MenuPolicies.Students.Add)]
     public async Task<ActionResult<object>> GetNextAdmissionNo(
         [FromQuery] Guid? academicYearId,
         CancellationToken cancellationToken)
@@ -53,7 +53,7 @@ public sealed class StudentsController(
 
     /// <summary>Generates the next roll number class-wise for a given academic year.</summary>
     [HttpGet("next-roll-number")]
-    [Authorize(Policy = PermissionNames.StudentCreate)]
+    [Authorize(Policy = MenuPolicies.Students.Add)]
     public async Task<ActionResult<object>> GetNextRollNumber(
         [FromQuery] Guid academicYearId,
         [FromQuery] Guid classId,
@@ -66,7 +66,7 @@ public sealed class StudentsController(
     /// <summary>Create a student and related rows (parents, academics, etc.).</summary>
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.StudentCreate)]
+    [Authorize(Policy = MenuPolicies.Students.Add)]
     [ProducesResponseType(typeof(CreateStudentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateStudentResponse>> CreateStudent(
@@ -100,7 +100,7 @@ public sealed class StudentsController(
 
     /// <summary>Paged list with optional search, sort, and status filter.</summary>
     [HttpGet]
-    [Authorize(Policy = PermissionNames.StudentRead)]
+    [Authorize(Policy = MenuPolicies.Students.View)]
     [ProducesResponseType(typeof(PagedResult<StudentListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllStudents(
         [FromQuery] int pageIndex = 1,
@@ -121,7 +121,7 @@ public sealed class StudentsController(
 
     /// <summary>Full student graph by id (active only).</summary>
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.StudentRead)]
+    [Authorize(Policy = MenuPolicies.Students.View)]
     [ProducesResponseType(typeof(StudentEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<StudentEntity>> GetStudentById(Guid id, CancellationToken cancellationToken)
@@ -132,7 +132,7 @@ public sealed class StudentsController(
 
     /// <summary>Replace student aggregate (body <see cref="StudentEntity.Id"/> must match route).</summary>
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.StudentUpdate)]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateStudent(Guid id, [FromBody] StudentEntity student, CancellationToken cancellationToken)
@@ -148,7 +148,7 @@ public sealed class StudentsController(
 
     /// <summary>Soft-delete student and related rows.</summary>
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.StudentDelete)]
+    [Authorize(Policy = MenuPolicies.Students.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStudent(Guid id, CancellationToken cancellationToken)
     {

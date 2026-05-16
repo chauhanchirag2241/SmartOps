@@ -6,23 +6,33 @@ public sealed class RoleDto
 
     public string Name { get; set; } = string.Empty;
 
+    public string Code { get; set; } = string.Empty;
+
     public string? Description { get; set; }
 
-    public IReadOnlyList<string> Permissions { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
 }
 
-public sealed class PermissionDto
+public sealed class CreateRoleDto
 {
-    public Guid Id { get; set; }
-
     public string Name { get; set; } = string.Empty;
 
+    public string Code { get; set; } = string.Empty;
+
     public string? Description { get; set; }
+
+    public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
 }
 
-public sealed class UpdateRolePermissionsDto
+public sealed class UpdateRoleDto
 {
-    public IReadOnlyList<string> PermissionNames { get; set; } = Array.Empty<string>();
+    public string Name { get; set; } = string.Empty;
+
+    public string Code { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public bool IsActive { get; set; } = true;
 }
 
 public sealed class SchoolUserDto

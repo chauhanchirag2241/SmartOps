@@ -258,24 +258,26 @@ WHERE ur.userid = @UserId
         return rows.ToList();
     }
 
-    public async Task<IList<string>> GetPermissionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT DISTINCT p.name
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TablePermissions} p
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions} rp ON rp.permissionid = p.id
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = rp.roleid
+SELECT r.id AS RoleId, r.name AS RoleName, r.code AS RoleCode
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
+INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
 WHERE ur.userid = @UserId
   AND ur.isactive = true
-  AND rp.isactive = true
-  AND p.isactive = true
+  AND r.isactive = true
+ORDER BY r.name
+LIMIT 1
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<string> rows = await connection.QueryAsync<string>(
+        RoleSummaryRow? row = await connection.QuerySingleOrDefaultAsync<RoleSummaryRow>(
             new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        return rows.ToList();
+        return row is null ? null : (row.RoleId, row.RoleName, row.RoleCode);
     }
 
     public async Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default)
@@ -569,6 +571,15 @@ ORDER BY u.username
         public bool IsActive { get; set; }
 
         public int VersionNo { get; set; }
+    }
+
+    private sealed class RoleSummaryRow
+    {
+        public Guid RoleId { get; set; }
+
+        public string RoleName { get; set; } = string.Empty;
+
+        public string RoleCode { get; set; } = string.Empty;
     }
 
     private sealed class SchoolMappingRow

@@ -1,11 +1,10 @@
+using SmartOps.Application.Modules.Identity.DTOs;
 using SmartOps.Domain.Modules.Identity.Entities;
 
 namespace SmartOps.Application.Modules.Identity.Interfaces;
 
 public interface IRoleRepository
 {
-    Task<IReadOnlyList<ApplicationRole>> GetAllAsync(CancellationToken cancellationToken = default);
-
     Task<ApplicationRole?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<ApplicationRole?> GetByNameAsync(string name, CancellationToken cancellationToken = default);
@@ -14,7 +13,9 @@ public interface IRoleRepository
 
     Task UpdateAsync(ApplicationRole role, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<string>> GetPermissionNamesForRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ApplicationRole>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    Task SetRolePermissionsAsync(Guid roleId, IReadOnlyList<string> permissionNames, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RoleMenuPermissionDto>> GetMenuPermissionsForRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
+
+    Task SetRoleMenuPermissionsAsync(Guid roleId, IReadOnlyList<RoleMenuPermissionDto> permissions, CancellationToken cancellationToken = default);
 }

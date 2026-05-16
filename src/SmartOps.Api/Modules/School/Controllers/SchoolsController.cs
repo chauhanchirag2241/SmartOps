@@ -17,7 +17,7 @@ namespace SmartOps.Api.Modules.School.Controllers;
 public sealed class SchoolsController(ISchoolRepository schoolRepository) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Schools.Add)]
     [ProducesResponseType(typeof(CreateSchoolResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateSchoolResponse>> CreateSchool(
         [FromBody] CreateSchoolDto request,
@@ -34,7 +34,7 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
     [ProducesResponseType(typeof(PagedResult<SchoolListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllSchools(
         [FromQuery] int pageIndex = 1,
@@ -63,7 +63,7 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
     [ProducesResponseType(typeof(SchoolEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SchoolEntity>> GetSchoolById(Guid id, CancellationToken cancellationToken)
@@ -73,7 +73,7 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateSchool(Guid id, [FromBody] SchoolEntity school, CancellationToken cancellationToken)
@@ -88,7 +88,7 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.AdminFull)]
+    [Authorize(Policy = MenuPolicies.Schools.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteSchool(Guid id, CancellationToken cancellationToken)
     {

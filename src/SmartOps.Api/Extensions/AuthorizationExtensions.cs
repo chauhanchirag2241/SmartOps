@@ -6,40 +6,29 @@ namespace SmartOps.Api.Extensions;
 
 public static class AuthorizationExtensions
 {
-    public static IServiceCollection AddPermissionPolicies(this IServiceCollection services)
+    public static IServiceCollection AddMenuPermissionPolicies(this IServiceCollection services)
     {
-        services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, MenuPermissionAuthorizationHandler>();
 
         services.AddAuthorization(options =>
         {
-            RegisterPolicy(options, PermissionNames.StudentRead);
-            RegisterPolicy(options, PermissionNames.StudentCreate);
-            RegisterPolicy(options, PermissionNames.StudentUpdate);
-            RegisterPolicy(options, PermissionNames.StudentDelete);
-            RegisterPolicy(options, PermissionNames.AttendanceRead);
-            RegisterPolicy(options, PermissionNames.AttendanceMark);
-            RegisterPolicy(options, PermissionNames.FeesRead);
-            RegisterPolicy(options, PermissionNames.FeesCreate);
-            RegisterPolicy(options, PermissionNames.FeesUpdate);
-            RegisterPolicy(options, PermissionNames.ExamsRead);
-            RegisterPolicy(options, PermissionNames.ExamsCreate);
-            RegisterPolicy(options, PermissionNames.HrRead);
-            RegisterPolicy(options, PermissionNames.HrManage);
-            RegisterPolicy(options, PermissionNames.ReportsView);
-            RegisterPolicy(options, PermissionNames.AdminFull);
-            RegisterPolicy(options, PermissionNames.TeacherRead);
-            RegisterPolicy(options, PermissionNames.ClassRead);
-            RegisterPolicy(options, PermissionNames.SubjectRead);
-            RegisterPolicy(options, PermissionNames.AcademicYearRead);
-            RegisterPolicy(options, PermissionNames.RolesManage);
-            RegisterPolicy(options, PermissionNames.SettingsRead);
+            foreach (string menuCode in MenuCodes.All)
+            {
+                RegisterPolicy(options, menuCode, MenuPermissionAction.View);
+                RegisterPolicy(options, menuCode, MenuPermissionAction.Add);
+                RegisterPolicy(options, menuCode, MenuPermissionAction.Edit);
+                RegisterPolicy(options, menuCode, MenuPermissionAction.Delete);
+                RegisterPolicy(options, menuCode, MenuPermissionAction.Export);
+            }
         });
 
         return services;
     }
 
-    private static void RegisterPolicy(AuthorizationOptions options, string permission)
+    private static void RegisterPolicy(AuthorizationOptions options, string menuCode, MenuPermissionAction action)
     {
-        options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
+        string policyName = MenuPolicy.For(menuCode, action);
+        options.AddPolicy(policyName, policy =>
+            policy.Requirements.Add(new MenuPermissionRequirement(menuCode, action)));
     }
 }

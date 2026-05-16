@@ -34,19 +34,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
     (userid, roleid, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT '{userId}', r.id, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-WHERE r.name = 'PlatformAdmin'
-  AND NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur
-    WHERE ur.userid = '{userId}' AND ur.roleid = r.id
-  );
-""");
-
-        Execute.Sql($"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
-    (userid, roleid, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{userId}', r.id, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-WHERE r.name = 'SchoolAdmin'
+WHERE r.code = 'ADMIN'
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur
     WHERE ur.userid = '{userId}' AND ur.roleid = r.id

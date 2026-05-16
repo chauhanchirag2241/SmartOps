@@ -17,7 +17,7 @@ public sealed class RolesController(
     ITenantProvider tenantProvider) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.HrRead)]
+    [Authorize(Policy = MenuPolicies.Roles.View)]
     public async Task<ActionResult<IReadOnlyList<RoleDto>>> GetAll(CancellationToken cancellationToken)
     {
         IReadOnlyList<ApplicationRole> roles = await roleRepository.GetAllAsync(cancellationToken).ConfigureAwait(false);
@@ -25,16 +25,17 @@ public sealed class RolesController(
 
         foreach (ApplicationRole role in roles)
         {
-            IReadOnlyList<string> permissions = await roleRepository
-                .GetPermissionNamesForRoleAsync(role.Id, cancellationToken)
+            IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
+                .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
                 .ConfigureAwait(false);
 
             result.Add(new RoleDto
             {
                 Id = role.Id,
                 Name = role.Name,
+                Code = role.Code,
                 Description = role.Description,
-                Permissions = permissions
+                MenuPermissions = permissions
             });
         }
 
@@ -42,7 +43,7 @@ public sealed class RolesController(
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.RolesManage)]
+    [Authorize(Policy = MenuPolicies.Roles.View)]
     public async Task<ActionResult<RoleDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
@@ -51,21 +52,106 @@ public sealed class RolesController(
             return NotFound();
         }
 
-        IReadOnlyList<string> permissions = await roleRepository
-            .GetPermissionNamesForRoleAsync(role.Id, cancellationToken)
+        IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
+            .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(new RoleDto
         {
             Id = role.Id,
             Name = role.Name,
+            Code = role.Code,
             Description = role.Description,
-            Permissions = permissions
+            MenuPermissions = permissions
         });
     }
 
+    [HttpPost]
+    [Authorize(Policy = MenuPolicies.Roles.Add)]
+    public async Task<ActionResult<RoleDto>> Create(
+        [FromBody] CreateRoleDto request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Code))
+        {
+            return BadRequest("Role name and code are required.");
+        }
+
+        string name = request.Name.Trim();
+        string code = request.Code.Trim().ToUpperInvariant();
+        if (await roleRepository.GetByNameAsync(name, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return Conflict("A role with this name already exists.");
+        }
+
+        var role = new ApplicationRole
+        {
+            Name = name,
+            Code = code,
+            Description = request.Description?.Trim(),
+            IsActive = true,
+        };
+
+        await roleRepository.CreateAsync(role, cancellationToken).ConfigureAwait(false);
+        await roleRepository
+            .SetRoleMenuPermissionsAsync(role.Id, request.MenuPermissions, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
+            .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = role.Id },
+            new RoleDto
+            {
+                Id = role.Id,
+                Name = role.Name,
+                Code = role.Code,
+                Description = role.Description,
+                MenuPermissions = permissions,
+            });
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Roles.Edit)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdateRoleDto request,
+        CancellationToken cancellationToken)
+    {
+        ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (role is null)
+        {
+            return NotFound();
+        }
+
+        string name = request.Name.Trim();
+        string code = request.Code.Trim().ToUpperInvariant();
+
+        IReadOnlyList<ApplicationRole> allRoles = await roleRepository.GetAllAsync(cancellationToken).ConfigureAwait(false);
+        if (allRoles.Any(r => r.Id != id && string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Conflict("A role with this name already exists.");
+        }
+
+        if (allRoles.Any(r => r.Id != id && string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Conflict("A role with this code already exists.");
+        }
+
+        role.Name = name;
+        role.Code = code;
+        role.Description = request.Description?.Trim();
+        role.IsActive = request.IsActive;
+
+        await roleRepository.UpdateAsync(role, cancellationToken).ConfigureAwait(false);
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}/users")]
-    [Authorize(Policy = PermissionNames.RolesManage)]
+    [Authorize(Policy = MenuPolicies.Roles.View)]
     public async Task<ActionResult<IReadOnlyList<SchoolUserDto>>> GetUsersInRole(
         Guid id,
         CancellationToken cancellationToken)
@@ -108,7 +194,7 @@ public sealed class RolesController(
     }
 
     [HttpPut("{id:guid}/users")]
-    [Authorize(Policy = PermissionNames.RolesManage)]
+    [Authorize(Policy = MenuPolicies.Roles.Edit)]
     public async Task<IActionResult> AssignUsers(
         Guid id,
         [FromBody] AssignRoleUsersDto request,
@@ -151,10 +237,10 @@ public sealed class RolesController(
     }
 
     [HttpPut("{id:guid}/permissions")]
-    [Authorize(Policy = PermissionNames.RolesManage)]
+    [Authorize(Policy = MenuPolicies.Roles.Edit)]
     public async Task<IActionResult> UpdatePermissions(
         Guid id,
-        [FromBody] UpdateRolePermissionsDto request,
+        [FromBody] UpdateRoleMenuPermissionsDto request,
         CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
@@ -164,7 +250,7 @@ public sealed class RolesController(
         }
 
         await roleRepository
-            .SetRolePermissionsAsync(id, request.PermissionNames, cancellationToken)
+            .SetRoleMenuPermissionsAsync(id, request.Permissions, cancellationToken)
             .ConfigureAwait(false);
 
         return NoContent();

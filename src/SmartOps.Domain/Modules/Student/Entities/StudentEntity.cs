@@ -20,7 +20,9 @@ public class StudentEntity : AuditableEntity
     public string? PhotoUrl { get; set; }
     //public string Status { get; set; } = "Active";
     public string? Remarks { get; set; }
-    
+    public Guid? UserId { get; set; }
+    public bool PortalAccess { get; set; }
+
     // Navigation Properties
     [DbIgnore] public List<StudentParentEntity> Parents { get; set; } = new();
     [DbIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();

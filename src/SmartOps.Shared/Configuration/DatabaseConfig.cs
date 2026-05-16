@@ -33,7 +33,10 @@ public static class DatabaseConfig
     // Teacher Module
     public const string TableTeachers = "teachers";
 
-    // Attendance Module
+    // School template schema (tenant tables cloned from here)
     public const string Schema_School = "school";
+
+    public const string TableSettings = "settings";
+    public const string TableAlerts = "alerts";
     public const string TableAttendance = "attendance";
 }

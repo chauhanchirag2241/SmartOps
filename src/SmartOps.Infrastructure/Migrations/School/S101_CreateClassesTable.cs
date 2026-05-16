@@ -2,23 +2,26 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.School;
 
-[Migration(013)]
-public sealed class M013_CreateClassesTable : Migration
+[Migration(101, "School template — classes")]
+public sealed class S101_CreateClassesTable : Migration
 {
+    private static string S => DatabaseConfig.Schema_School;
+
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableClasses).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableClasses).Exists())
         {
-            Create.Table(DatabaseConfig.TableClasses).InSchema(DatabaseConfig.Schema_Global)
+            Create.Table(DatabaseConfig.TableClasses).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classname").AsString(50).NotNullable()
                 .WithColumn("section").AsInt32().NotNullable().WithDefaultValue(1)
                 .WithColumn("streamgroup").AsInt32().NotNullable().WithDefaultValue(1)
-                .WithColumn("academicyearid").AsGuid().NotNullable().ForeignKey("fk_classes_academicyearid", DatabaseConfig.Schema_Global, DatabaseConfig.TableAcademicYears, "id")
+                .WithColumn("academicyearid").AsGuid().NotNullable()
+                    .ForeignKey("fk_classes_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("capacity").AsInt32().NotNullable().WithDefaultValue(0)
-                .WithColumn("classteacher").AsString(200).Nullable()  //change when add teacher screen
+                .WithColumn("classteacher").AsString(200).Nullable()
                 .WithColumn("roomnumber").AsString(50).Nullable()
                 .WithColumn("shift").AsInt32().NotNullable().WithDefaultValue(1)
                 .WithColumn("medium").AsInt32().NotNullable().WithDefaultValue(1)
@@ -26,13 +29,10 @@ public sealed class M013_CreateClassesTable : Migration
                 .WithAuditColumns();
 
             Create.UniqueConstraint("uq_classes_identity")
-                .OnTable(DatabaseConfig.TableClasses).WithSchema(DatabaseConfig.Schema_Global)
+                .OnTable(DatabaseConfig.TableClasses).WithSchema(S)
                 .Columns("classname", "section", "streamgroup", "academicyearid");
         }
     }
 
-    public override void Down()
-    {
-        Delete.Table(DatabaseConfig.TableClasses).InSchema(DatabaseConfig.Schema_Global);
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableClasses).InSchema(S);
 }

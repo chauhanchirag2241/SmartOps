@@ -2,18 +2,13 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.Global;
 
-[Migration(007)]
-public sealed class M007_CreateUserSchoolMappingsTable : Migration
+[Migration(7, "Global — user school mappings")]
+public sealed class G007_CreateUserSchoolMappingsTable : Migration
 {
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Exists())
-        {
-            Create.Schema(DatabaseConfig.Schema_Global);
-        }
-
         if (Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableUserSchoolMappings).Exists())
         {
             return;
@@ -45,7 +40,6 @@ ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappin
     {
         Execute.Sql($"ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings} DROP CONSTRAINT IF EXISTS fk_user_school_mappings_user;");
         Execute.Sql($"ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings} DROP CONSTRAINT IF EXISTS fk_user_school_mappings_school;");
-
         Delete.PrimaryKey("pk_user_school_mappings").FromTable(DatabaseConfig.TableUserSchoolMappings).InSchema(DatabaseConfig.Schema_Global);
         Delete.Table(DatabaseConfig.TableUserSchoolMappings).InSchema(DatabaseConfig.Schema_Global);
     }

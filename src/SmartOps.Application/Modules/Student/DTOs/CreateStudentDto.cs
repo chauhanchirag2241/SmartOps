@@ -18,6 +18,7 @@ public class CreateStudentDto
     public string? Address { get; set; }
     public string? PhotoUrl { get; set; }
     public string? Remarks { get; set; }
+    public bool PortalAccess { get; set; }
 
     // Navigation
     public List<CreateStudentParentDto> Parents { get; set; } = new();
@@ -79,6 +80,7 @@ public static class StudentMappingExtensions
             Address = dto.Address,
             PhotoUrl = dto.PhotoUrl,
             Remarks = dto.Remarks,
+            PortalAccess = dto.PortalAccess,
             //Status = "Active",
             Parents = dto.Parents.Select(p => new StudentParentEntity
             {

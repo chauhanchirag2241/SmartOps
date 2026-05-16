@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
 using SmartOps.Domain.Common.Enums;
@@ -128,6 +129,27 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableTeachers, teacher, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+    public async Task SetTeacherUserIdAsync(Guid teacherId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableTeachers}
+SET userid = @UserId, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+WHERE id = @TeacherId AND isactive = true
+""";
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    TeacherId = teacherId,
+                    UserId = userId,
+                    Now = DateTime.UtcNow,
+                    Actor = ResolveUpdateActor()
+                },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task DeleteTeacherAsync(Guid id, CancellationToken cancellationToken = default)

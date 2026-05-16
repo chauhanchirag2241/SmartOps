@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence.Repositories;
@@ -9,7 +10,7 @@ using SmartOps.Shared.Configuration;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Repositories;
 
-public sealed class RoleRepository : BaseRepository
+public sealed class RoleRepository : BaseRepository, IRoleRepository
 {
     public RoleRepository(DapperContext context, ICurrentUserService currentUser)
         : base(context, currentUser)
@@ -144,5 +145,94 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
         role.VersionNo += 1;
         role.UpdatedBy = actor;
         role.UpdatedOn = utcNow;
+    }
+
+    public async Task<IReadOnlyList<ApplicationRole>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        string sql = $"""
+SELECT
+    id AS Id,
+    name AS Name,
+    description AS Description,
+    isactive AS IsActive,
+    versionno AS VersionNo,
+    createdby AS CreatedBy,
+    createdon AS CreatedOn,
+    updatedby AS UpdatedBy,
+    updatedon AS UpdatedOn
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+WHERE isactive = true
+ORDER BY name
+""";
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IEnumerable<ApplicationRole> rows = await connection.QueryAsync<ApplicationRole>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetPermissionNamesForRoleAsync(Guid roleId, CancellationToken cancellationToken = default)
+    {
+        string sql = $"""
+SELECT p.name
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TablePermissions} p
+INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions} rp ON rp.permissionid = p.id
+WHERE rp.roleid = @RoleId AND rp.isactive = true AND p.isactive = true
+ORDER BY p.name
+""";
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IEnumerable<string> rows = await connection.QueryAsync<string>(
+            new CommandDefinition(sql, new { RoleId = roleId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task SetRolePermissionsAsync(Guid roleId, IReadOnlyList<string> permissionNames, CancellationToken cancellationToken = default)
+    {
+        Guid actor = ResolveUpdateActor();
+        DateTime utcNow = DateTime.UtcNow;
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        string deactivateSql = $"""
+UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions}
+SET isactive = false, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
+WHERE roleid = @RoleId AND isactive = true
+""";
+        await connection.ExecuteAsync(
+            new CommandDefinition(deactivateSql, new { RoleId = roleId, Actor = actor, Now = utcNow }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        foreach (string permissionName in permissionNames.Distinct(StringComparer.Ordinal))
+        {
+            string insertSql = $"""
+INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions}
+    (roleid, permissionid, isactive, versionno, createdby, createdon, updatedby, updatedon)
+SELECT @RoleId, p.id, true, 1, @Actor, @Now, @Actor, @Now
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TablePermissions} p
+WHERE p.name = @PermissionName AND p.isactive = true
+  AND NOT EXISTS (
+    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions} rp
+    WHERE rp.roleid = @RoleId AND rp.permissionid = p.id AND rp.isactive = true
+  )
+""";
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    insertSql,
+                    new { RoleId = roleId, PermissionName = permissionName, Actor = actor, Now = utcNow },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            string reviveSql = $"""
+UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions}
+SET isactive = true, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
+WHERE roleid = @RoleId
+  AND permissionid = (SELECT id FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TablePermissions} WHERE name = @PermissionName LIMIT 1)
+  AND isactive = false
+""";
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    reviveSql,
+                    new { RoleId = roleId, PermissionName = permissionName, Actor = actor, Now = utcNow },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
     }
 }

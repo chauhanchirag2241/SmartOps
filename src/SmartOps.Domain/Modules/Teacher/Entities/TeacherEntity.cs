@@ -34,5 +34,6 @@ public class TeacherEntity : AuditableEntity
     public string Role { get; set; } = "Teacher";
     public bool PortalAccess { get; set; } = true;
     public string? Username { get; set; }
+    public Guid? UserId { get; set; }
     public bool IsActive { get; set; } = true;
 }

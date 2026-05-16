@@ -456,8 +456,125 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = true AND versionno = 
         }
     }
 
+    public async Task AddUserToSchoolAsync(Guid userId, Guid schoolId, string schoolRole, CancellationToken cancellationToken = default)
+    {
+        Guid actor = ResolveUpdateActor(userId);
+        DateTime utcNow = DateTime.UtcNow;
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        string existsSql = $"""
+SELECT role, isactive, versionno
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
+WHERE userid = @UserId AND schoolid = @SchoolId
+LIMIT 1
+""";
+
+        var existing = await connection.QuerySingleOrDefaultAsync<SchoolMappingRow>(
+            new CommandDefinition(
+                existsSql,
+                new { UserId = userId, SchoolId = schoolId },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (existing is not null)
+        {
+            if (existing.IsActive && string.Equals(existing.Role, schoolRole, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string updateSql = $"""
+UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
+SET role = @Role, isactive = true, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
+WHERE userid = @UserId AND schoolid = @SchoolId AND versionno = @VersionNo
+""";
+            int rows = await connection.ExecuteAsync(
+                new CommandDefinition(
+                    updateSql,
+                    new
+                    {
+                        UserId = userId,
+                        SchoolId = schoolId,
+                        Role = schoolRole,
+                        Actor = actor,
+                        Now = utcNow,
+                        VersionNo = existing.VersionNo
+                    },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (rows == 0)
+            {
+                throw new ConcurrencyException("Record was modified by another user.");
+            }
+
+            return;
+        }
+
+        string insertSql = $"""
+INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
+(
+    userid, schoolid, role, isactive, versionno, createdby, createdon, updatedby, updatedon
+)
+VALUES
+(
+    @UserId, @SchoolId, @Role, true, 1, @Actor, @Now, @Actor, @Now
+)
+""";
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                insertSql,
+                new
+                {
+                    UserId = userId,
+                    SchoolId = schoolId,
+                    Role = schoolRole,
+                    Actor = actor,
+                    Now = utcNow
+                },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ApplicationUser>> GetUsersBySchoolAsync(Guid schoolId, CancellationToken cancellationToken = default)
+    {
+        string sql = $"""
+SELECT
+    u.id AS Id,
+    u.username AS Username,
+    u.email AS Email,
+    u.passwordhash AS PasswordHash,
+    u.securitystamp AS SecurityStamp,
+    u.lockoutend AS LockoutEnd,
+    u.accessfailedcount AS AccessFailedCount,
+    u.lockoutenabled AS LockoutEnabled,
+    u.isactive AS IsActive,
+    u.versionno AS VersionNo,
+    u.createdby AS CreatedBy,
+    u.createdon AS CreatedOn,
+    u.updatedby AS UpdatedBy,
+    u.updatedon AS UpdatedOn
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
+INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings} m ON m.userid = u.id
+WHERE m.schoolid = @SchoolId AND m.isactive = true AND u.isactive = true
+ORDER BY u.username
+""";
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IEnumerable<ApplicationUser> rows = await connection.QueryAsync<ApplicationUser>(
+            new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
     private sealed class UserRoleMappingRow
     {
+        public bool IsActive { get; set; }
+
+        public int VersionNo { get; set; }
+    }
+
+    private sealed class SchoolMappingRow
+    {
+        public string Role { get; set; } = string.Empty;
+
         public bool IsActive { get; set; }
 
         public int VersionNo { get; set; }

@@ -2,10 +2,10 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.Global;
 
-[Migration(001)]
-public sealed class M001_CreateUsersTable : Migration
+[Migration(1, "Global — users")]
+public sealed class G001_CreateUsersTable : Migration
 {
     public override void Up()
     {
@@ -24,11 +24,12 @@ public sealed class M001_CreateUsersTable : Migration
             .WithColumn("username").AsString(100).NotNullable().Unique()
             .WithColumn("email").AsString(256).NotNullable().Unique()
             .WithColumn("passwordhash").AsCustom("text").NotNullable()
+            .WithColumn("securitystamp").AsCustom("text").Nullable()
+            .WithColumn("lockoutend").AsDateTimeOffset().Nullable()
+            .WithColumn("accessfailedcount").AsInt32().NotNullable().WithDefaultValue(0)
+            .WithColumn("lockoutenabled").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithAuditColumns();
     }
 
-    public override void Down()
-    {
-        Delete.Table(DatabaseConfig.TableUsers).InSchema(DatabaseConfig.Schema_Global);
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableUsers).InSchema(DatabaseConfig.Schema_Global);
 }

@@ -2,27 +2,25 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.School;
 
-[Migration(019)]
-public sealed class M019_CreateSettingsTable : Migration
+[Migration(106, "School template — settings")]
+public sealed class S106_CreateSettingsTable : Migration
 {
+    private static string S => DatabaseConfig.Schema_School;
+
     public override void Up()
     {
-        var schema = DatabaseConfig.Schema_Global;
-        var table = "settings";
-
-        if (!Schema.Schema(schema).Table(table).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableSettings).Exists())
         {
-            Create.Table(table).InSchema(schema)
+            Create.Table(DatabaseConfig.TableSettings).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("key").AsString(100).NotNullable().Unique()
                 .WithColumn("value").AsString(500).NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithAuditColumns();
 
-            // Seed initial admission number sequence
-            Insert.IntoTable(table).InSchema(schema).Row(new
+            Insert.IntoTable(DatabaseConfig.TableSettings).InSchema(S).Row(new
             {
                 key = "Student_AdmissionNo_Sequence",
                 value = "1",
@@ -31,8 +29,5 @@ public sealed class M019_CreateSettingsTable : Migration
         }
     }
 
-    public override void Down()
-    {
-        Delete.Table("settings").InSchema(DatabaseConfig.Schema_Global);
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableSettings).InSchema(S);
 }

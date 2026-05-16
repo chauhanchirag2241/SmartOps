@@ -1,22 +1,28 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Teacher.DTOs;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Domain.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Models;
+using SmartOps.Application.Common.Abstractions;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Teacher.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class TeachersController(ITeacherRepository teacherRepository) : ControllerBase
+public sealed class TeachersController(
+    ITeacherRepository teacherRepository,
+    IUserProvisioningService userProvisioning,
+    ITenantProvider tenantProvider) : ControllerBase
 {
     [HttpPost]
-    [AllowAnonymous] // For demo purposes, matching StudentsController reference if applicable
+    [Authorize(Policy = PermissionNames.HrManage)]
     [ProducesResponseType(typeof(CreateTeacherResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateTeacherResponse>> CreateTeacher(
         [FromBody] CreateTeacherDto request,
@@ -27,11 +33,25 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
         var entity = request.ToEntity();
         var teacherId = await teacherRepository.CreateTeacherAsync(entity, cancellationToken).ConfigureAwait(false);
 
+        if (TryGetSchoolId(out Guid schoolId))
+        {
+            Guid? userId = await userProvisioning
+                .ProvisionTeacherUserAsync(entity, schoolId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (userId.HasValue)
+            {
+                await teacherRepository
+                    .SetTeacherUserIdAsync(teacherId, userId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
         return Ok(new CreateTeacherResponse("Teacher created successfully", teacherId));
     }
 
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.TeacherRead)]
     public async Task<IActionResult> GetAllTeachers(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
@@ -49,7 +69,7 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
     }
 
     [HttpGet("/api/teacher/class-teacher-dropdown")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.TeacherRead)]
     public async Task<IActionResult> GetClassTeacherDropdown(CancellationToken cancellationToken)
     {
         var result = await teacherRepository.GetClassTeacherDropdownAsync(cancellationToken).ConfigureAwait(false);
@@ -57,7 +77,7 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
     }
 
     [HttpGet("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.TeacherRead)]
     public async Task<ActionResult<TeacherEntity>> GetTeacherById(Guid id, CancellationToken cancellationToken)
     {
         var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken).ConfigureAwait(false);
@@ -65,7 +85,7 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
     }
 
     [HttpPut("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.HrManage)]
     public async Task<IActionResult> UpdateTeacher(Guid id, [FromBody] TeacherEntity teacher, CancellationToken cancellationToken)
     {
         if (id != teacher.Id) return BadRequest("Route id and payload id must match.");
@@ -75,10 +95,17 @@ public sealed class TeachersController(ITeacherRepository teacherRepository) : C
     }
 
     [HttpDelete("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.HrManage)]
     public async Task<IActionResult> DeleteTeacher(Guid id, CancellationToken cancellationToken)
     {
         await teacherRepository.DeleteTeacherAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
+    }
+
+    private bool TryGetSchoolId(out Guid schoolId)
+    {
+        schoolId = Guid.Empty;
+        string? raw = tenantProvider.GetCurrentSchoolId();
+        return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
     }
 }

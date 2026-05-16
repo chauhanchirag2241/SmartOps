@@ -7,7 +7,7 @@ using SmartOps.Application.Common.Abstractions;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SmartOps.Infrastructure.Migrations;
+using SmartOps.Infrastructure.Migrations.Global;
 using SmartOps.Infrastructure.Modules.Identity.Repositories;
 using SmartOps.Infrastructure.Modules.Identity.Services;
 using SmartOps.Infrastructure.Modules.Identity.Stores;
@@ -68,7 +68,7 @@ public static class InfrastructureServiceCollectionExtensions
             .ConfigureRunner(rb => rb
                 .AddPostgres()
                 .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(M001_CreateUsersTable).Assembly).For.Migrations());
+                .ScanIn(typeof(G000_EnablePgCrypto).Assembly).For.Migrations());
 
         services.AddLogging(lb => lb.AddFluentMigratorConsole());
 
@@ -83,6 +83,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserRepository>(sp => sp.GetRequiredService<UserRepository>());
 
         services.AddScoped<RoleRepository>();
+        services.AddScoped<IRoleRepository>(sp => sp.GetRequiredService<RoleRepository>());
+
+        services.AddScoped<PermissionRepository>();
+        services.AddScoped<IPermissionRepository>(sp => sp.GetRequiredService<PermissionRepository>());
+
+        services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 
         services.AddScoped<RefreshTokenRepository>();
         services.AddScoped<IRefreshTokenRepository>(sp => sp.GetRequiredService<RefreshTokenRepository>());

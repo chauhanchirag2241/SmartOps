@@ -19,5 +19,8 @@ public interface ITeacherRepository
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default);
     Task UpdateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default);
+
+    Task SetTeacherUserIdAsync(Guid teacherId, Guid userId, CancellationToken cancellationToken = default);
+
     Task DeleteTeacherAsync(Guid id, CancellationToken cancellationToken = default);
 }

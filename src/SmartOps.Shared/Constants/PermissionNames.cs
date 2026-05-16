@@ -34,4 +34,16 @@ public static class PermissionNames
     public const string ReportsView = "reports.view";
 
     public const string AdminFull = "admin.full";
+
+    public const string TeacherRead = "teacher.read";
+
+    public const string ClassRead = "class.read";
+
+    public const string SubjectRead = "subject.read";
+
+    public const string AcademicYearRead = "academicyear.read";
+
+    public const string RolesManage = "roles.manage";
+
+    public const string SettingsRead = "settings.read";
 }

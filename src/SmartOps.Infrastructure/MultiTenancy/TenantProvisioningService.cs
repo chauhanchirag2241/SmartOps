@@ -7,8 +7,11 @@ namespace SmartOps.Infrastructure.MultiTenancy;
 
 public sealed class TenantProvisioningService : ITenantProvisioningService
 {
-    private static readonly string[] GlobalTemplateTables =
-    {
+    /// <summary>
+    /// Tables in the <c>school</c> template schema — copied into each tenant schema on school create.
+    /// </summary>
+    private static readonly string[] SchoolTemplateTables =
+    [
         DatabaseConfig.TableAcademicYears,
         DatabaseConfig.TableClasses,
         DatabaseConfig.TableSubjects,
@@ -18,7 +21,10 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
         DatabaseConfig.TableStudentFeeConfigs,
-    };
+        DatabaseConfig.TableAttendance,
+        DatabaseConfig.TableSettings,
+        DatabaseConfig.TableAlerts,
+    ];
 
     private readonly IDbConnectionFactory _connectionFactory;
 
@@ -34,9 +40,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             throw new ArgumentException("Schema name is required.", nameof(schemaName));
         }
 
-        var safeSchema = SanitizeSchemaName(schemaName);
+        string safeSchema = SanitizeSchemaName(schemaName);
 
-        await using var connection = (NpgsqlConnection)await _connectionFactory
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _connectionFactory
             .CreateGlobalConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -45,9 +51,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
                 $"CREATE SCHEMA IF NOT EXISTS \"{safeSchema}\";",
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        foreach (var table in GlobalTemplateTables)
+        foreach (string table in SchoolTemplateTables)
         {
-            if (!await TableExistsAsync(connection, DatabaseConfig.Schema_Global, table, cancellationToken).ConfigureAwait(false))
+            if (!await TableExistsAsync(connection, DatabaseConfig.Schema_School, table, cancellationToken).ConfigureAwait(false))
             {
                 continue;
             }
@@ -56,19 +62,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
                 new CommandDefinition(
                     $"""
                      CREATE TABLE IF NOT EXISTS "{safeSchema}"."{table}"
-                     (LIKE {DatabaseConfig.Schema_Global}."{table}" INCLUDING DEFAULTS);
-                     """,
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (await TableExistsAsync(connection, DatabaseConfig.Schema_School, DatabaseConfig.TableAttendance, cancellationToken)
-                .ConfigureAwait(false))
-        {
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-                     CREATE TABLE IF NOT EXISTS "{safeSchema}"."{DatabaseConfig.TableAttendance}"
-                     (LIKE {DatabaseConfig.Schema_School}."{DatabaseConfig.TableAttendance}" INCLUDING DEFAULTS);
+                     (LIKE {DatabaseConfig.Schema_School}."{table}" INCLUDING DEFAULTS);
                      """,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
@@ -76,7 +70,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
 
     private static string SanitizeSchemaName(string schemaName)
     {
-        var cleaned = schemaName.Trim().ToLowerInvariant();
+        string cleaned = schemaName.Trim().ToLowerInvariant();
         if (!System.Text.RegularExpressions.Regex.IsMatch(cleaned, "^[a-z][a-z0-9_]*$"))
         {
             throw new ArgumentException($"Invalid schema name: {schemaName}", nameof(schemaName));

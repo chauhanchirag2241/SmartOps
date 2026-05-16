@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
                 };
             });
 
-        services.AddAuthorization();
+        services.AddPermissionPolicies();
         return services;
     }
 

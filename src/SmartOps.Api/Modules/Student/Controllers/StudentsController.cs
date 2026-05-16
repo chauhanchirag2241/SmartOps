@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Student.DTOs;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
 using SmartOps.Domain.Modules.Student.Models;
-
 using SmartOps.Domain.Modules.Setting.Interfaces;
 using SmartOps.Domain.Modules.AcademicYear.Interfaces;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Student.Controllers;
 
@@ -20,9 +22,11 @@ namespace SmartOps.Api.Modules.Student.Controllers;
 [Route("api/[controller]")]
 [Authorize]
 public sealed class StudentsController(
-    IStudentRepository studentRepository, 
+    IStudentRepository studentRepository,
     ISettingRepository settingRepository,
-    IAcademicYearRepository academicYearRepository) : ControllerBase
+    IAcademicYearRepository academicYearRepository,
+    IUserProvisioningService userProvisioning,
+    ITenantProvider tenantProvider) : ControllerBase
 {
     /// <summary>Generates the next admission number based on settings and year.</summary>
     [HttpGet("next-admission-no")]
@@ -62,7 +66,7 @@ public sealed class StudentsController(
     /// <summary>Create a student and related rows (parents, academics, etc.).</summary>
 
     [HttpPost]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentCreate)]
     [ProducesResponseType(typeof(CreateStudentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateStudentResponse>> CreateStudent(
@@ -77,12 +81,26 @@ public sealed class StudentsController(
         var entity = request.ToEntity();
         var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
+        if (entity.PortalAccess && TryGetSchoolId(out Guid schoolId))
+        {
+            Guid? userId = await userProvisioning
+                .ProvisionStudentUserAsync(entity, schoolId, entity.PortalAccess, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (userId.HasValue)
+            {
+                await studentRepository
+                    .SetStudentUserIdAsync(studentId, userId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
         return Ok(new CreateStudentResponse("Student created successfully", studentId));
     }
 
     /// <summary>Paged list with optional search, sort, and status filter.</summary>
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentRead)]
     [ProducesResponseType(typeof(PagedResult<StudentListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllStudents(
         [FromQuery] int pageIndex = 1,
@@ -103,7 +121,7 @@ public sealed class StudentsController(
 
     /// <summary>Full student graph by id (active only).</summary>
     [HttpGet("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentRead)]
     [ProducesResponseType(typeof(StudentEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<StudentEntity>> GetStudentById(Guid id, CancellationToken cancellationToken)
@@ -114,7 +132,7 @@ public sealed class StudentsController(
 
     /// <summary>Replace student aggregate (body <see cref="StudentEntity.Id"/> must match route).</summary>
     [HttpPut("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentUpdate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateStudent(Guid id, [FromBody] StudentEntity student, CancellationToken cancellationToken)
@@ -130,11 +148,18 @@ public sealed class StudentsController(
 
     /// <summary>Soft-delete student and related rows.</summary>
     [HttpDelete("{id:guid}")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.StudentDelete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStudent(Guid id, CancellationToken cancellationToken)
     {
         await studentRepository.DeleteStudentAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
+    }
+
+    private bool TryGetSchoolId(out Guid schoolId)
+    {
+        schoolId = Guid.Empty;
+        string? raw = tenantProvider.GetCurrentSchoolId();
+        return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
     }
 }

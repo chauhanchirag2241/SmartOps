@@ -2,10 +2,10 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.Global;
 
-[Migration(021)]
-public sealed class M021_CreateSchoolBranchesTable : Migration
+[Migration(9, "Global — school branches")]
+public sealed class G009_CreateSchoolBranchesTable : Migration
 {
     public override void Up()
     {
@@ -31,11 +31,5 @@ public sealed class M021_CreateSchoolBranchesTable : Migration
             .OnDelete(System.Data.Rule.Cascade);
     }
 
-    public override void Down()
-    {
-        if (Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableSchoolBranches).Exists())
-        {
-            Delete.Table(DatabaseConfig.TableSchoolBranches).InSchema(DatabaseConfig.Schema_Global);
-        }
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableSchoolBranches).InSchema(DatabaseConfig.Schema_Global);
 }

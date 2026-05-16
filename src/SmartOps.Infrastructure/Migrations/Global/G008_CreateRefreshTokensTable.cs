@@ -2,18 +2,13 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.Global;
 
-[Migration(008)]
-public sealed class M008_CreateRefreshTokensTable : Migration
+[Migration(8, "Global — refresh tokens")]
+public sealed class G008_CreateRefreshTokensTable : Migration
 {
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Exists())
-        {
-            Create.Schema(DatabaseConfig.Schema_Global);
-        }
-
         if (Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableRefreshTokens).Exists())
         {
             return;

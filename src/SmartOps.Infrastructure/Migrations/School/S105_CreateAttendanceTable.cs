@@ -2,25 +2,21 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.School;
 
-[Migration(018)]
-public sealed class M018_CreateAttendanceTable : Migration
+[Migration(105, "School template — attendance")]
+public sealed class S105_CreateAttendanceTable : Migration
 {
+    private static string S => DatabaseConfig.Schema_School;
     private const string UniqueAttendanceConstraintName = "uq_attendance_class_student_date";
     private const string ClassDateIndexName = "ix_attendance_classdate";
     private const string StudentIndexName = "ix_attendance_student";
 
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_School).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableAttendance).Exists())
         {
-            Create.Schema(DatabaseConfig.Schema_School);
-        }
-
-        if (!Schema.Schema(DatabaseConfig.Schema_School).Table(DatabaseConfig.TableAttendance).Exists())
-        {
-            Create.Table(DatabaseConfig.TableAttendance).InSchema(DatabaseConfig.Schema_School)
+            Create.Table(DatabaseConfig.TableAttendance).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classid").AsGuid().NotNullable()
                 .WithColumn("studentid").AsGuid().NotNullable()
@@ -31,31 +27,25 @@ public sealed class M018_CreateAttendanceTable : Migration
                 .WithAuditColumns();
 
             Create.UniqueConstraint(UniqueAttendanceConstraintName)
-                .OnTable(DatabaseConfig.TableAttendance).WithSchema(DatabaseConfig.Schema_School)
+                .OnTable(DatabaseConfig.TableAttendance).WithSchema(S)
                 .Columns("classid", "studentid", "attendancedate");
         }
 
-        if (!Schema.Schema(DatabaseConfig.Schema_School).Table(DatabaseConfig.TableAttendance).Index(ClassDateIndexName).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableAttendance).Index(ClassDateIndexName).Exists())
         {
             Create.Index(ClassDateIndexName)
-                .OnTable(DatabaseConfig.TableAttendance).InSchema(DatabaseConfig.Schema_School)
+                .OnTable(DatabaseConfig.TableAttendance).InSchema(S)
                 .OnColumn("classid").Ascending()
                 .OnColumn("attendancedate").Ascending();
         }
 
-        if (!Schema.Schema(DatabaseConfig.Schema_School).Table(DatabaseConfig.TableAttendance).Index(StudentIndexName).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableAttendance).Index(StudentIndexName).Exists())
         {
             Create.Index(StudentIndexName)
-                .OnTable(DatabaseConfig.TableAttendance).InSchema(DatabaseConfig.Schema_School)
+                .OnTable(DatabaseConfig.TableAttendance).InSchema(S)
                 .OnColumn("studentid").Ascending();
         }
     }
 
-    public override void Down()
-    {
-        if (Schema.Schema(DatabaseConfig.Schema_School).Table(DatabaseConfig.TableAttendance).Exists())
-        {
-            Delete.Table(DatabaseConfig.TableAttendance).InSchema(DatabaseConfig.Schema_School);
-        }
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableAttendance).InSchema(S);
 }

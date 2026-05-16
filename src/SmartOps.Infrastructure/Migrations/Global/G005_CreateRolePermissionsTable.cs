@@ -2,18 +2,13 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.Global;
 
-[Migration(005)]
-public sealed class M005_CreateRolePermissionsTable : Migration
+[Migration(5, "Global — role permissions")]
+public sealed class G005_CreateRolePermissionsTable : Migration
 {
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Exists())
-        {
-            Create.Schema(DatabaseConfig.Schema_Global);
-        }
-
         if (Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableRolePermissions).Exists())
         {
             return;
@@ -44,7 +39,6 @@ ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions}
     {
         Execute.Sql($"ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions} DROP CONSTRAINT IF EXISTS fk_role_permissions_role;");
         Execute.Sql($"ALTER TABLE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRolePermissions} DROP CONSTRAINT IF EXISTS fk_role_permissions_permission;");
-
         Delete.PrimaryKey("pk_role_permissions").FromTable(DatabaseConfig.TableRolePermissions).InSchema(DatabaseConfig.Schema_Global);
         Delete.Table(DatabaseConfig.TableRolePermissions).InSchema(DatabaseConfig.Schema_Global);
     }

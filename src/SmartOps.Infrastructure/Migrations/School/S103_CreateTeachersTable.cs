@@ -2,16 +2,18 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.School;
 
-[Migration(016)]
-public sealed class M016_CreateTeachersTable : Migration
+[Migration(103, "School template — teachers")]
+public sealed class S103_CreateTeachersTable : Migration
 {
+    private static string S => DatabaseConfig.Schema_School;
+
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableTeachers).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableTeachers).Exists())
         {
-            Create.Table(DatabaseConfig.TableTeachers).InSchema(DatabaseConfig.Schema_Global)
+            Create.Table(DatabaseConfig.TableTeachers).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("firstname").AsString(100).NotNullable()
                 .WithColumn("lastname").AsString(100).NotNullable()
@@ -31,22 +33,32 @@ public sealed class M016_CreateTeachersTable : Migration
                 .WithColumn("experience").AsInt32().WithDefaultValue(0)
                 .WithColumn("salarygrade").AsString(50).Nullable()
                 .WithColumn("employmenttype").AsString(50).WithDefaultValue("Full-time")
-                .WithColumn("qualifications").AsString(2000).Nullable() // Storing as semi-colon separated or JSON for simplicity in this demo
+                .WithColumn("qualifications").AsString(2000).Nullable()
                 .WithColumn("bankaccountnumber").AsString(50).Nullable()
                 .WithColumn("bankifsccode").AsString(20).Nullable()
                 .WithColumn("bankname").AsString(100).Nullable()
+                .WithColumn("classid").AsGuid().Nullable()
+                    .ForeignKey("fk_teachers_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("shift").AsString(100).Nullable()
                 .WithColumn("weeklyperiods").AsInt32().WithDefaultValue(0)
                 .WithColumn("maxperiodsperday").AsInt32().WithDefaultValue(0)
                 .WithColumn("role").AsString(50).NotNullable().WithDefaultValue("Teacher")
                 .WithColumn("portalaccess").AsBoolean().WithDefaultValue(true)
                 .WithColumn("username").AsString(100).Nullable().Unique()
+                .WithColumn("userid").AsGuid().Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableTeachers}
+    ADD CONSTRAINT fk_teachers_user FOREIGN KEY (userid)
+    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
+""");
         }
     }
 
     public override void Down()
     {
-        Delete.Table(DatabaseConfig.TableTeachers).InSchema(DatabaseConfig.Schema_Global);
+        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableTeachers} DROP CONSTRAINT IF EXISTS fk_teachers_user;");
+        Delete.Table(DatabaseConfig.TableTeachers).InSchema(S);
     }
 }

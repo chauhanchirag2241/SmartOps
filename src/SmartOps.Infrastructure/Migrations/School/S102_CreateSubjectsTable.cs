@@ -2,16 +2,18 @@ using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
 using SmartOps.Shared.Configuration;
 
-namespace SmartOps.Infrastructure.Migrations;
+namespace SmartOps.Infrastructure.Migrations.School;
 
-[Migration(015)]
-public class M015_CreateSubjectsTable : Migration
+[Migration(102, "School template — subjects")]
+public sealed class S102_CreateSubjectsTable : Migration
 {
+    private static string S => DatabaseConfig.Schema_School;
+
     public override void Up()
     {
-        if (!Schema.Schema(DatabaseConfig.Schema_Global).Table(DatabaseConfig.TableSubjects).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableSubjects).Exists())
         {
-            Create.Table(DatabaseConfig.TableSubjects).InSchema(DatabaseConfig.Schema_Global)
+            Create.Table(DatabaseConfig.TableSubjects).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("subjectname").AsString(100).NotNullable()
                 .WithColumn("subjectcode").AsString(50).NotNullable()
@@ -33,8 +35,5 @@ public class M015_CreateSubjectsTable : Migration
         }
     }
 
-    public override void Down()
-    {
-        Delete.Table(DatabaseConfig.TableSubjects).InSchema(DatabaseConfig.Schema_Global);
-    }
+    public override void Down() => Delete.Table(DatabaseConfig.TableSubjects).InSchema(S);
 }

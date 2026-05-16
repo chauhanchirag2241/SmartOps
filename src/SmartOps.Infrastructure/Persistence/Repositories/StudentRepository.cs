@@ -178,6 +178,23 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     }
 
     /// <inheritdoc />
+    public async Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
+SET userid = @UserId, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+WHERE id = @StudentId AND isactive = true
+""";
+        await connection.ExecuteAsync(sql, new
+        {
+            StudentId = studentId,
+            UserId = userId,
+            Now = DateTime.UtcNow,
+            Actor = ResolveUpdateActor()
+        }).ConfigureAwait(false);
+    }
+
     public async Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);

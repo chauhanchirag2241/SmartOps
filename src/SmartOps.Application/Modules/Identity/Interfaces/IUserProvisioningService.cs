@@ -15,4 +15,10 @@ public interface IUserProvisioningService
         Guid schoolId,
         bool portalAccess,
         CancellationToken cancellationToken = default);
+
+    Task<Guid?> ProvisionParentUserAsync(
+        string email,
+        string? username,
+        Guid schoolId,
+        CancellationToken cancellationToken = default);
 }

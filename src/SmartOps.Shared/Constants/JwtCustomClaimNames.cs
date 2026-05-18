@@ -10,4 +10,8 @@ public static class JwtCustomClaimNames
     public const string SchoolId = "schoolid";
 
     public const string Permissions = "permissions";
+
+    public const string ScopeVersion = "scope_ver";
+
+    public const string ScopeType = "scope_type";
 }

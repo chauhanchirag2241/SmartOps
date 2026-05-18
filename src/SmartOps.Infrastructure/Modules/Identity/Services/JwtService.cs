@@ -23,13 +23,19 @@ public sealed class JwtService : IJwtService
         _tenantContext = tenantContext;
     }
 
-    public string GenerateAccessToken(ApplicationUser user, IList<string> roles)
+    public string GenerateAccessToken(
+        ApplicationUser user,
+        IList<string> roles,
+        int scopeVersion = 1,
+        DataScopeType scopeType = DataScopeType.Global)
     {
         List<Claim> claims = new()
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Username)
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(JwtCustomClaimNames.ScopeVersion, scopeVersion.ToString()),
+            new Claim(JwtCustomClaimNames.ScopeType, scopeType.ToString())
         };
 
         string? tenantId = _tenantContext.TenantId;

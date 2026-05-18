@@ -1,14 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Domain.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Models;
-using SmartOps.Application.Common.Abstractions;
 using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Teacher.Controllers;
@@ -19,6 +21,8 @@ namespace SmartOps.Api.Modules.Teacher.Controllers;
 public sealed class TeachersController(
     ITeacherRepository teacherRepository,
     IUserProvisioningService userProvisioning,
+    ITeacherAssignmentService teacherAssignmentService,
+    IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
 {
     [HttpPost]
@@ -35,16 +39,44 @@ public sealed class TeachersController(
 
         if (TryGetSchoolId(out Guid schoolId))
         {
-            Guid? userId = await userProvisioning
+            Guid? provisionedUserId = await userProvisioning
                 .ProvisionTeacherUserAsync(entity, schoolId, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (userId.HasValue)
+            if (provisionedUserId.HasValue)
             {
                 await teacherRepository
-                    .SetTeacherUserIdAsync(teacherId, userId.Value, cancellationToken)
+                    .SetTeacherUserIdAsync(teacherId, provisionedUserId.Value, cancellationToken)
                     .ConfigureAwait(false);
             }
+        }
+
+        if (request.Schedule.ClassAssignments.Count > 0)
+        {
+            await teacherAssignmentService.SaveAssignmentsAsync(
+                teacherId,
+                new SaveTeacherAssignmentsRequestDto { ClassAssignments = request.Schedule.ClassAssignments },
+                cancellationToken).ConfigureAwait(false);
+        }
+        else if (entity.ClassId.HasValue)
+        {
+            await teacherAssignmentService.SaveAssignmentsAsync(
+                teacherId,
+                new SaveTeacherAssignmentsRequestDto
+                {
+                    ClassAssignments =
+                    [
+                        new TeacherClassAssignmentRowDto
+                        {
+                            ClassId = entity.ClassId.Value,
+                            IsClassTeacher = true,
+                            CanViewStudents = true,
+                            CanMarkAttendance = true,
+                            CanAddMarks = true
+                        }
+                    ]
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         return Ok(new CreateTeacherResponse("Teacher created successfully", teacherId));
@@ -80,8 +112,47 @@ public sealed class TeachersController(
     [Authorize(Policy = MenuPolicies.Teachers.View)]
     public async Task<ActionResult<TeacherEntity>> GetTeacherById(Guid id, CancellationToken cancellationToken)
     {
+        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.View, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
         var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken).ConfigureAwait(false);
         return teacher is null ? NotFound() : Ok(teacher);
+    }
+
+    [HttpGet("{id:guid}/assignments")]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
+    [ProducesResponseType(typeof(TeacherAssignmentsResponseDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TeacherAssignmentsResponseDto>> GetAssignments(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.View, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        TeacherAssignmentsResponseDto result = await teacherAssignmentService
+            .GetAssignmentsAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(result);
+    }
+
+    [HttpPut("{id:guid}/assignments")]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> SaveAssignments(
+        Guid id,
+        [FromBody] SaveTeacherAssignmentsRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        await teacherAssignmentService.SaveAssignmentsAsync(id, request, cancellationToken).ConfigureAwait(false);
+        return NoContent();
     }
 
     [HttpPut("{id:guid}")]
@@ -89,6 +160,11 @@ public sealed class TeachersController(
     public async Task<IActionResult> UpdateTeacher(Guid id, [FromBody] TeacherEntity teacher, CancellationToken cancellationToken)
     {
         if (id != teacher.Id) return BadRequest("Route id and payload id must match.");
+
+        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
 
         await teacherRepository.UpdateTeacherAsync(teacher, cancellationToken).ConfigureAwait(false);
         return NoContent();

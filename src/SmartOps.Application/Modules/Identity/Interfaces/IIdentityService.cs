@@ -1,3 +1,4 @@
+using SmartOps.Application.Modules.Authorization.DTOs;
 using SmartOps.Application.Modules.Identity.DTOs;
 using SmartOps.Shared.Common;
 
@@ -17,4 +18,6 @@ public interface IIdentityService
         Guid userId,
         string application,
         CancellationToken cancellationToken = default);
+
+    Task<Result<UserScopeDto>> GetUserScopesAsync(Guid userId, CancellationToken cancellationToken = default);
 }

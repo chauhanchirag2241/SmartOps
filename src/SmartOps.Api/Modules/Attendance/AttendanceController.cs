@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Attendance.DTOs;
 using SmartOps.Application.Modules.Attendance.Interfaces;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Shared.Constants;
 
 namespace SmartOps.Api.Modules.Attendance;
@@ -13,15 +14,18 @@ namespace SmartOps.Api.Modules.Attendance;
 public sealed class AttendanceController : ControllerBase
 {
     private readonly IAttendanceService _service;
+    private readonly IResourceAuthorizationService _resourceAuthorization;
     private readonly IValidator<SubmitAttendanceRequestDto> _validator;
     private readonly ILogger<AttendanceController> _logger;
 
     public AttendanceController(
         IAttendanceService service,
+        IResourceAuthorizationService resourceAuthorization,
         IValidator<SubmitAttendanceRequestDto> validator,
         ILogger<AttendanceController> logger)
     {
         _service = service;
+        _resourceAuthorization = resourceAuthorization;
         _validator = validator;
         _logger = logger;
     }
@@ -36,10 +40,10 @@ public sealed class AttendanceController : ControllerBase
         [FromQuery] DateOnly date,
         CancellationToken ct)
     {
-        //if (!HasClassPermission("attendance.view"))
-        //{
-        //    return Forbid();
-        //}
+        if (!await _resourceAuthorization.CanAccessClassAsync(classId, AccessLevel.View, ct).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
 
         var result =
             await _service.GetClassAttendanceAsync(
@@ -58,10 +62,10 @@ public sealed class AttendanceController : ControllerBase
         [FromBody] SubmitAttendanceRequestDto request,
         CancellationToken ct)
     {
-        //if (!HasClassPermission("attendance.mark"))
-        //{
-        //    return Forbid();
-        //}
+        if (!await _resourceAuthorization.CanAccessClassAsync(request.ClassId, AccessLevel.Edit, ct).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
 
         var validation = await _validator.ValidateAsync(request, ct).ConfigureAwait(false);
 
@@ -92,19 +96,15 @@ public sealed class AttendanceController : ControllerBase
         [FromQuery] int year,
         CancellationToken ct)
     {
+        if (!await _resourceAuthorization.CanAccessStudentAsync(studentId, AccessLevel.View, ct).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
         var result =
             await _service.GetStudentSummaryAsync(studentId, month, year, ct)
             .ConfigureAwait(false);
 
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
-
-    private bool HasClassPermission(string action)
-    {
-        var classPerms = User.FindAll("class_permission").Select(c => c.Value);
-
-        return classPerms.Any(p => p.EndsWith($":{action}", StringComparison.OrdinalIgnoreCase))
-            || User.IsInRole("Admin")
-            || User.IsInRole("Principal");
     }
 }

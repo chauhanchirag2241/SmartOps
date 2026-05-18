@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddDatabaseServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSmartOpsAuthorizationInfrastructure(configuration);
         services.AddSmartOpsDatabaseInfrastructure(configuration);
         return services;
     }

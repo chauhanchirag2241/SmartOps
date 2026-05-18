@@ -1,6 +1,8 @@
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Common.Enums;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student.Interfaces;
@@ -17,6 +19,8 @@ namespace SmartOps.Infrastructure.Persistence.Repositories;
 /// </summary>
 public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
+    private readonly IUserScopeContext _scope;
+
     private static readonly string[] RelatedTablesForSoftDelete =
     {
         DatabaseConfig.TableStudentParents,
@@ -25,9 +29,10 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentFeeConfigs,
     };
 
-    public StudentRepository(DapperContext context, ICurrentUserService currentUser)
+    public StudentRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
         : base(context, currentUser)
     {
+        _scope = scope;
     }
 
     /// <inheritdoc />
@@ -98,9 +103,25 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     {
         try
         {
+            await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            var whereClause = BuildListWhereClause(filter, classId, ref searchTerm);
+            Guid? effectiveClassId = ScopeSqlBuilder.ResolveClassIdFilter(_scope, classId);
+            if (effectiveClassId == Guid.Empty)
+            {
+                return new PagedResult<StudentListModel>
+                {
+                    Items = [],
+                    TotalCount = 0,
+                    PageIndex = pageIndex,
+                    PageSize = pageSize
+                };
+            }
+
+            var whereClause = BuildListWhereClause(filter, effectiveClassId, ref searchTerm);
+            whereClause = ScopeSqlBuilder.AppendStudentScopeFilter(
+                _scope, "s", Context.OperationalSchema, ref whereClause);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
             var schema = Context.OperationalSchema;
@@ -143,7 +164,14 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                     connection,
                     querySql,
                     countSql,
-                    new { SearchTerm = searchTerm, ClassId = classId },
+                    new
+                    {
+                        SearchTerm = searchTerm,
+                        ClassId = effectiveClassId,
+                        ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
+                        ScopeClassIds = _scope.AllowedClassIds.ToArray(),
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId
+                    },
                     pageIndex,
                     pageSize)
                 .ConfigureAwait(false);

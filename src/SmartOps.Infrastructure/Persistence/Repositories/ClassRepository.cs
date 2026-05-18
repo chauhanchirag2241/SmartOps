@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Class.Entities;
@@ -17,9 +18,12 @@ namespace SmartOps.Infrastructure.Persistence.Repositories;
 /// </summary>
 public sealed class ClassRepository : BaseRepository, IClassRepository
 {
-    public ClassRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly IUserScopeContext _scope;
+
+    public ClassRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
         : base(context, currentUser)
     {
+        _scope = scope;
     }
 
     /// <inheritdoc />
@@ -88,7 +92,21 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count > 0)
+            {
+                whereClause += " AND c.id = ANY(@ScopeClassIds)";
+            }
+            else
+            {
+                whereClause += " AND 1 = 0";
+            }
+        }
+
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
         var schema = Context.OperationalSchema;
@@ -134,7 +152,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 connection,
                 querySql,
                 countSql,
-                new { SearchTerm = searchTerm },
+                new { SearchTerm = searchTerm, ScopeClassIds = _scope.AllowedClassIds.ToArray() },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);

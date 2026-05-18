@@ -22,11 +22,12 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
 WebApplication app = builder.Build();
 
-app.UseSmartOpsMigrations();
+await app.UseSmartOpsMigrationsAsync();
 
 app.UseExceptionHandlingMiddleware();
 
@@ -43,6 +44,8 @@ app.UseCors("DefaultPolicy");
 app.UseTenantResolver();
 
 app.UseAuthentication();
+
+app.UseMiddleware<SmartOps.Api.Middleware.UserScopeMiddleware>();
 
 app.UseAuthorization();
 

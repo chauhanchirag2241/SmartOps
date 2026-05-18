@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
@@ -14,9 +15,12 @@ namespace SmartOps.Infrastructure.Persistence.Repositories;
 
 public sealed class TeacherRepository : BaseRepository, ITeacherRepository
 {
-    public TeacherRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly IUserScopeContext _scope;
+
+    public TeacherRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
         : base(context, currentUser)
     {
+        _scope = scope;
     }
 
     public async Task<Guid> CreateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default)
@@ -75,6 +79,23 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
             searchTerm = $"%{searchTerm}%";
         }
 
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedTeacherIds.Count > 0)
+            {
+                whereClause += " AND id = ANY(@ScopeTeacherIds)";
+            }
+            else if (_scope.AllowedDepartmentIds.Count > 0)
+            {
+                whereClause += " AND departmentid = ANY(@ScopeDepartmentIds)";
+            }
+            else
+            {
+                whereClause += " AND 1 = 0";
+            }
+        }
+
         var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
         var orderBy = string.IsNullOrWhiteSpace(sortColumn) ? "createdon DESC" : $"{sortColumn} {direction}";
 
@@ -95,7 +116,12 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
             connection,
             querySql,
             countSql,
-            new { SearchTerm = searchTerm },
+            new
+            {
+                SearchTerm = searchTerm,
+                ScopeTeacherIds = _scope.AllowedTeacherIds.ToArray(),
+                ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray()
+            },
             pageIndex,
             pageSize).ConfigureAwait(false);
     }

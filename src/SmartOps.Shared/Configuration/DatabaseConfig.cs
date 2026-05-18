@@ -15,7 +15,12 @@ public static class DatabaseConfig
     public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserSchoolMappings = "userschoolmappings";
     public const string TableRefreshTokens = "refreshtokens";
-    
+    public const string TableClaims = "claims";
+    public const string TableRoleClaims = "roleclaims";
+    public const string TableUserClaims = "userclaims";
+    public const string TableUserScopeVersions = "userscopeversions";
+    public const string TableAuthorizationAuditLog = "authorizationauditlog";
+
     // Students Module
     public const string TableStudents = "students";
     public const string TableStudentParents = "studentparents";
@@ -32,6 +37,12 @@ public static class DatabaseConfig
 
     // Teacher Module
     public const string TableTeachers = "teachers";
+    public const string TableDepartments = "departments";
+    public const string TableTeacherClassAssignments = "teacherclassassignments";
+    public const string TableTeacherSubjectAssignments = "teachersubjectassignments";
+    public const string TableHodDepartmentAssignments = "hoddepartmentassignments";
+    public const string TableParentStudentMappings = "parentstudentmappings";
+    public const string TableStaffScopeAssignments = "staffscopeassignments";
 
     // School template schema (tenant tables cloned from here)
     public const string Schema_School = "school";

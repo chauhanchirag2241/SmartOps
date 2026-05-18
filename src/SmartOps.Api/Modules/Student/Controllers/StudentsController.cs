@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Student.DTOs;
 using SmartOps.Domain.Common.Enums;
@@ -26,6 +27,7 @@ public sealed class StudentsController(
     ISettingRepository settingRepository,
     IAcademicYearRepository academicYearRepository,
     IUserProvisioningService userProvisioning,
+    IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
 {
     /// <summary>Generates the next admission number based on settings and year.</summary>
@@ -126,6 +128,11 @@ public sealed class StudentsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<StudentEntity>> GetStudentById(Guid id, CancellationToken cancellationToken)
     {
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.View, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
         var student = await studentRepository.GetStudentByIdAsync(id, cancellationToken).ConfigureAwait(false);
         return student is null ? NotFound() : Ok(student);
     }
@@ -142,6 +149,11 @@ public sealed class StudentsController(
             return BadRequest("Route id and payload id must match.");
         }
 
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
         await studentRepository.UpdateStudentAsync(student, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
@@ -152,6 +164,11 @@ public sealed class StudentsController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStudent(Guid id, CancellationToken cancellationToken)
     {
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Delete, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
         await studentRepository.DeleteStudentAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }

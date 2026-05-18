@@ -3,6 +3,7 @@ using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Teacher.Entities;
+using SmartOps.Shared.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 
@@ -37,8 +38,8 @@ public sealed class UserProvisioningService : IUserProvisioningService
 
         if (existing is not null)
         {
-            await _users.AddUserToRoleAsync(existing.Id, "Teacher", cancellationToken).ConfigureAwait(false);
-            await _users.AddUserToSchoolAsync(existing.Id, schoolId, "Teacher", cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToRoleAsync(existing.Id, RoleNames.Teacher, cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToSchoolAsync(existing.Id, schoolId, RoleNames.Teacher, cancellationToken).ConfigureAwait(false);
             return existing.Id;
         }
 
@@ -53,8 +54,8 @@ public sealed class UserProvisioningService : IUserProvisioningService
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToRoleAsync(user.Id, "Teacher", cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToSchoolAsync(user.Id, schoolId, "Teacher", cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToRoleAsync(user.Id, RoleNames.Teacher, cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToSchoolAsync(user.Id, schoolId, RoleNames.Teacher, cancellationToken).ConfigureAwait(false);
 
         return user.Id;
     }
@@ -75,8 +76,8 @@ public sealed class UserProvisioningService : IUserProvisioningService
 
         if (existing is not null)
         {
-            await _users.AddUserToRoleAsync(existing.Id, "Student", cancellationToken).ConfigureAwait(false);
-            await _users.AddUserToSchoolAsync(existing.Id, schoolId, "Student", cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToRoleAsync(existing.Id, RoleNames.Student, cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToSchoolAsync(existing.Id, schoolId, RoleNames.Student, cancellationToken).ConfigureAwait(false);
             return existing.Id;
         }
 
@@ -91,8 +92,51 @@ public sealed class UserProvisioningService : IUserProvisioningService
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToRoleAsync(user.Id, "Student", cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToSchoolAsync(user.Id, schoolId, "Student", cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToRoleAsync(user.Id, RoleNames.Student, cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToSchoolAsync(user.Id, schoolId, RoleNames.Student, cancellationToken).ConfigureAwait(false);
+
+        return user.Id;
+    }
+
+    public async Task<Guid?> ProvisionParentUserAsync(
+        string email,
+        string? username,
+        Guid schoolId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return null;
+        }
+
+        string normalizedEmail = email.Trim().ToLowerInvariant();
+        string loginName = !string.IsNullOrWhiteSpace(username)
+            ? username.Trim()
+            : normalizedEmail;
+
+        ApplicationUser? existing = await _users.GetByEmailAsync(normalizedEmail, cancellationToken).ConfigureAwait(false)
+            ?? await _users.GetByUsernameAsync(loginName, cancellationToken).ConfigureAwait(false);
+
+        if (existing is not null)
+        {
+            await _users.AddUserToRoleAsync(existing.Id, RoleNames.Parent, cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToSchoolAsync(existing.Id, schoolId, RoleNames.Parent, cancellationToken).ConfigureAwait(false);
+            return existing.Id;
+        }
+
+        var user = new ApplicationUser
+        {
+            Username = loginName,
+            Email = normalizedEmail,
+            IsActive = true,
+            LockoutEnabled = true
+        };
+        user.PasswordHash = _passwordHasher.HashPassword(user, DefaultPassword);
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
+
+        await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToRoleAsync(user.Id, RoleNames.Parent, cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToSchoolAsync(user.Id, schoolId, RoleNames.Parent, cancellationToken).ConfigureAwait(false);
 
         return user.Id;
     }

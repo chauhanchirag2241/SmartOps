@@ -3,6 +3,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Authorization.DTOs;
 using SmartOps.Application.Modules.Identity.DTOs;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Shared.Common;
@@ -125,6 +126,26 @@ public sealed class AuthController : ControllerBase
 
         Result<UserPermissionResponseDto> result =
             await _identityService.GetUserPermissionsAsync(userId, app, cancellationToken).ConfigureAwait(false);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : Unauthorized(result.Error);
+    }
+
+    [HttpGet("scopes")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserScopeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Scopes(CancellationToken cancellationToken)
+    {
+        string? sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out Guid userId))
+        {
+            return Unauthorized();
+        }
+
+        Result<UserScopeDto> result =
+            await _identityService.GetUserScopesAsync(userId, cancellationToken).ConfigureAwait(false);
 
         return result.IsSuccess
             ? Ok(result.Value)

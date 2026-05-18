@@ -84,6 +84,9 @@ public class TeacherBankDetails
 public class TeacherScheduleInfo
 {
     public Guid? ClassId { get; set; }
+
+    public List<TeacherClassAssignmentRowDto> ClassAssignments { get; set; } = [];
+
     public string? Shift { get; set; }
     public int WeeklyPeriods { get; set; }
     public int MaxPeriodsPerDay { get; set; }

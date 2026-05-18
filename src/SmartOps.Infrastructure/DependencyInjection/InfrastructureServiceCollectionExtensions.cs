@@ -27,6 +27,8 @@ using SmartOps.Infrastructure.Modules.Attendance.Services;
 using SmartOps.Infrastructure.Persistence.Repositories;
 using SmartOps.Domain.Modules.Setting.Interfaces;
 using SmartOps.Infrastructure.Modules.Setting.Repositories;
+using SmartOps.Application.Modules.Teacher.Interfaces;
+using SmartOps.Infrastructure.Modules.Teacher.Services;
 using Dapper;
 
 namespace SmartOps.Infrastructure.DependencyInjection;
@@ -37,6 +39,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSmartOpsDatabaseInfrastructure(configuration);
         services.AddSmartOpsIdentityInfrastructure(configuration);
+        services.AddSmartOpsAuthorizationInfrastructure(configuration);
         services.AddSmartOpsMultiTenancyInfrastructure();
         return services;
     }
@@ -57,6 +60,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAttendanceService, AttendanceService>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<ISchoolRepository, SchoolRepository>();
+        services.AddScoped<ITeacherAssignmentService, TeacherAssignmentService>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -122,6 +126,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITenantSchemaProvider, TenantSchemaProvider>();
         services.AddScoped<ITenantSchoolResolver, TenantSchoolResolver>();
         services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
+        services.AddScoped<ITenantSchemaSyncService, TenantSchemaSyncService>();
         return services;
     }
 }

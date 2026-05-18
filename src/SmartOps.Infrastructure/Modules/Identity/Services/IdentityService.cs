@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
+using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.DTOs;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
+using SmartOps.Infrastructure.MultiTenancy;
 using SmartOps.Shared.Common;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
@@ -15,6 +18,8 @@ public sealed class IdentityService : IIdentityService
     private readonly IMenuRepository _menuRepository;
     private readonly IJwtService _jwtService;
     private readonly IUserCredentialValidator _credentialValidator;
+    private readonly IUserScopeService _userScopeService;
+    private readonly TenantContext _tenantContext;
     private readonly IOptions<JwtOptions> _jwtOptions;
     private readonly ILogger<IdentityService> _logger;
 
@@ -24,6 +29,8 @@ public sealed class IdentityService : IIdentityService
         IMenuRepository menuRepository,
         IJwtService jwtService,
         IUserCredentialValidator credentialValidator,
+        IUserScopeService userScopeService,
+        TenantContext tenantContext,
         IOptions<JwtOptions> jwtOptions,
         ILogger<IdentityService> logger)
     {
@@ -32,6 +39,8 @@ public sealed class IdentityService : IIdentityService
         _menuRepository = menuRepository;
         _jwtService = jwtService;
         _credentialValidator = credentialValidator;
+        _userScopeService = userScopeService;
+        _tenantContext = tenantContext;
         _jwtOptions = jwtOptions;
         _logger = logger;
     }
@@ -57,37 +66,16 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        string accessToken = _jwtService.GenerateAccessToken(user, roles);
-        string refreshTokenValue = _jwtService.GenerateRefreshToken();
+        (string accessToken, string refreshTokenValue) = await CreateTokenPairAsync(user, roles, cancellationToken).ConfigureAwait(false);
 
-        JwtOptions jwt = _jwtOptions.Value;
-        DateTime utcNow = DateTime.UtcNow;
-
-        RefreshToken refreshEntity = new()
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Token = refreshTokenValue,
-            ExpiresAt = utcNow.AddDays(jwt.RefreshTokenExpiryDays),
-            IsRevoked = false,
-            CreatedBy = user.Id,
-            CreatedOn = utcNow,
-            UpdatedBy = user.Id,
-            UpdatedOn = utcNow,
-            IsActive = true,
-            VersionNo = 1
-        };
-
-        await _refreshTokenRepository.CreateAsync(refreshEntity, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("User {Email} logged in successfully.", user.Email);
 
         LoginResponseDto response = new()
         {
             AccessToken = accessToken,
             RefreshToken = refreshTokenValue,
-            ExpiresIn = jwt.AccessTokenExpiryMinutes * 60
+            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60
         };
-
-        _logger.LogInformation("User {Email} logged in successfully.", user.Email);
 
         return Result<LoginResponseDto>.Success(response);
     }
@@ -116,12 +104,48 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        string accessToken = _jwtService.GenerateAccessToken(user, roles);
-        string refreshTokenValue = _jwtService.GenerateRefreshToken();
-
-        JwtOptions jwt = _jwtOptions.Value;
-
         await _refreshTokenRepository.RevokeAsync(refreshToken, cancellationToken).ConfigureAwait(false);
+
+        (string accessToken, string refreshTokenValue) = await CreateTokenPairAsync(user, roles, cancellationToken).ConfigureAwait(false);
+
+        LoginResponseDto response = new()
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshTokenValue,
+            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60
+        };
+
+        return Result<LoginResponseDto>.Success(response);
+    }
+
+    public async Task<Result<UserScopeDto>> GetUserScopesAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        Guid? schoolId = Guid.TryParse(_tenantContext.SchoolId, out Guid sid) ? sid : null;
+        UserScopeDto scope = await _userScopeService
+            .GetScopeAsync(userId, schoolId, cancellationToken)
+            .ConfigureAwait(false);
+        return Result<UserScopeDto>.Success(scope);
+    }
+
+    private async Task<(string AccessToken, string RefreshToken)> CreateTokenPairAsync(
+        ApplicationUser user,
+        IList<string> roles,
+        CancellationToken cancellationToken)
+    {
+        Guid? schoolId = Guid.TryParse(_tenantContext.SchoolId, out Guid sid) ? sid : null;
+        UserScopeDto scope = await _userScopeService
+            .GetScopeAsync(user.Id, schoolId, cancellationToken)
+            .ConfigureAwait(false);
+
+        string accessToken = _jwtService.GenerateAccessToken(
+            user,
+            roles,
+            scope.ScopeVersion,
+            scope.ScopeType);
+
+        string refreshTokenValue = _jwtService.GenerateRefreshToken();
+        JwtOptions jwt = _jwtOptions.Value;
+        DateTime utcNow = DateTime.UtcNow;
 
         RefreshToken refreshEntity = new()
         {
@@ -139,15 +163,7 @@ public sealed class IdentityService : IIdentityService
         };
 
         await _refreshTokenRepository.CreateAsync(refreshEntity, cancellationToken).ConfigureAwait(false);
-
-        LoginResponseDto response = new()
-        {
-            AccessToken = accessToken,
-            RefreshToken = refreshTokenValue,
-            ExpiresIn = jwt.AccessTokenExpiryMinutes * 60
-        };
-
-        return Result<LoginResponseDto>.Success(response);
+        return (accessToken, refreshTokenValue);
     }
 
     public async Task<Result> LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)

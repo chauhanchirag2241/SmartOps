@@ -18,6 +18,8 @@ public interface IUserRepository
 
     Task<IList<string>> GetRolesAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    Task<IList<string>> GetRoleCodesAsync(Guid userId, CancellationToken cancellationToken = default);
+
     Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);

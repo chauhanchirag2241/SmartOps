@@ -258,6 +258,24 @@ WHERE ur.userid = @UserId
         return rows.ToList();
     }
 
+    public async Task<IList<string>> GetRoleCodesAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        string sql = $"""
+SELECT r.code
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
+INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
+WHERE ur.userid = @UserId
+  AND ur.isactive = true
+  AND r.isactive = true
+""";
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IEnumerable<string> rows = await connection.QueryAsync<string>(
+            new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.ToList();
+    }
+
     public async Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

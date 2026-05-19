@@ -40,9 +40,9 @@ public sealed class AttendanceController : ControllerBase
         [FromQuery] DateOnly date,
         CancellationToken ct)
     {
-        if (!await _resourceAuthorization.CanAccessClassAsync(classId, AccessLevel.View, ct).ConfigureAwait(false))
+        if (!await _resourceAuthorization.CanMarkAttendanceForClassAsync(classId, ct).ConfigureAwait(false))
         {
-            return NotFound();
+            return Forbid();
         }
 
         var result =
@@ -62,9 +62,9 @@ public sealed class AttendanceController : ControllerBase
         [FromBody] SubmitAttendanceRequestDto request,
         CancellationToken ct)
     {
-        if (!await _resourceAuthorization.CanAccessClassAsync(request.ClassId, AccessLevel.Edit, ct).ConfigureAwait(false))
+        if (!await _resourceAuthorization.CanMarkAttendanceForClassAsync(request.ClassId, ct).ConfigureAwait(false))
         {
-            return NotFound();
+            return Forbid();
         }
 
         var validation = await _validator.ValidateAsync(request, ct).ConfigureAwait(false);

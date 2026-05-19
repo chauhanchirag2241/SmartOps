@@ -36,12 +36,12 @@ SELECT
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
-WHERE email = @Email AND isactive = true
+WHERE lower(trim(email)) = lower(trim(@Email)) AND isactive = true
 LIMIT 1
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        CommandDefinition command = new(sql, new { Email = email }, cancellationToken: cancellationToken);
+        CommandDefinition command = new(sql, new { Email = email.Trim() }, cancellationToken: cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 
@@ -92,12 +92,12 @@ SELECT
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
-WHERE username = @Username AND isactive = true
+WHERE lower(trim(username)) = lower(trim(@Username)) AND isactive = true
 LIMIT 1
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        CommandDefinition command = new(sql, new { Username = username }, cancellationToken: cancellationToken);
+        CommandDefinition command = new(sql, new { Username = username.Trim() }, cancellationToken: cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 

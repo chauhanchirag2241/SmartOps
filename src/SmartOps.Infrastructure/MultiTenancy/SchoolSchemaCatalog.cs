@@ -57,6 +57,12 @@ internal static class SchoolSchemaCatalog
             DatabaseConfig.TableParentStudentMappings,
             "parentuserid",
             "studentid"),
+        new(
+            "uq_attendance_class_student_date",
+            DatabaseConfig.TableAttendance,
+            "classid",
+            "studentid",
+            "attendancedate"),
     ];
 }
 

@@ -219,9 +219,15 @@ SELECT DISTINCT x.classid FROM (
         int scopeVersion,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Guid> classIds = await _scopeMapping
-            .GetTeacherClassIdsAsync(schema, userId, academicYearId, cancellationToken)
+        await _scopeMapping
+            .EnsureTeacherLinkedToUserAsync(schema, userId, cancellationToken)
             .ConfigureAwait(false);
+
+        IReadOnlyList<Guid> classIds = await ResolveTeacherClassIdsWithFallbackAsync(
+            schema, userId, academicYearId, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<Guid> attendanceClassIds = await ResolveTeacherAttendanceClassIdsWithFallbackAsync(
+            schema, userId, academicYearId, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<Guid> studentIds = await _scopeMapping
             .GetStudentIdsByClassIdsAsync(schema, classIds, academicYearId, cancellationToken)
@@ -233,9 +239,50 @@ SELECT DISTINCT x.classid FROM (
             ScopeVersion = scopeVersion,
             IsGlobalScope = false,
             AllowedClassIds = classIds,
+            AllowedAttendanceClassIds = attendanceClassIds,
             AllowedStudentIds = studentIds,
             ActiveAcademicYearId = academicYearId
         };
+    }
+
+    private async Task<IReadOnlyList<Guid>> ResolveTeacherClassIdsWithFallbackAsync(
+        string schema,
+        Guid userId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Guid> classIds = await _scopeMapping
+            .GetTeacherClassIdsAsync(schema, userId, academicYearId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (classIds.Count == 0 && academicYearId.HasValue)
+        {
+            classIds = await _scopeMapping
+                .GetTeacherClassIdsAsync(schema, userId, null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return classIds;
+    }
+
+    private async Task<IReadOnlyList<Guid>> ResolveTeacherAttendanceClassIdsWithFallbackAsync(
+        string schema,
+        Guid userId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Guid> classIds = await _scopeMapping
+            .GetTeacherAttendanceClassIdsAsync(schema, userId, academicYearId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (classIds.Count == 0 && academicYearId.HasValue)
+        {
+            classIds = await _scopeMapping
+                .GetTeacherAttendanceClassIdsAsync(schema, userId, null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return classIds;
     }
 
     private async Task<UserScopeDto> ResolveStudentScopeAsync(

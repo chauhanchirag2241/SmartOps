@@ -47,8 +47,10 @@ public sealed class IdentityService : IIdentityService
 
     public async Task<Result<LoginResponseDto>> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
     {
+        string normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
         ApplicationUser? user = await _userRepository
-            .GetByEmailAsync(request.Email, cancellationToken)
+            .GetByEmailAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false);
 
         if (user is null)

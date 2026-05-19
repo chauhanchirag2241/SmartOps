@@ -25,7 +25,11 @@ public sealed class S105_CreateAttendanceTable : Migration
                 .WithColumn("status").AsInt16().NotNullable()
                 .WithColumn("remarks").AsString(int.MaxValue).Nullable()
                 .WithAuditColumns();
+        }
 
+        if (Schema.Schema(S).Table(DatabaseConfig.TableAttendance).Exists()
+            && !Schema.Schema(S).Table(DatabaseConfig.TableAttendance).Constraint(UniqueAttendanceConstraintName).Exists())
+        {
             Create.UniqueConstraint(UniqueAttendanceConstraintName)
                 .OnTable(DatabaseConfig.TableAttendance).WithSchema(S)
                 .Columns("classid", "studentid", "attendancedate");

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using SmartOps.Application.Common.Abstractions;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Identity.Interfaces;
+using SmartOps.Application.Modules.Identity.Utilities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Infrastructure.Migrations.Global;
 using SmartOps.Infrastructure.Modules.Identity.Repositories;
@@ -82,7 +83,9 @@ public static class InfrastructureServiceCollectionExtensions
     public static IServiceCollection AddSmartOpsIdentityInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<PersonaRoleMappingOptions>(configuration.GetSection(PersonaRoleMappingOptions.SectionName));
 
+        services.AddScoped<IPersonaRoleMapper, PersonaRoleMapper>();
         services.AddScoped<UserRepository>();
         services.AddScoped<IUserRepository>(sp => sp.GetRequiredService<UserRepository>());
 

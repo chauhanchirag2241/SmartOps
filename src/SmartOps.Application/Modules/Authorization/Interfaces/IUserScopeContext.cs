@@ -16,6 +16,8 @@ public interface IUserScopeContext
 
     IReadOnlyList<Guid> AllowedClassIds { get; }
 
+    IReadOnlyList<Guid> AllowedAttendanceClassIds { get; }
+
     IReadOnlyList<Guid> AllowedStudentIds { get; }
 
     IReadOnlyList<Guid> AllowedDepartmentIds { get; }
@@ -29,6 +31,8 @@ public interface IUserScopeContext
     Task EnsureLoadedAsync(CancellationToken cancellationToken = default);
 
     bool HasClassAccess(Guid classId);
+
+    bool HasAttendanceClassAccess(Guid classId);
 
     bool HasStudentAccess(Guid studentId);
 

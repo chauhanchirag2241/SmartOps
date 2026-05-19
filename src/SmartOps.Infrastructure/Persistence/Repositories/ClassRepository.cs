@@ -161,9 +161,33 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(
+        bool attendanceOnly = false,
+        CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
+        string whereClause = "WHERE c.isactive = true";
+        object parameters = new { };
+
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            IReadOnlyList<Guid> scopeClassIds = attendanceOnly
+                ? _scope.AllowedAttendanceClassIds
+                : _scope.AllowedClassIds;
+
+            if (scopeClassIds.Count > 0)
+            {
+                whereClause += " AND c.id = ANY(@ScopeClassIds)";
+                parameters = new { ScopeClassIds = scopeClassIds.ToArray() };
+            }
+            else
+            {
+                return [];
+            }
+        }
 
         var sql = $@"
             SELECT
@@ -177,10 +201,10 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                         ELSE ''
                     END AS Name
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
-            WHERE c.isactive = true
+            {whereClause}
             ORDER BY c.classname ASC, c.section ASC;";
 
-        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        var items = await connection.QueryAsync<DropdownDto>(sql, parameters).ConfigureAwait(false);
         return items.ToList();
     }
 

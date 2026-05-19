@@ -12,6 +12,9 @@ public sealed class UserScopeDto
 
     public IReadOnlyList<Guid> AllowedClassIds { get; init; } = [];
 
+    /// <summary>Classes where the teacher may mark attendance (matrix permission).</summary>
+    public IReadOnlyList<Guid> AllowedAttendanceClassIds { get; init; } = [];
+
     public IReadOnlyList<Guid> AllowedStudentIds { get; init; } = [];
 
     public IReadOnlyList<Guid> AllowedDepartmentIds { get; init; } = [];

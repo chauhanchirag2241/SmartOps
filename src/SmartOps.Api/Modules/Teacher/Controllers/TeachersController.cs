@@ -22,6 +22,7 @@ public sealed class TeachersController(
     ITeacherRepository teacherRepository,
     IUserProvisioningService userProvisioning,
     ITeacherAssignmentService teacherAssignmentService,
+    IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
 {
@@ -47,6 +48,10 @@ public sealed class TeachersController(
             {
                 await teacherRepository
                     .SetTeacherUserIdAsync(teacherId, provisionedUserId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+
+                await userScopeService
+                    .BumpScopeVersionAsync(provisionedUserId.Value, schoolId, cancellationToken)
                     .ConfigureAwait(false);
             }
         }

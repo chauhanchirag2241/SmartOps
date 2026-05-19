@@ -86,7 +86,7 @@ public sealed class StudentsController(
         if (entity.PortalAccess && TryGetSchoolId(out Guid schoolId))
         {
             Guid? userId = await userProvisioning
-                .ProvisionStudentUserAsync(entity, schoolId, entity.PortalAccess, cancellationToken)
+                .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
                 .ConfigureAwait(false);
 
             if (userId.HasValue)

@@ -21,7 +21,7 @@ public class StudentEntity : AuditableEntity
     //public string Status { get; set; } = "Active";
     public string? Remarks { get; set; }
     public Guid? UserId { get; set; }
-    public bool PortalAccess { get; set; }
+    public bool PortalAccess { get; set; } = true;
 
     // Navigation Properties
     [DbIgnore] public List<StudentParentEntity> Parents { get; set; } = new();

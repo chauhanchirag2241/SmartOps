@@ -28,29 +28,87 @@ LIMIT 1
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    public async Task EnsureTeacherLinkedToUserAsync(
+        string schema,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        string sql = $"""
+UPDATE {schema}.{DatabaseConfig.TableTeachers} t
+SET userid = @UserId,
+    updatedon = NOW(),
+    versionno = t.versionno + 1
+FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
+WHERE u.id = @UserId
+  AND u.isactive = true
+  AND t.isactive = true
+  AND t.userid IS NULL
+  AND lower(trim(t.email)) = lower(trim(u.email))
+""";
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+            new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Guid>> GetTeacherClassIdsAsync(
         string schema,
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
+        string teacherMatch = BuildTeacherUserMatchSql(schema);
         string sql = $"""
 SELECT DISTINCT x.classid
 FROM (
     SELECT tca.classid
     FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
     INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = tca.teacherid
-    WHERE t.userid = @UserId AND tca.isactive = true AND t.isactive = true
+    WHERE {teacherMatch}
+      AND tca.isactive = true
+      AND t.isactive = true
       AND (@AcademicYearId IS NULL OR tca.academicyearid = @AcademicYearId)
     UNION
     SELECT t.classid
     FROM {schema}.{DatabaseConfig.TableTeachers} t
-    WHERE t.userid = @UserId AND t.classid IS NOT NULL AND t.isactive = true
+    WHERE {teacherMatch}
+      AND t.classid IS NOT NULL
+      AND t.isactive = true
 ) x
 WHERE x.classid IS NOT NULL
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<Guid>> GetTeacherAttendanceClassIdsAsync(
+        string schema,
+        Guid userId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken = default)
+    {
+        string teacherMatch = BuildTeacherUserMatchSql(schema);
+        string sql = $"""
+SELECT DISTINCT tca.classid
+FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
+INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = tca.teacherid
+WHERE {teacherMatch}
+  AND tca.isactive = true
+  AND t.isactive = true
+  AND tca.canmarkattendance = true
+  AND (@AcademicYearId IS NULL OR tca.academicyearid = @AcademicYearId)
+""";
+        return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string BuildTeacherUserMatchSql(string schema) =>
+        $"""
+(t.userid = @UserId OR EXISTS (
+    SELECT 1
+    FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
+    WHERE u.id = @UserId
+      AND u.isactive = true
+      AND lower(trim(u.email)) = lower(trim(t.email))
+))
+""";
 
     public async Task<IReadOnlyList<Guid>> GetDepartmentIdsForHodAsync(
         string schema,

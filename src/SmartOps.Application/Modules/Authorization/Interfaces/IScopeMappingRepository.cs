@@ -4,7 +4,15 @@ public interface IScopeMappingRepository
 {
     Task<Guid?> GetActiveAcademicYearIdAsync(string schema, CancellationToken cancellationToken = default);
 
+    Task EnsureTeacherLinkedToUserAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Guid>> GetTeacherClassIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Guid>> GetTeacherAttendanceClassIdsAsync(
+        string schema,
+        Guid userId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetDepartmentIdsForHodAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
 

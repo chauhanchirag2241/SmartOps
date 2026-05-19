@@ -42,6 +42,20 @@ public sealed class ResourceAuthorizationService : IResourceAuthorizationService
         return _scope.HasClassAccess(classId);
     }
 
+    public async Task<bool> CanMarkAttendanceForClassAsync(
+        Guid classId,
+        CancellationToken cancellationToken = default)
+    {
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_scope.ScopeType == DataScopeType.ModuleOnly || _scope.ScopeType == DataScopeType.Self)
+        {
+            return false;
+        }
+
+        return _scope.HasAttendanceClassAccess(classId);
+    }
+
     public async Task<bool> CanAccessTeacherAsync(
         Guid teacherId,
         AccessLevel level,

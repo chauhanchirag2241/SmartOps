@@ -53,7 +53,22 @@ public sealed class ResourceAuthorizationService : IResourceAuthorizationService
             return false;
         }
 
-        return _scope.HasAttendanceClassAccess(classId);
+        return _scope.HasClassAccess(classId);
+    }
+
+    public async Task<bool> CanAccessSubjectInClassAsync(
+        Guid classId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_scope.ScopeType == DataScopeType.ModuleOnly || _scope.ScopeType == DataScopeType.Self)
+        {
+            return false;
+        }
+
+        return _scope.HasSubjectInClassAccess(classId, subjectId);
     }
 
     public async Task<bool> CanAccessTeacherAsync(

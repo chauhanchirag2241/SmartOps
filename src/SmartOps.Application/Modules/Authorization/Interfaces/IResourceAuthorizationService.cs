@@ -15,5 +15,7 @@ public interface IResourceAuthorizationService
 
     Task<bool> CanMarkAttendanceForClassAsync(Guid classId, CancellationToken cancellationToken = default);
 
+    Task<bool> CanAccessSubjectInClassAsync(Guid classId, Guid subjectId, CancellationToken cancellationToken = default);
+
     Task<bool> CanAccessTeacherAsync(Guid teacherId, AccessLevel level, CancellationToken cancellationToken = default);
 }

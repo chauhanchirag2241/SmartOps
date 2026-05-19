@@ -72,10 +72,6 @@ public sealed class UserScopeService : IUserScopeService
             .GetActiveAcademicYearIdAsync(schema, cancellationToken)
             .ConfigureAwait(false);
 
-        await _scopeMapping
-            .BackfillTeacherClassAssignmentsFromLegacyAsync(schema, academicYearId, cancellationToken)
-            .ConfigureAwait(false);
-
         int scopeVersion = schoolId.HasValue
             ? await GetScopeVersionAsync(userId, schoolId.Value, cancellationToken).ConfigureAwait(false)
             : 1;
@@ -195,15 +191,12 @@ ON CONFLICT (userid) DO UPDATE SET
         CancellationToken cancellationToken)
     {
         string sql = $"""
-SELECT DISTINCT x.classid FROM (
-    SELECT tca.classid
-    FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
-    INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = tca.teacherid
-    WHERE t.departmentid = ANY(@DepartmentIds) AND tca.isactive = true
-    UNION
-    SELECT t.classid FROM {schema}.{DatabaseConfig.TableTeachers} t
-    WHERE t.departmentid = ANY(@DepartmentIds) AND t.classid IS NOT NULL
-) x WHERE x.classid IS NOT NULL
+SELECT DISTINCT m.classid
+FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+WHERE t.departmentid = ANY(@DepartmentIds)
+  AND m.isactive = true
+  AND t.isactive = true
 """;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<Guid> rows = await connection.QueryAsync<Guid>(
@@ -226,7 +219,7 @@ SELECT DISTINCT x.classid FROM (
         IReadOnlyList<Guid> classIds = await ResolveTeacherClassIdsWithFallbackAsync(
             schema, userId, academicYearId, cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<Guid> attendanceClassIds = await ResolveTeacherAttendanceClassIdsWithFallbackAsync(
+        IReadOnlyList<Guid> subjectIds = await ResolveTeacherSubjectIdsWithFallbackAsync(
             schema, userId, academicYearId, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<Guid> studentIds = await _scopeMapping
@@ -239,7 +232,7 @@ SELECT DISTINCT x.classid FROM (
             ScopeVersion = scopeVersion,
             IsGlobalScope = false,
             AllowedClassIds = classIds,
-            AllowedAttendanceClassIds = attendanceClassIds,
+            AllowedSubjectIds = subjectIds,
             AllowedStudentIds = studentIds,
             ActiveAcademicYearId = academicYearId
         };
@@ -265,24 +258,24 @@ SELECT DISTINCT x.classid FROM (
         return classIds;
     }
 
-    private async Task<IReadOnlyList<Guid>> ResolveTeacherAttendanceClassIdsWithFallbackAsync(
+    private async Task<IReadOnlyList<Guid>> ResolveTeacherSubjectIdsWithFallbackAsync(
         string schema,
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Guid> classIds = await _scopeMapping
-            .GetTeacherAttendanceClassIdsAsync(schema, userId, academicYearId, cancellationToken)
+        IReadOnlyList<Guid> subjectIds = await _scopeMapping
+            .GetTeacherSubjectIdsAsync(schema, userId, academicYearId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (classIds.Count == 0 && academicYearId.HasValue)
+        if (subjectIds.Count == 0 && academicYearId.HasValue)
         {
-            classIds = await _scopeMapping
-                .GetTeacherAttendanceClassIdsAsync(schema, userId, null, cancellationToken)
+            subjectIds = await _scopeMapping
+                .GetTeacherSubjectIdsAsync(schema, userId, null, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        return classIds;
+        return subjectIds;
     }
 
     private async Task<UserScopeDto> ResolveStudentScopeAsync(

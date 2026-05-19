@@ -57,11 +57,9 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     [HttpGet("/api/class/dropdown")]
     [Authorize(Policy = MenuPolicies.Classes.ListForAttendanceDropdown)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetClassDropdown(
-        [FromQuery] bool forAttendance = false,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetClassDropdown(CancellationToken cancellationToken = default)
     {
-        var result = await classRepository.GetClassDropdownAsync(forAttendance, cancellationToken).ConfigureAwait(false);
+        var result = await classRepository.GetClassDropdownAsync(cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 

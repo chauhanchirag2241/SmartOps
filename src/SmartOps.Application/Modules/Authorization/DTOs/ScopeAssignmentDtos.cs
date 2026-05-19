@@ -1,16 +1,5 @@
 namespace SmartOps.Application.Modules.Authorization.DTOs;
 
-public sealed class AssignTeacherClassDto
-{
-    public Guid TeacherId { get; set; }
-
-    public Guid ClassId { get; set; }
-
-    public Guid? AcademicYearId { get; set; }
-
-    public bool IsClassTeacher { get; set; } = true;
-}
-
 public sealed class AssignParentStudentDto
 {
     public string ParentEmail { get; set; } = null!;

@@ -19,38 +19,6 @@ public sealed class ScopesController(
     ITenantProvider tenantProvider,
     DapperContext dapperContext) : ControllerBase
 {
-    [HttpPost("teacher-classes")]
-    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
-    public async Task<IActionResult> AssignTeacherClass(
-        [FromBody] AssignTeacherClassDto request,
-        CancellationToken cancellationToken)
-    {
-        if (!TryGetSchoolId(out Guid schoolId))
-        {
-            return BadRequest("School context is required.");
-        }
-
-        Guid? academicYearId = request.AcademicYearId
-            ?? await scopeMapping.GetActiveAcademicYearIdAsync(dapperContext.OperationalSchema, cancellationToken)
-                .ConfigureAwait(false);
-
-        if (!academicYearId.HasValue)
-        {
-            return BadRequest("No active academic year found.");
-        }
-
-        await scopeMapping.UpsertTeacherClassAssignmentAsync(
-            dapperContext.OperationalSchema,
-            request.TeacherId,
-            request.ClassId,
-            academicYearId.Value,
-            request.IsClassTeacher,
-            cancellationToken).ConfigureAwait(false);
-
-        await InvalidateScopeForSchoolUsersAsync(schoolId, cancellationToken).ConfigureAwait(false);
-        return NoContent();
-    }
-
     [HttpPost("parent-students")]
     [Authorize(Policy = MenuPolicies.Students.Edit)]
     public async Task<IActionResult> AssignParentStudent(
@@ -102,12 +70,6 @@ public sealed class ScopesController(
 
         await userScopeService.BumpScopeVersionAsync(request.UserId, schoolId, cancellationToken).ConfigureAwait(false);
         return NoContent();
-    }
-
-    private async Task InvalidateScopeForSchoolUsersAsync(Guid schoolId, CancellationToken cancellationToken)
-    {
-        _ = schoolId;
-        _ = cancellationToken;
     }
 
     private bool TryGetSchoolId(out Guid schoolId)

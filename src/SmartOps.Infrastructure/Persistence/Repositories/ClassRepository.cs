@@ -162,7 +162,6 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(
-        bool attendanceOnly = false,
         CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -174,14 +173,10 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
-            IReadOnlyList<Guid> scopeClassIds = attendanceOnly
-                ? _scope.AllowedAttendanceClassIds
-                : _scope.AllowedClassIds;
-
-            if (scopeClassIds.Count > 0)
+            if (_scope.AllowedClassIds.Count > 0)
             {
                 whereClause += " AND c.id = ANY(@ScopeClassIds)";
-                parameters = new { ScopeClassIds = scopeClassIds.ToArray() };
+                parameters = new { ScopeClassIds = _scope.AllowedClassIds.ToArray() };
             }
             else
             {

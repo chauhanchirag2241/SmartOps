@@ -8,11 +8,7 @@ public interface IScopeMappingRepository
 
     Task<IReadOnlyList<Guid>> GetTeacherClassIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Guid>> GetTeacherAttendanceClassIdsAsync(
-        string schema,
-        Guid userId,
-        Guid? academicYearId,
-        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetTeacherSubjectIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetDepartmentIdsForHodAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
 
@@ -29,16 +25,6 @@ public interface IScopeMappingRepository
     Task<IReadOnlyList<Guid>> GetStaffScopeClassIdsAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetStaffScopeDepartmentIdsAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
-
-    Task BackfillTeacherClassAssignmentsFromLegacyAsync(string schema, Guid? academicYearId, CancellationToken cancellationToken = default);
-
-    Task UpsertTeacherClassAssignmentAsync(
-        string schema,
-        Guid teacherId,
-        Guid classId,
-        Guid academicYearId,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default);
 
     Task UpsertParentStudentMappingAsync(
         string schema,

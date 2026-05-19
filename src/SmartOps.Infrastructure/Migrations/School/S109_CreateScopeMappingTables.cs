@@ -12,45 +12,48 @@ public sealed class S109_CreateScopeMappingTables : Migration
 
     public override void Up()
     {
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableTeacherClassAssignments).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableClassSubjectTeacherMappings).Exists())
         {
-            Create.Table(DatabaseConfig.TableTeacherClassAssignments).InSchema(S)
+            Create.Table(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("teacherid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teacherclassassignments_teacherid", S, DatabaseConfig.TableTeachers, "id")
                 .WithColumn("classid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teacherclassassignments_classid", S, DatabaseConfig.TableClasses, "id")
+                    .ForeignKey("fk_cst_mappings_classid", S, DatabaseConfig.TableClasses, "id")
+                .WithColumn("subjectid").AsGuid().NotNullable()
+                    .ForeignKey("fk_cst_mappings_subjectid", S, DatabaseConfig.TableSubjects, "id")
+                .WithColumn("teacherid").AsGuid().NotNullable()
+                    .ForeignKey("fk_cst_mappings_teacherid", S, DatabaseConfig.TableTeachers, "id")
                 .WithColumn("academicyearid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teacherclassassignments_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
+                    .ForeignKey("fk_cst_mappings_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("isclassteacher").AsBoolean().NotNullable().WithDefaultValue(false)
                 .WithAuditColumns();
 
-            Create.UniqueConstraint("uq_teacherclassassignments")
-                .OnTable(DatabaseConfig.TableTeacherClassAssignments).WithSchema(S)
-                .Columns("teacherid", "classid", "academicyearid");
+            Create.UniqueConstraint("uq_classsubjectteachermappings")
+                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).WithSchema(S)
+                .Columns("classid", "subjectid", "teacherid", "academicyearid");
 
-            Create.Index("ix_teacherclassassignments_teacherid")
-                .OnTable(DatabaseConfig.TableTeacherClassAssignments).InSchema(S)
+            Create.Index("ix_cst_mappings_teacherid")
+                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
                 .OnColumn("teacherid").Ascending();
-        }
 
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableTeacherSubjectAssignments).Exists())
-        {
-            Create.Table(DatabaseConfig.TableTeacherSubjectAssignments).InSchema(S)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("teacherid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teachersubjectassignments_teacherid", S, DatabaseConfig.TableTeachers, "id")
-                .WithColumn("subjectid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teachersubjectassignments_subjectid", S, DatabaseConfig.TableSubjects, "id")
-                .WithColumn("classid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teachersubjectassignments_classid", S, DatabaseConfig.TableClasses, "id")
-                .WithColumn("academicyearid").AsGuid().NotNullable()
-                    .ForeignKey("fk_teachersubjectassignments_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
-                .WithAuditColumns();
+            Create.Index("ix_cst_mappings_classid")
+                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
+                .OnColumn("classid").Ascending();
 
-            Create.UniqueConstraint("uq_teachersubjectassignments")
-                .OnTable(DatabaseConfig.TableTeacherSubjectAssignments).WithSchema(S)
-                .Columns("teacherid", "subjectid", "classid", "academicyearid");
+            Create.Index("ix_cst_mappings_class_year")
+                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
+                .OnColumn("classid").Ascending()
+                .OnColumn("academicyearid").Ascending();
+
+            Create.Index("ix_cst_mappings_teacher_year")
+                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
+                .OnColumn("teacherid").Ascending()
+                .OnColumn("academicyearid").Ascending();
+
+            Execute.Sql($"""
+CREATE UNIQUE INDEX uq_cst_mappings_one_class_teacher
+ON {S}.{DatabaseConfig.TableClassSubjectTeacherMappings} (classid, academicyearid)
+WHERE isclassteacher = true AND isactive = true;
+""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableHodDepartmentAssignments).Exists())
@@ -132,7 +135,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStaffScopeAssignments}
         Delete.Table(DatabaseConfig.TableStaffScopeAssignments).InSchema(S);
         Delete.Table(DatabaseConfig.TableParentStudentMappings).InSchema(S);
         Delete.Table(DatabaseConfig.TableHodDepartmentAssignments).InSchema(S);
-        Delete.Table(DatabaseConfig.TableTeacherSubjectAssignments).InSchema(S);
-        Delete.Table(DatabaseConfig.TableTeacherClassAssignments).InSchema(S);
+        Delete.Table(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S);
     }
 }

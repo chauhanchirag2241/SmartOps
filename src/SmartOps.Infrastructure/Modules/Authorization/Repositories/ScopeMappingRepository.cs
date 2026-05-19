@@ -56,50 +56,39 @@ WHERE u.id = @UserId
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildTeacherUserMatchSql(schema);
+        string teacherMatch = BuildTeacherUserMatchSql();
         string sql = $"""
-SELECT DISTINCT x.classid
-FROM (
-    SELECT tca.classid
-    FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
-    INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = tca.teacherid
-    WHERE {teacherMatch}
-      AND tca.isactive = true
-      AND t.isactive = true
-      AND (@AcademicYearId IS NULL OR tca.academicyearid = @AcademicYearId)
-    UNION
-    SELECT t.classid
-    FROM {schema}.{DatabaseConfig.TableTeachers} t
-    WHERE {teacherMatch}
-      AND t.classid IS NOT NULL
-      AND t.isactive = true
-) x
-WHERE x.classid IS NOT NULL
+SELECT DISTINCT m.classid
+FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+WHERE {teacherMatch}
+  AND m.isactive = true
+  AND t.isactive = true
+  AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetTeacherAttendanceClassIdsAsync(
+    public async Task<IReadOnlyList<Guid>> GetTeacherSubjectIdsAsync(
         string schema,
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildTeacherUserMatchSql(schema);
+        string teacherMatch = BuildTeacherUserMatchSql();
         string sql = $"""
-SELECT DISTINCT tca.classid
-FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = tca.teacherid
+SELECT DISTINCT m.subjectid
+FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
 WHERE {teacherMatch}
-  AND tca.isactive = true
+  AND m.isactive = true
   AND t.isactive = true
-  AND tca.canmarkattendance = true
-  AND (@AcademicYearId IS NULL OR tca.academicyearid = @AcademicYearId)
+  AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string BuildTeacherUserMatchSql(string schema) =>
+    private static string BuildTeacherUserMatchSql() =>
         $"""
 (t.userid = @UserId OR EXISTS (
     SELECT 1
@@ -133,10 +122,12 @@ WHERE userid = @UserId AND isactive = true
         }
 
         string sql = $"""
-SELECT DISTINCT c.id
-FROM {schema}.{DatabaseConfig.TableClasses} c
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.classid = c.id
-WHERE t.departmentid = ANY(@DepartmentIds) AND t.isactive = true AND c.isactive = true
+SELECT DISTINCT m.classid
+FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+WHERE t.departmentid = ANY(@DepartmentIds)
+  AND m.isactive = true
+  AND t.isactive = true
 """;
         return await QueryGuidListAsync(sql, new { DepartmentIds = departmentIds.ToArray() }, cancellationToken).ConfigureAwait(false);
     }
@@ -227,58 +218,6 @@ SELECT scopevalue FROM {schema}.{DatabaseConfig.TableStaffScopeAssignments}
 WHERE userid = @UserId AND scopetype = 'Department' AND isactive = true
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId }, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task BackfillTeacherClassAssignmentsFromLegacyAsync(
-        string schema,
-        Guid? academicYearId,
-        CancellationToken cancellationToken = default)
-    {
-        if (academicYearId is null)
-        {
-            return;
-        }
-
-        string sql = $"""
-INSERT INTO {schema}.{DatabaseConfig.TableTeacherClassAssignments}
-    (id, teacherid, classid, academicyearid, isclassteacher, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), t.id, t.classid, @AcademicYearId, true, true, 1,
-       '{DatabaseConfig.SystemUserId}', NOW(), '{DatabaseConfig.SystemUserId}', NOW()
-FROM {schema}.{DatabaseConfig.TableTeachers} t
-WHERE t.classid IS NOT NULL AND t.isactive = true
-  AND NOT EXISTS (
-    SELECT 1 FROM {schema}.{DatabaseConfig.TableTeacherClassAssignments} tca
-    WHERE tca.teacherid = t.id AND tca.classid = t.classid AND tca.academicyearid = @AcademicYearId
-  )
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    public async Task UpsertTeacherClassAssignmentAsync(
-        string schema,
-        Guid teacherId,
-        Guid classId,
-        Guid academicYearId,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default)
-    {
-        string sql = $"""
-INSERT INTO {schema}.{DatabaseConfig.TableTeacherClassAssignments}
-    (id, teacherid, classid, academicyearid, isclassteacher, isactive, versionno, createdby, createdon, updatedby, updatedon)
-VALUES (gen_random_uuid(), @TeacherId, @ClassId, @AcademicYearId, @IsClassTeacher, true, 1,
-        '{DatabaseConfig.SystemUserId}', NOW(), '{DatabaseConfig.SystemUserId}', NOW())
-ON CONFLICT ON CONSTRAINT uq_teacherclassassignments DO UPDATE SET
-    isclassteacher = EXCLUDED.isclassteacher,
-    isactive = true,
-    updatedon = NOW(),
-    versionno = versionno + 1
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { TeacherId = teacherId, ClassId = classId, AcademicYearId = academicYearId, IsClassTeacher = isClassTeacher }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
     }
 
     public async Task UpsertParentStudentMappingAsync(

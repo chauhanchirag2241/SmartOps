@@ -16,7 +16,7 @@ public interface IUserScopeContext
 
     IReadOnlyList<Guid> AllowedClassIds { get; }
 
-    IReadOnlyList<Guid> AllowedAttendanceClassIds { get; }
+    IReadOnlyList<Guid> AllowedSubjectIds { get; }
 
     IReadOnlyList<Guid> AllowedStudentIds { get; }
 
@@ -32,7 +32,9 @@ public interface IUserScopeContext
 
     bool HasClassAccess(Guid classId);
 
-    bool HasAttendanceClassAccess(Guid classId);
+    bool HasSubjectAccess(Guid subjectId);
+
+    bool HasSubjectInClassAccess(Guid classId, Guid subjectId);
 
     bool HasStudentAccess(Guid studentId);
 

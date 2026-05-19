@@ -22,30 +22,23 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableSettings,
         DatabaseConfig.TableAlerts,
         DatabaseConfig.TableDepartments,
-        DatabaseConfig.TableTeacherClassAssignments,
-        DatabaseConfig.TableTeacherSubjectAssignments,
+        DatabaseConfig.TableClassSubjectTeacherMappings,
         DatabaseConfig.TableHodDepartmentAssignments,
         DatabaseConfig.TableParentStudentMappings,
         DatabaseConfig.TableStaffScopeAssignments,
     ];
 
     /// <summary>
-    /// Unique constraints required for upsert SQL (ON CONFLICT ON CONSTRAINT ...).
+    /// Unique constraints required for tenant schema sync.
     /// </summary>
     internal static readonly TenantUniqueConstraint[] RequiredUniqueConstraints =
     [
         new(
-            "uq_teacherclassassignments",
-            DatabaseConfig.TableTeacherClassAssignments,
-            "teacherid",
+            "uq_classsubjectteachermappings",
+            DatabaseConfig.TableClassSubjectTeacherMappings,
             "classid",
-            "academicyearid"),
-        new(
-            "uq_teachersubjectassignments",
-            DatabaseConfig.TableTeacherSubjectAssignments,
-            "teacherid",
             "subjectid",
-            "classid",
+            "teacherid",
             "academicyearid"),
         new(
             "uq_hoddepartmentassignments",

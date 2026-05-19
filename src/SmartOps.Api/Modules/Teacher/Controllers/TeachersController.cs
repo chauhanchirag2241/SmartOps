@@ -21,7 +21,7 @@ namespace SmartOps.Api.Modules.Teacher.Controllers;
 public sealed class TeachersController(
     ITeacherRepository teacherRepository,
     IUserProvisioningService userProvisioning,
-    ITeacherAssignmentService teacherAssignmentService,
+    IClassSubjectTeacherMappingService mappingService,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
@@ -58,29 +58,9 @@ public sealed class TeachersController(
 
         if (request.Schedule.ClassAssignments.Count > 0)
         {
-            await teacherAssignmentService.SaveAssignmentsAsync(
+            await mappingService.SaveTeacherAssignmentsAsync(
                 teacherId,
                 new SaveTeacherAssignmentsRequestDto { ClassAssignments = request.Schedule.ClassAssignments },
-                cancellationToken).ConfigureAwait(false);
-        }
-        else if (entity.ClassId.HasValue)
-        {
-            await teacherAssignmentService.SaveAssignmentsAsync(
-                teacherId,
-                new SaveTeacherAssignmentsRequestDto
-                {
-                    ClassAssignments =
-                    [
-                        new TeacherClassAssignmentRowDto
-                        {
-                            ClassId = entity.ClassId.Value,
-                            IsClassTeacher = true,
-                            CanViewStudents = true,
-                            CanMarkAttendance = true,
-                            CanAddMarks = true
-                        }
-                    ]
-                },
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -136,8 +116,8 @@ public sealed class TeachersController(
             return NotFound();
         }
 
-        TeacherAssignmentsResponseDto result = await teacherAssignmentService
-            .GetAssignmentsAsync(id, cancellationToken)
+        TeacherAssignmentsResponseDto result = await mappingService
+            .GetTeacherAssignmentsAsync(id, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(result);
@@ -156,7 +136,7 @@ public sealed class TeachersController(
             return NotFound();
         }
 
-        await teacherAssignmentService.SaveAssignmentsAsync(id, request, cancellationToken).ConfigureAwait(false);
+        await mappingService.SaveTeacherAssignmentsAsync(id, request, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
 

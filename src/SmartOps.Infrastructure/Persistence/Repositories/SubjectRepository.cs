@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Subject.Entities;
 using SmartOps.Domain.Modules.Subject.Interfaces;
@@ -11,9 +12,12 @@ namespace SmartOps.Infrastructure.Persistence.Repositories;
 
 public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 {
-    public SubjectRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly IUserScopeContext _scope;
+
+    public SubjectRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
         : base(context, currentUser)
     {
+        _scope = scope;
     }
 
     public async Task<Guid> CreateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken)
@@ -47,7 +51,21 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedSubjectIds.Count > 0)
+            {
+                whereClause += " AND s.id = ANY(@ScopeSubjectIds)";
+            }
+            else
+            {
+                whereClause += " AND 1 = 0";
+            }
+        }
+
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
         var schema = Context.OperationalSchema;
@@ -87,7 +105,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
                 connection,
                 querySql,
                 countSql,
-                new { SearchTerm = searchTerm },
+                new { SearchTerm = searchTerm, ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);
@@ -97,15 +115,33 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+
+        string whereClause = "WHERE s.isactive = true";
+        object parameters = new { };
+
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedSubjectIds.Count > 0)
+            {
+                whereClause += " AND s.id = ANY(@ScopeSubjectIds)";
+                parameters = new { ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() };
+            }
+            else
+            {
+                return [];
+            }
+        }
+
         var sql = $@"
             SELECT
                 s.id AS Id,
                 s.subjectname AS Name
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableSubjects} s
-            WHERE s.isactive = true
+            {whereClause}
             ORDER BY s.subjectname ASC;";
 
-        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        var items = await connection.QueryAsync<DropdownDto>(sql, parameters).ConfigureAwait(false);
         return items.ToList();
     }
 

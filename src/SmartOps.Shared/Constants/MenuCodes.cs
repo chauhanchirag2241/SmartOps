@@ -23,6 +23,8 @@ public static class MenuCodes
 
     public const string Classes = "CLASSES";
 
+    public const string ClassMappings = "CLASS_MAPPINGS";
+
     public const string Subjects = "SUBJECTS";
 
     public const string AcademicYears = "ACADEMIC_YEARS";
@@ -40,6 +42,7 @@ public static class MenuCodes
         Students,
         Teachers,
         Classes,
+        ClassMappings,
         Subjects,
         AcademicYears,
         Attendance

@@ -21,7 +21,6 @@ namespace SmartOps.Api.Modules.Teacher.Controllers;
 public sealed class TeachersController(
     ITeacherRepository teacherRepository,
     IUserProvisioningService userProvisioning,
-    IClassSubjectTeacherMappingService mappingService,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
@@ -54,14 +53,6 @@ public sealed class TeachersController(
                     .BumpScopeVersionAsync(provisionedUserId.Value, schoolId, cancellationToken)
                     .ConfigureAwait(false);
             }
-        }
-
-        if (request.Schedule.ClassAssignments.Count > 0)
-        {
-            await mappingService.SaveTeacherAssignmentsAsync(
-                teacherId,
-                new SaveTeacherAssignmentsRequestDto { ClassAssignments = request.Schedule.ClassAssignments },
-                cancellationToken).ConfigureAwait(false);
         }
 
         return Ok(new CreateTeacherResponse("Teacher created successfully", teacherId));
@@ -104,40 +95,6 @@ public sealed class TeachersController(
 
         var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken).ConfigureAwait(false);
         return teacher is null ? NotFound() : Ok(teacher);
-    }
-
-    [HttpGet("{id:guid}/assignments")]
-    [Authorize(Policy = MenuPolicies.Teachers.View)]
-    [ProducesResponseType(typeof(TeacherAssignmentsResponseDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<TeacherAssignmentsResponseDto>> GetAssignments(Guid id, CancellationToken cancellationToken)
-    {
-        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.View, cancellationToken).ConfigureAwait(false))
-        {
-            return NotFound();
-        }
-
-        TeacherAssignmentsResponseDto result = await mappingService
-            .GetTeacherAssignmentsAsync(id, cancellationToken)
-            .ConfigureAwait(false);
-
-        return Ok(result);
-    }
-
-    [HttpPut("{id:guid}/assignments")]
-    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> SaveAssignments(
-        Guid id,
-        [FromBody] SaveTeacherAssignmentsRequestDto request,
-        CancellationToken cancellationToken)
-    {
-        if (!await resourceAuthorization.CanAccessTeacherAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
-        {
-            return NotFound();
-        }
-
-        await mappingService.SaveTeacherAssignmentsAsync(id, request, cancellationToken).ConfigureAwait(false);
-        return NoContent();
     }
 
     [HttpPut("{id:guid}")]

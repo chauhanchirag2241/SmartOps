@@ -20,7 +20,7 @@ public sealed class DapperContext : IAsyncDisposable
 
     public async Task<IDbConnection> GetGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (_connection is null)
+        if (_connection is null || IsConnectionDisposed(_connection))
         {
             _connection = (NpgsqlConnection)await _connectionFactory
                 .CreateGlobalConnectionAsync(cancellationToken)
@@ -28,6 +28,27 @@ public sealed class DapperContext : IAsyncDisposable
         }
 
         return _connection;
+    }
+
+    /// <summary>
+    /// Scoped connection is owned by DapperContext — callers must not dispose it.
+    /// </summary>
+    private static bool IsConnectionDisposed(IDbConnection connection)
+    {
+        if (connection is not NpgsqlConnection npgsql)
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = npgsql.State;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     public Task<IDbConnection> GetOperationalConnectionAsync(CancellationToken cancellationToken = default)

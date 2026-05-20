@@ -12,7 +12,9 @@ public sealed class ClassSubjectTeacherMappingDto
 
     public string? SubjectName { get; set; }
 
-    public Guid TeacherId { get; set; }
+    public string? SubjectCode { get; set; }
+
+    public Guid? TeacherId { get; set; }
 
     public string? TeacherName { get; set; }
 
@@ -21,6 +23,48 @@ public sealed class ClassSubjectTeacherMappingDto
     public bool IsClassTeacher { get; set; }
 }
 
+public sealed class MappingLookupOptionDto
+{
+    public Guid Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? Code { get; set; }
+
+    public string? SubLabel { get; set; }
+}
+
+public sealed class ClassMappingSummaryDto
+{
+    public Guid ClassId { get; set; }
+
+    public string ClassName { get; set; } = string.Empty;
+
+    public string? Section { get; set; }
+
+    public int SubjectCount { get; set; }
+
+    public int TeachersAssignedCount { get; set; }
+
+    public int ClassTeacherCount { get; set; }
+}
+
+public sealed class MappingLookupsResponseDto
+{
+    public Guid? ActiveAcademicYearId { get; set; }
+
+    public IReadOnlyList<MappingLookupOptionDto> AcademicYears { get; set; } = [];
+
+    public IReadOnlyList<MappingLookupOptionDto> Classes { get; set; } = [];
+
+    public IReadOnlyList<MappingLookupOptionDto> Subjects { get; set; } = [];
+
+    public IReadOnlyList<MappingLookupOptionDto> Teachers { get; set; } = [];
+
+    public IReadOnlyList<ClassMappingSummaryDto> ClassSummaries { get; set; } = [];
+}
+
+/// <summary>Legacy shape retained for teacher create payload compatibility.</summary>
 public sealed class TeacherClassAssignmentRowDto
 {
     public Guid ClassId { get; set; }
@@ -30,62 +74,12 @@ public sealed class TeacherClassAssignmentRowDto
     public bool IsClassTeacher { get; set; }
 }
 
-public sealed class TeacherAssignmentsResponseDto
+/// <summary>Reserved for future student-to-class mapping rows.</summary>
+public sealed class StudentMappingPlaceholderDto
 {
-    public Guid TeacherId { get; set; }
+    public Guid StudentId { get; set; }
 
-    public Guid? AcademicYearId { get; set; }
-
-    public List<TeacherClassAssignmentRowDto> ClassAssignments { get; set; } = [];
-}
-
-public sealed class SaveTeacherAssignmentsRequestDto
-{
-    public Guid? AcademicYearId { get; set; }
-
-    public List<TeacherClassAssignmentRowDto> ClassAssignments { get; set; } = [];
-}
-
-public sealed class ClassMappingGridRowDto
-{
-    public Guid SubjectId { get; set; }
-
-    public string? SubjectName { get; set; }
-
-    public List<Guid> TeacherIds { get; set; } = [];
-}
-
-public sealed class SaveClassMappingsRequestDto
-{
-    public Guid? AcademicYearId { get; set; }
-
-    public Guid? ClassTeacherId { get; set; }
-
-    public List<ClassMappingGridRowDto> Rows { get; set; } = [];
-}
-
-public sealed class SubjectMappingGridRowDto
-{
     public Guid ClassId { get; set; }
-
-    public string? ClassName { get; set; }
-
-    public List<Guid> TeacherIds { get; set; } = [];
-}
-
-public sealed class SaveSubjectMappingsRequestDto
-{
-    public Guid? AcademicYearId { get; set; }
-
-    public List<SubjectMappingGridRowDto> Rows { get; set; } = [];
-}
-
-/// <summary>Legacy flat teacher list — prefer <see cref="SaveSubjectMappingsRequestDto"/>.</summary>
-public sealed class SaveSubjectTeachersRequestDto
-{
-    public Guid? AcademicYearId { get; set; }
-
-    public List<Guid> TeacherIds { get; set; } = [];
 }
 
 public sealed class CreateClassSubjectTeacherMappingDto
@@ -94,7 +88,8 @@ public sealed class CreateClassSubjectTeacherMappingDto
 
     public Guid SubjectId { get; set; }
 
-    public Guid TeacherId { get; set; }
+    /// <summary>Null or empty GUID means assign teacher later.</summary>
+    public Guid? TeacherId { get; set; }
 
     public Guid? AcademicYearId { get; set; }
 
@@ -102,6 +97,23 @@ public sealed class CreateClassSubjectTeacherMappingDto
 }
 
 public sealed class UpdateClassSubjectTeacherMappingDto
+{
+    public Guid? TeacherId { get; set; }
+
+    public bool? IsClassTeacher { get; set; }
+
+    public bool AssignLater { get; set; }
+}
+
+public sealed class AssignTeacherLaterRequestDto
+{
+    /// <summary>When true, clears teacher assignment (assign later).</summary>
+    public bool AssignLater { get; set; }
+
+    public Guid? TeacherId { get; set; }
+}
+
+public sealed class SetClassTeacherRequestDto
 {
     public bool IsClassTeacher { get; set; }
 }

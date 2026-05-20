@@ -4,38 +4,13 @@ namespace SmartOps.Application.Modules.Teacher.Interfaces;
 
 public interface IClassSubjectTeacherMappingService
 {
-    Task<TeacherAssignmentsResponseDto> GetTeacherAssignmentsAsync(
-        Guid teacherId,
-        CancellationToken cancellationToken = default);
-
-    Task SaveTeacherAssignmentsAsync(
-        Guid teacherId,
-        SaveTeacherAssignmentsRequestDto request,
+    Task<MappingLookupsResponseDto> GetLookupsAsync(
+        Guid? academicYearId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassIdAsync(
         Guid classId,
         Guid? academicYearId,
-        CancellationToken cancellationToken = default);
-
-    Task SaveClassMappingsAsync(
-        Guid classId,
-        SaveClassMappingsRequestDto request,
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetBySubjectIdAsync(
-        Guid subjectId,
-        Guid? academicYearId,
-        CancellationToken cancellationToken = default);
-
-    Task SaveSubjectMappingsAsync(
-        Guid subjectId,
-        SaveSubjectMappingsRequestDto request,
-        CancellationToken cancellationToken = default);
-
-    Task SaveSubjectTeachersAsync(
-        Guid subjectId,
-        SaveSubjectTeachersRequestDto request,
         CancellationToken cancellationToken = default);
 
     Task<ClassSubjectTeacherMappingDto> AddMappingAsync(
@@ -45,6 +20,16 @@ public interface IClassSubjectTeacherMappingService
     Task<ClassSubjectTeacherMappingDto> UpdateMappingAsync(
         Guid id,
         UpdateClassSubjectTeacherMappingDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<ClassSubjectTeacherMappingDto> SetClassTeacherAsync(
+        Guid id,
+        bool isClassTeacher,
+        CancellationToken cancellationToken = default);
+
+    Task<ClassSubjectTeacherMappingDto> AssignTeacherLaterAsync(
+        Guid id,
+        AssignTeacherLaterRequestDto request,
         CancellationToken cancellationToken = default);
 
     Task RemoveMappingAsync(Guid id, CancellationToken cancellationToken = default);

@@ -92,6 +92,15 @@ public static class MenuPolicies
         public const string ListForAttendanceDropdown = "Menu:CLASSES:ViewOrAttendanceView";
     }
 
+    public static class ClassMappings
+    {
+        public const string View = "Menu:CLASS_MAPPINGS:View";
+        public const string Add = "Menu:CLASS_MAPPINGS:Add";
+        public const string Edit = "Menu:CLASS_MAPPINGS:Edit";
+        public const string Delete = "Menu:CLASS_MAPPINGS:Delete";
+        public const string Export = "Menu:CLASS_MAPPINGS:Export";
+    }
+
     public static class Subjects
     {
         public const string View = "Menu:SUBJECTS:View";

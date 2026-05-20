@@ -1,6 +1,6 @@
 using System.Data;
 using Npgsql;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 
 namespace SmartOps.Infrastructure.Persistence.Context;
 

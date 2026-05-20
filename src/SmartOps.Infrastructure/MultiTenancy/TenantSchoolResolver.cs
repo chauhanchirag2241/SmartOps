@@ -1,6 +1,6 @@
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Domain.Modules.School.Entities;
-using SmartOps.Domain.Modules.School.Interfaces;
+using SmartOps.Domain.Modules.School;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
 

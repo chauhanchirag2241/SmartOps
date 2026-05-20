@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using SmartOps.Api.Authorization;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Extensions;
 

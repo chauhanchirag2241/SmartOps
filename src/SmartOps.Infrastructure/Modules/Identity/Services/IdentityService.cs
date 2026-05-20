@@ -1,13 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
-using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Application.Modules.Identity.DTOs;
+using SmartOps.Application.Modules.Identity;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Infrastructure.MultiTenancy;
-using SmartOps.Shared.Common;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 

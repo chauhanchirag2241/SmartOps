@@ -1,5 +1,5 @@
 using SmartOps.Domain.Common;
-using SmartOps.Domain.Modules.Subject.Enums;
+using SmartOps.Domain.Modules.Subject;
 
 namespace SmartOps.Domain.Modules.Subject.Entities;
 

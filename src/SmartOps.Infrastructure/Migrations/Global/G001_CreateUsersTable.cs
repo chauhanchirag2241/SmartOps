@@ -1,6 +1,6 @@
 using FluentMigrator;
 using SmartOps.Infrastructure.Migrations.Extensions;
-using SmartOps.Shared.Configuration;
+using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 

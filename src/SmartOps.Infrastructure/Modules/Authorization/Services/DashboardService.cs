@@ -1,10 +1,10 @@
 using Dapper;
-using SmartOps.Application.Common.Abstractions;
-using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Infrastructure.Persistence.Context;
-using SmartOps.Shared.Configuration;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Enums;
 using System.Data;
 
 namespace SmartOps.Infrastructure.Modules.Authorization.Services;

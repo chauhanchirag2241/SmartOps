@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using SmartOps.Application.Modules.Identity.Interfaces;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Authorization;
 

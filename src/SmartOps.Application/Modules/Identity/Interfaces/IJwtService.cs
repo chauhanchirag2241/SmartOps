@@ -1,6 +1,6 @@
 using System.Security.Claims;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SmartOps.Shared.Constants;
 
 namespace SmartOps.Application.Modules.Identity.Interfaces;
 

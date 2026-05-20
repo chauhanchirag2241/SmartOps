@@ -1,18 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
-using SmartOps.Application.Modules.Student.DTOs;
+using SmartOps.Application.Modules.Student;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
-using SmartOps.Domain.Modules.Student.Interfaces;
-using SmartOps.Domain.Modules.Student.Models;
-using SmartOps.Domain.Modules.Setting.Interfaces;
-using SmartOps.Domain.Modules.AcademicYear.Interfaces;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Modules.Student;
+using SmartOps.Domain.Modules.Setting;
+using SmartOps.Domain.Modules.AcademicYear;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Student.Controllers;
 

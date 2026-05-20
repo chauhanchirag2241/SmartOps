@@ -1,6 +1,6 @@
 using System.Text.Json;
 using FluentValidation;
-using SmartOps.Shared.Common;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Api.Middleware;
 

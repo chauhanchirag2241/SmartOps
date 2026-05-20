@@ -1,7 +1,7 @@
 using FluentMigrator;
 using Microsoft.AspNetCore.Identity;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SmartOps.Shared.Configuration;
+using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 

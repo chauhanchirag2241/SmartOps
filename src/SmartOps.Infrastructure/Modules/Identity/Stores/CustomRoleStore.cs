@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SmartOps.Infrastructure.Modules.Identity.Repositories;
+using SmartOps.Infrastructure.Modules.Identity;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Stores;
 

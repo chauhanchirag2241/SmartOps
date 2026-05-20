@@ -1,5 +1,5 @@
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Enums;
 
 namespace SmartOps.Infrastructure.Modules.Authorization.Services;
 

@@ -1,6 +1,6 @@
 using FluentMigrator;
 using FluentMigrator.Builders.Create.Table;
-using SmartOps.Shared.Configuration;
+using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Extensions;
 

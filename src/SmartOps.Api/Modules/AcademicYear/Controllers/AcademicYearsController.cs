@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SmartOps.Application.Modules.AcademicYear.DTOs;
+using SmartOps.Application.Modules.AcademicYear;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
-using SmartOps.Domain.Modules.AcademicYear.Interfaces;
-using SmartOps.Domain.Modules.AcademicYear.Models;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Modules.AcademicYear;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.AcademicYear.Controllers;
 

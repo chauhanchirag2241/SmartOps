@@ -23,7 +23,6 @@
   <ItemGroup>
     <ProjectReference Include="..\SmartOps.Application\SmartOps.Application.csproj" />
     <ProjectReference Include="..\SmartOps.Domain\SmartOps.Domain.csproj" />
-    <ProjectReference Include="..\SmartOps.Shared\SmartOps.Shared.csproj" />
   </ItemGroup>
 
 </Project>

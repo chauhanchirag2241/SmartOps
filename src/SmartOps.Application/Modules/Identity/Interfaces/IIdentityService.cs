@@ -1,6 +1,6 @@
-using SmartOps.Application.Modules.Authorization.DTOs;
-using SmartOps.Application.Modules.Identity.DTOs;
-using SmartOps.Shared.Common;
+using SmartOps.Application.Modules.Authorization;
+using SmartOps.Application.Modules.Identity;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Application.Modules.Identity.Interfaces;
 

@@ -5,7 +5,7 @@ using SmartOps.Application.Modules.Identity.Utilities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Teacher.Entities;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 

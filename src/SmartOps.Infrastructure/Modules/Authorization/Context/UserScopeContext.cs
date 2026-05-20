@@ -2,10 +2,10 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
-using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Infrastructure.MultiTenancy;
-using SmartOps.Shared.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Authorization.Context;
 

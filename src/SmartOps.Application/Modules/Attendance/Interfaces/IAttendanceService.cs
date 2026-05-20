@@ -1,5 +1,5 @@
-using SmartOps.Application.Modules.Attendance.DTOs;
-using SmartOps.Shared.Common;
+using SmartOps.Application.Modules.Attendance;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Application.Modules.Attendance.Interfaces;
 

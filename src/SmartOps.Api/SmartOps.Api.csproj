@@ -19,7 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="..\SmartOps.Application\SmartOps.Application.csproj" />
     <ProjectReference Include="..\SmartOps.Infrastructure\SmartOps.Infrastructure.csproj" />
-    <ProjectReference Include="..\SmartOps.Shared\SmartOps.Shared.csproj" />
   </ItemGroup>
 
 </Project>

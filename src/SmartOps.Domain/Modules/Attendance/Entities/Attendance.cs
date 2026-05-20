@@ -1,5 +1,5 @@
 using SmartOps.Domain.Common;
-using SmartOps.Domain.Modules.Attendance.Enums;
+using SmartOps.Domain.Modules.Attendance;
 
 namespace SmartOps.Domain.Modules.Attendance.Entities;
 

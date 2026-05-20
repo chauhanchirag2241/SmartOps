@@ -1,13 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SmartOps.Application.Modules.Class.DTOs;
+using SmartOps.Application.Modules.Class;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Class.Entities;
-using SmartOps.Domain.Modules.Class.Interfaces;
-using SmartOps.Domain.Modules.Class.Models;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Modules.Class;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Class.Controllers;
 

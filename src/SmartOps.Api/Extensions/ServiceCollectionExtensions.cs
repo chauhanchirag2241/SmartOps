@@ -5,7 +5,7 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using SmartOps.Application.Common.DependencyInjection;
 using SmartOps.Application.Configuration;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Infrastructure.DependencyInjection;
 using SmartOps.Infrastructure.Services;
 

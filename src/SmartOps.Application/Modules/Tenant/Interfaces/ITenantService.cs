@@ -1,5 +1,5 @@
 using SmartOps.Application.Modules.Tenant.DTOs;
-using SmartOps.Shared.Common;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Application.Modules.Tenant.Interfaces;
 

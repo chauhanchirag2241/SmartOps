@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SmartOps.Domain\SmartOps.Domain.csproj" />
-    <ProjectReference Include="..\SmartOps.Shared\SmartOps.Shared.csproj" />
   </ItemGroup>
 
 </Project>

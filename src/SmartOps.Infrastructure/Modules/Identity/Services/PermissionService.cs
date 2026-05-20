@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-using SmartOps.Application.Modules.Identity.DTOs;
+using SmartOps.Application.Modules.Identity;
 using SmartOps.Application.Modules.Identity.Interfaces;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 

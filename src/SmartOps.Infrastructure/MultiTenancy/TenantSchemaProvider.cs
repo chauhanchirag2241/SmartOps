@@ -1,5 +1,5 @@
-using SmartOps.Application.Common.Abstractions;
-using SmartOps.Shared.Configuration;
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
 

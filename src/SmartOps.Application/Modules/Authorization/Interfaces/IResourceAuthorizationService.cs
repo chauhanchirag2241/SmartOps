@@ -1,11 +1,6 @@
-namespace SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Domain.Common.Enums;
 
-public enum AccessLevel
-{
-    View,
-    Edit,
-    Delete
-}
+namespace SmartOps.Application.Modules.Authorization.Interfaces;
 
 public interface IResourceAuthorizationService
 {

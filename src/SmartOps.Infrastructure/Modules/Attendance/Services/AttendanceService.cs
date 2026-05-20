@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
-using SmartOps.Application.Common.Abstractions;
-using SmartOps.Application.Modules.Attendance.DTOs;
+using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Attendance;
 using SmartOps.Application.Modules.Attendance.Interfaces;
-using SmartOps.Domain.Modules.Attendance.Enums;
-using SmartOps.Shared.Common;
-using SmartOps.Shared.Configuration;
+using SmartOps.Domain.Modules.Attendance;
+using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Configuration;
 using AttendanceEntity = SmartOps.Domain.Modules.Attendance.Entities.Attendance;
 
 namespace SmartOps.Infrastructure.Modules.Attendance.Services;

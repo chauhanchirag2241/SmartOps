@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Teacher.Controllers;
 

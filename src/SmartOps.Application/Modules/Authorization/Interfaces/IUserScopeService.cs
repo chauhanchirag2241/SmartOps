@@ -1,4 +1,4 @@
-using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Modules.Authorization;
 
 namespace SmartOps.Application.Modules.Authorization.Interfaces;
 

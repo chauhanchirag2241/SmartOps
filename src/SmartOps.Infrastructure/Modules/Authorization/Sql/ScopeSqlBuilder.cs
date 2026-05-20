@@ -1,6 +1,6 @@
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Shared.Configuration;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Enums;
+using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Modules.Authorization.Sql;
 

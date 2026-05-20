@@ -1,5 +1,5 @@
 using FluentValidation;
-using SmartOps.Application.Modules.Identity.DTOs;
+using SmartOps.Application.Modules.Identity;
 
 namespace SmartOps.Application.Modules.Identity.Validators;
 

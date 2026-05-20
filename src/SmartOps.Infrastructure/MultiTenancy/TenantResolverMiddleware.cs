@@ -1,8 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Http;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Domain.Modules.School.Entities;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
 

@@ -1,4 +1,4 @@
-using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Application.Modules.Teacher;
 
 namespace SmartOps.Application.Modules.Teacher.Interfaces;
 

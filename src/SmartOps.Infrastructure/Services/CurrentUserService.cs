@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 
 namespace SmartOps.Infrastructure.Services;
 

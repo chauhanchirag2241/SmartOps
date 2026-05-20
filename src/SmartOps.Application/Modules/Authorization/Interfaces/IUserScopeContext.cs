@@ -1,4 +1,4 @@
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Enums;
 
 namespace SmartOps.Application.Modules.Authorization.Interfaces;
 

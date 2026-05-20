@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Infrastructure.Modules.Authorization.Context;
-using SmartOps.Infrastructure.Modules.Authorization.Repositories;
+using SmartOps.Infrastructure.Modules.Authorization;
 using SmartOps.Infrastructure.Modules.Authorization.Services;
 
 namespace SmartOps.Infrastructure.DependencyInjection;

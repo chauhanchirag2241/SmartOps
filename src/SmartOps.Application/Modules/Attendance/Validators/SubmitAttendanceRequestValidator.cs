@@ -1,5 +1,5 @@
 using FluentValidation;
-using SmartOps.Application.Modules.Attendance.DTOs;
+using SmartOps.Application.Modules.Attendance;
 
 namespace SmartOps.Application.Modules.Attendance.Validators;
 

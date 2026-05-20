@@ -1,5 +1,5 @@
-using SmartOps.Application.Modules.School.DTOs;
-using SmartOps.Shared.Common;
+using SmartOps.Application.Modules.School;
+using SmartOps.Domain.Common;
 
 namespace SmartOps.Application.Modules.School.Interfaces;
 

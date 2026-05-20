@@ -52,3 +52,13 @@ public enum SchoolFilter
     Active = 1,
     Inactive = 2
 }
+
+/// <summary>
+/// Filters for Academic Year table.
+/// </summary>
+public enum AcademicYearFilter
+{
+    All = 0,
+    Active = 1,
+    Inactive = 2
+}

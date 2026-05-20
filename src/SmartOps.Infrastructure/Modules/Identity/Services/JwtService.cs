@@ -6,9 +6,10 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Identity.Interfaces;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Infrastructure.MultiTenancy;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 

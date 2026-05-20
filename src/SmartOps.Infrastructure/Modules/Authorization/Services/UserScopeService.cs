@@ -1,13 +1,14 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
-using SmartOps.Application.Modules.Authorization.DTOs;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Infrastructure.MultiTenancy;
 using SmartOps.Infrastructure.Persistence.Context;
-using SmartOps.Shared.Configuration;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Common.Enums;
 using Dapper;
 using System.Data;
 

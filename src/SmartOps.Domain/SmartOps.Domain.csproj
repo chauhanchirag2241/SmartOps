@@ -8,8 +8,4 @@
     <AssemblyName>SmartOps.Domain</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\SmartOps.Shared\SmartOps.Shared.csproj" />
-  </ItemGroup>
-
 </Project>

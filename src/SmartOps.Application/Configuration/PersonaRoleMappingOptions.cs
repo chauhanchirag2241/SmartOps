@@ -1,4 +1,4 @@
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Application.Configuration;
 

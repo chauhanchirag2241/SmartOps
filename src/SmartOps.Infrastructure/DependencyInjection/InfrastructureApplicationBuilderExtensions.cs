@@ -2,7 +2,7 @@ using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Infrastructure.MultiTenancy;
 
 namespace SmartOps.Infrastructure.DependencyInjection;

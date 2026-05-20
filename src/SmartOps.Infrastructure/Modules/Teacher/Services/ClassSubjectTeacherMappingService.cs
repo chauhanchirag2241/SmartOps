@@ -1,14 +1,14 @@
 using System.Data;
 using Dapper;
 using Npgsql;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Infrastructure.Persistence.Context;
-using SmartOps.Shared.Configuration;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Enums;
 
 namespace SmartOps.Infrastructure.Modules.Teacher.Services;
 

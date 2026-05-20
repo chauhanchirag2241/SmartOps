@@ -1,17 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SmartOps.Application.Common.Abstractions;
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
-using SmartOps.Application.Modules.Teacher.DTOs;
+using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
-using SmartOps.Domain.Modules.Teacher.Interfaces;
-using SmartOps.Domain.Modules.Teacher.Models;
-using SmartOps.Shared.Constants;
+using SmartOps.Domain.Modules.Teacher;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Teacher.Controllers;
 

@@ -127,4 +127,13 @@ public static class MenuPolicies
         public const string Delete = "Menu:ATTENDANCE:Delete";
         public const string Export = "Menu:ATTENDANCE:Export";
     }
+
+    public static class Homework
+    {
+        public const string View = "Menu:HOMEWORK:View";
+        public const string Add = "Menu:HOMEWORK:Add";
+        public const string Edit = "Menu:HOMEWORK:Edit";
+        public const string Delete = "Menu:HOMEWORK:Delete";
+        public const string Export = "Menu:HOMEWORK:Export";
+    }
 }

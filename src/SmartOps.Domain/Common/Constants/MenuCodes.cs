@@ -31,6 +31,8 @@ public static class MenuCodes
 
     public const string Attendance = "ATTENDANCE";
 
+    public const string Homework = "HOMEWORK";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -45,6 +47,7 @@ public static class MenuCodes
         ClassMappings,
         Subjects,
         AcademicYears,
-        Attendance
+        Attendance,
+        Homework
     ];
 }

@@ -46,4 +46,6 @@ public static class DatabaseConfig
     public const string TableSettings = "settings";
     public const string TableAlerts = "alerts";
     public const string TableAttendance = "attendance";
+    public const string TableHomework = "homework";
+    public const string TableHomeworkDetails = "homeworkdetails";
 }

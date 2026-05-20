@@ -19,6 +19,8 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableStudentPreviousSchools,
         DatabaseConfig.TableStudentFeeConfigs,
         DatabaseConfig.TableAttendance,
+        DatabaseConfig.TableHomework,
+        DatabaseConfig.TableHomeworkDetails,
         DatabaseConfig.TableSettings,
         DatabaseConfig.TableAlerts,
         DatabaseConfig.TableDepartments,
@@ -56,6 +58,11 @@ internal static class SchoolSchemaCatalog
             "classid",
             "studentid",
             "attendancedate"),
+        new(
+            "uq_homeworkdetails_homework_student",
+            DatabaseConfig.TableHomeworkDetails,
+            "homeworkid",
+            "studentid"),
     ];
 }
 

@@ -26,13 +26,15 @@ public static class AuthorizationExtensions
                 options,
                 MenuPolicies.Students.ListForAttendanceOrModule,
                 (MenuCodes.Students, MenuPermissionAction.View),
-                (MenuCodes.Attendance, MenuPermissionAction.View));
+                (MenuCodes.Attendance, MenuPermissionAction.View),
+                (MenuCodes.Homework, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,
                 MenuPolicies.Classes.ListForAttendanceDropdown,
                 (MenuCodes.Classes, MenuPermissionAction.View),
-                (MenuCodes.Attendance, MenuPermissionAction.View));
+                (MenuCodes.Attendance, MenuPermissionAction.View),
+                (MenuCodes.Homework, MenuPermissionAction.View));
         });
 
         return services;

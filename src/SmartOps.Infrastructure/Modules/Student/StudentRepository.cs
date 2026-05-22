@@ -27,6 +27,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
         DatabaseConfig.TableStudentFeeConfigs,
+        DatabaseConfig.TableStudentCustomFields,
     };
 
     public StudentRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
@@ -86,6 +87,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         student.Academics = (await multi.ReadAsync<StudentAcademicEntity>().ConfigureAwait(false)).ToList();
         student.FeeConfigs = (await multi.ReadAsync<StudentFeeConfigEntity>().ConfigureAwait(false)).ToList();
         student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
+        student.CustomFields = (await multi.ReadAsync<StudentCustomFieldEntity>().ConfigureAwait(false)).ToList();
 
         return student;
     }
@@ -140,6 +142,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
                 COALESCE(s.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
+                a.rollnumber AS RollNumber,
                 CASE
                     WHEN c.classname IS NOT NULL THEN 
                         c.classname || ' — ' || 
@@ -151,7 +154,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 s.isactive AS IsActive
             FROM {schema}.{students} s
             LEFT JOIN (
-                SELECT studentid, classid,
+                SELECT studentid, classid, rollnumber,
                        ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) AS rn
                 FROM {schema}.{academics}
                 WHERE isactive = true
@@ -349,6 +352,7 @@ WHERE id = @StudentId AND isactive = true
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeConfigs} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
         ";
     }
 
@@ -430,6 +434,9 @@ WHERE id = @StudentId AND isactive = true
                     .ConfigureAwait(false);
             }
         }
+
+        await InsertCustomFieldsAsync(connection, transaction, studentId, student.CustomFields, utcNow)
+            .ConfigureAwait(false);
     }
 
     private async Task UpdateChildCollectionsAsync(
@@ -507,6 +514,65 @@ WHERE id = @StudentId AND isactive = true
                     .ConfigureAwait(false);
             }
         }
+
+        if (student.CustomFields is not null)
+        {
+            await ReplaceCustomFieldsAsync(connection, transaction, student.Id, student.CustomFields, actorId, utcNow)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task InsertCustomFieldsAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid studentId,
+        List<StudentCustomFieldEntity>? customFields,
+        DateTime utcNow)
+    {
+        if (customFields is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var field in customFields)
+        {
+            if (string.IsNullOrWhiteSpace(field.FieldLabel) && string.IsNullOrWhiteSpace(field.FieldValue))
+            {
+                continue;
+            }
+
+            field.Id = Guid.NewGuid();
+            field.StudentId = studentId;
+            EnsureInsertAudit(field, utcNow);
+            await InsertWithoutReturnAsync(
+                    connection,
+                    Context.OperationalSchema,
+                    DatabaseConfig.TableStudentCustomFields,
+                    field,
+                    transaction)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task ReplaceCustomFieldsAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid studentId,
+        List<StudentCustomFieldEntity>? customFields,
+        Guid actorId,
+        DateTime utcNow)
+    {
+        await SoftDeleteRelatedAsync(
+                connection,
+                Context.OperationalSchema,
+                DatabaseConfig.TableStudentCustomFields,
+                "StudentId",
+                studentId,
+                transaction)
+            .ConfigureAwait(false);
+
+        await InsertCustomFieldsAsync(connection, transaction, studentId, customFields, utcNow)
+            .ConfigureAwait(false);
     }
 
     public async Task<int> GetMaxRollNumberAsync(Guid academicYearId, Guid classId, CancellationToken cancellationToken = default)

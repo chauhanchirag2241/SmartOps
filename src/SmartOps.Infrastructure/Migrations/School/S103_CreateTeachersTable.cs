@@ -15,8 +15,8 @@ public sealed class S103_CreateTeachersTable : Migration
         {
             Create.Table(DatabaseConfig.TableTeachers).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("firstname").AsString(100).NotNullable()
-                .WithColumn("lastname").AsString(100).NotNullable()
+                .WithColumn("firstname").AsString(50).NotNullable()
+                .WithColumn("lastname").AsString(50).NotNullable()
                 .WithColumn("dob").AsDate().NotNullable()
                 .WithColumn("gender").AsString(20).NotNullable()
                 .WithColumn("bloodgroup").AsString(10).Nullable()
@@ -28,20 +28,20 @@ public sealed class S103_CreateTeachersTable : Migration
                 .WithColumn("address").AsString(1000).Nullable()
                 .WithColumn("employeeid").AsString(50).Nullable().Unique()
                 .WithColumn("joiningdate").AsDate().NotNullable()
-                .WithColumn("department").AsString(100).NotNullable()
-                .WithColumn("designation").AsString(100).NotNullable()
+                .WithColumn("designation").AsString(100).Nullable()
                 .WithColumn("experience").AsInt32().WithDefaultValue(0)
                 .WithColumn("salarygrade").AsString(50).Nullable()
                 .WithColumn("employmenttype").AsString(50).WithDefaultValue("Full-time")
                 .WithColumn("qualifications").AsString(2000).Nullable()
                 .WithColumn("bankaccountnumber").AsString(50).Nullable()
                 .WithColumn("bankifsccode").AsString(20).Nullable()
-                .WithColumn("bankname").AsString(100).Nullable()
+                .WithColumn("bankname").AsString(50).Nullable()
                 .WithColumn("classid").AsGuid().Nullable()
                     .ForeignKey("fk_teachers_classid", S, DatabaseConfig.TableClasses, "id")
-                .WithColumn("shift").AsString(100).Nullable()
-                .WithColumn("weeklyperiods").AsInt32().WithDefaultValue(0)
-                .WithColumn("maxperiodsperday").AsInt32().WithDefaultValue(0)
+                .WithColumn("shiftstarttime").AsString(5).Nullable()
+                .WithColumn("shiftendtime").AsString(5).Nullable()
+                .WithColumn("weeklyperiods").AsInt32().Nullable()
+                .WithColumn("maxperiodsperday").AsInt32().Nullable()
                 .WithColumn("role").AsString(50).NotNullable().WithDefaultValue("Teacher")
                 .WithColumn("portalaccess").AsBoolean().WithDefaultValue(true)
                 .WithColumn("username").AsString(100).Nullable().Unique()
@@ -54,7 +54,12 @@ ALTER TABLE {S}.{DatabaseConfig.TableTeachers}
     REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
 """);
         }
+
+       
     }
+
+    /// <summary>Applies column changes when the table already exists (re-run / existing school DB).</summary>
+   
 
     public override void Down()
     {

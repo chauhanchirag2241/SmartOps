@@ -128,17 +128,17 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     WHEN 4 THEN 'D'
                     ELSE 'N/A'
                 END AS Section,
-                CASE c.streamgroup
-                    WHEN 1 THEN 'None'
-                    WHEN 2 THEN 'Science'
-                    WHEN 3 THEN 'Commerce'
-                    WHEN 4 THEN 'Arts'
-                    WHEN 5 THEN 'Regional'
-                    ELSE 'N/A'
+                CASE
+                    WHEN c.streamgroup IS NULL THEN NULL
+                    WHEN c.streamgroup = 1 THEN 'None'
+                    WHEN c.streamgroup = 2 THEN 'Science'
+                    WHEN c.streamgroup = 3 THEN 'Commerce'
+                    WHEN c.streamgroup = 4 THEN 'Arts'
+                    WHEN c.streamgroup = 5 THEN 'Regional'
+                    ELSE NULL
                 END AS StreamGroup,
                 ay.title AS AcademicYear,
                 c.capacity AS Capacity,
-                COALESCE(c.classteacher, 'Not assigned') AS ClassTeacher,
                 COALESCE(c.roomnumber, 'N/A') AS RoomNumber,
                 CASE WHEN c.isactive THEN 'Active' ELSE 'Inactive' END AS Status,
                 c.isactive AS IsActive
@@ -271,7 +271,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            where += " AND (c.classname ILIKE @SearchTerm OR c.classteacher ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm OR ay.title ILIKE @SearchTerm)";
+            where += " AND (c.classname ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm OR ay.title ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 
@@ -310,11 +310,6 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         if (IsSortKey(sortColumn, "capacity"))
         {
             return $"c.capacity {direction}, c.id ASC";
-        }
-
-        if (IsSortKey(sortColumn, "classTeacher"))
-        {
-            return $"c.classteacher {direction}, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "roomNumber"))

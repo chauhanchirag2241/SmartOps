@@ -25,8 +25,7 @@ public class CreateTeacherDto
             Address = Personal.Address,
             // Professional
             JoiningDate = Professional.JoiningDate,
-            Department = Professional.Department,
-            Designation = Professional.Designation,
+            Designation = string.IsNullOrWhiteSpace(Professional.Designation) ? null : Professional.Designation.Trim(),
             Experience = Professional.Experience,
             SalaryGrade = Professional.SalaryGrade,
             EmploymentType = Professional.EmploymentType,
@@ -36,7 +35,8 @@ public class CreateTeacherDto
             BankName = Professional.BankDetails?.BankName,
             // Schedule
             ClassId = Schedule.ClassId,
-            Shift = Schedule.Shift,
+            ShiftStartTime = Schedule.ShiftStartTime,
+            ShiftEndTime = Schedule.ShiftEndTime,
             WeeklyPeriods = Schedule.WeeklyPeriods,
             MaxPeriodsPerDay = Schedule.MaxPeriodsPerDay,
             Role = Schedule.Role,
@@ -65,8 +65,7 @@ public class TeacherPersonalInfo
 public class TeacherProfessionalInfo
 {
     public DateOnly JoiningDate { get; set; }
-    public string Department { get; set; } = null!;
-    public string Designation { get; set; } = null!;
+    public string? Designation { get; set; }
     public int Experience { get; set; }
     public string? SalaryGrade { get; set; }
     public string EmploymentType { get; set; } = "Full-time";
@@ -87,9 +86,10 @@ public class TeacherScheduleInfo
 
     public List<TeacherClassAssignmentRowDto> ClassAssignments { get; set; } = [];
 
-    public string? Shift { get; set; }
-    public int WeeklyPeriods { get; set; }
-    public int MaxPeriodsPerDay { get; set; }
+    public string? ShiftStartTime { get; set; }
+    public string? ShiftEndTime { get; set; }
+    public int? WeeklyPeriods { get; set; }
+    public int? MaxPeriodsPerDay { get; set; }
     public string Role { get; set; } = "Teacher";
     public string PortalAccess { get; set; } = "Enabled";
     public string? Username { get; set; }

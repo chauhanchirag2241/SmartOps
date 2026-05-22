@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SmartOps.Domain.Modules.Student.Entities;
 
 namespace SmartOps.Application.Modules.Student;
@@ -15,6 +16,8 @@ public class CreateStudentDto
     public string? Mobile { get; set; }
     public string? Email { get; set; }
     public string? AadhaarNo { get; set; }
+    public string? Caste { get; set; }
+    public string? Category { get; set; }
     public string? Address { get; set; }
     public string? PhotoUrl { get; set; }
     public string? Remarks { get; set; }
@@ -25,6 +28,16 @@ public class CreateStudentDto
     public List<CreateStudentAcademicDto> Academics { get; set; } = new();
     public List<CreateStudentPreviousSchoolDto> PreviousSchools { get; set; } = new();
     public List<CreateStudentFeeConfigDto> FeeConfigs { get; set; } = new();
+    public List<StudentCustomFieldDto> CustomFields { get; set; } = new();
+}
+
+public class StudentCustomFieldDto
+{
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = null!;
+
+    [JsonPropertyName("value")]
+    public string? Value { get; set; }
 }
 
 public class CreateStudentParentDto
@@ -77,6 +90,8 @@ public static class StudentMappingExtensions
             Mobile = dto.Mobile,
             Email = dto.Email,
             AadhaarNo = dto.AadhaarNo,
+            Caste = dto.Caste,
+            Category = dto.Category,
             Address = dto.Address,
             PhotoUrl = dto.PhotoUrl,
             Remarks = dto.Remarks,
@@ -111,7 +126,15 @@ public static class StudentMappingExtensions
                 DiscountRemarks = f.DiscountRemarks,
                 PaymentMode = f.PaymentMode,
                 FirstDueDate = f.FirstDueDate
-            }).ToList()
+            }).ToList(),
+            CustomFields = dto.CustomFields
+                .Where(cf => !string.IsNullOrWhiteSpace(cf.Label) || !string.IsNullOrWhiteSpace(cf.Value))
+                .Select(cf => new StudentCustomFieldEntity
+                {
+                    FieldLabel = cf.Label.Trim(),
+                    FieldValue = string.IsNullOrWhiteSpace(cf.Value) ? null : cf.Value.Trim()
+                })
+                .ToList()
         };
     }
 }

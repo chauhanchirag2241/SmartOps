@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Attributes;
 
@@ -16,6 +17,8 @@ public class StudentEntity : AuditableEntity
     public string? Mobile { get; set; }
     public string? Email { get; set; }
     public string? AadhaarNo { get; set; }
+    public string? Caste { get; set; }
+    public string? Category { get; set; }
     public string? Address { get; set; }
     public string? PhotoUrl { get; set; }
     //public string Status { get; set; } = "Active";
@@ -28,4 +31,7 @@ public class StudentEntity : AuditableEntity
     [DbIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();
     [DbIgnore] public List<StudentPreviousSchoolEntity> PreviousSchools { get; set; } = new();
     [DbIgnore] public List<StudentFeeConfigEntity> FeeConfigs { get; set; } = new();
+    [DbIgnore]
+    [JsonPropertyName("customFields")]
+    public List<StudentCustomFieldEntity> CustomFields { get; set; } = new();
 }

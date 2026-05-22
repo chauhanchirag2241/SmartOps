@@ -18,8 +18,7 @@ public class TeacherEntity : AuditableEntity
     public string? Address { get; set; }
     public string? EmployeeId { get; set; }
     public DateOnly JoiningDate { get; set; }
-    public string Department { get; set; } = null!;
-    public string Designation { get; set; } = null!;
+    public string? Designation { get; set; }
     public int Experience { get; set; }
     public string? SalaryGrade { get; set; }
     public string EmploymentType { get; set; } = "Full-time";
@@ -28,9 +27,14 @@ public class TeacherEntity : AuditableEntity
     public string? BankIfscCode { get; set; }
     public string? BankName { get; set; }
     public Guid? ClassId { get; set; }
-    public string? Shift { get; set; }
-    public int WeeklyPeriods { get; set; }
-    public int MaxPeriodsPerDay { get; set; }
+    /// <summary>24-hour time HH:mm (e.g. 07:30).</summary>
+    public string? ShiftStartTime { get; set; }
+
+    /// <summary>24-hour time HH:mm (e.g. 13:30).</summary>
+    public string? ShiftEndTime { get; set; }
+
+    public int? WeeklyPeriods { get; set; }
+    public int? MaxPeriodsPerDay { get; set; }
     public string Role { get; set; } = "Teacher";
     public bool PortalAccess { get; set; } = true;
     public string? Username { get; set; }

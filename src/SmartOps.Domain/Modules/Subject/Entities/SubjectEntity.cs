@@ -8,9 +8,9 @@ public sealed class SubjectEntity : AuditableEntity
     public Guid Id { get; set; }
     public string SubjectName { get; set; } = string.Empty;
     public string SubjectCode { get; set; } = string.Empty;
-    public SubjectType SubjectType { get; set; }
-    public SubjectCategory SubjectCategory { get; set; }
-    public int Medium { get; set; } // Mapping to Medium enum
+    public SubjectType? SubjectType { get; set; }
+    public SubjectCategory? SubjectCategory { get; set; }
+    public int? Medium { get; set; }
     public string AssignedClasses { get; set; } = "[]"; // Store as JSON string
     public int PeriodsPerWeek { get; set; }
     public string PeriodDuration { get; set; } = string.Empty;

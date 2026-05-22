@@ -8,20 +8,21 @@ public sealed class CreateSubjectDto
 {
     public string SubjectName { get; set; } = null!;
     public string SubjectCode { get; set; } = null!;
-    public string SubjectType { get; set; } = null!;
-    public string SubjectCategory { get; set; } = null!;
-    public string Medium { get; set; } = null!;
+    public string? SubjectType { get; set; }
+    public string? SubjectCategory { get; set; }
+    public string? Medium { get; set; }
     public string[] AssignedClasses { get; set; } = [];
-    public int PeriodsPerWeek { get; set; }
-    public string PeriodDuration { get; set; } = null!;
+    public int PeriodsPerWeek { get; set; } = 1;
+    public string? PeriodDuration { get; set; }
     public string[] TeachingDays { get; set; } = [];
-    public int MaxTheory { get; set; }
-    public int MaxPractical { get; set; }
-    public int PassingMarks { get; set; }
-    public string GradeSystem { get; set; } = null!;
+    public int MaxTheory { get; set; } = 80;
+    public int MaxPractical { get; set; } = 20;
+    public int PassingMarks { get; set; } = 33;
+    public string? GradeSystem { get; set; }
     public string? SyllabusTextbook { get; set; }
     public string? Curriculum { get; set; }
     public string? Description { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 public static class SubjectMappingExtensions
@@ -30,34 +31,69 @@ public static class SubjectMappingExtensions
     {
         return new SubjectEntity
         {
-            SubjectName = dto.SubjectName,
-            SubjectCode = dto.SubjectCode,
-            SubjectType = Enum.TryParse<SubjectType>(dto.SubjectType, true, out var type) ? type : SubjectType.Theory,
-            SubjectCategory = Enum.TryParse<SubjectCategory>(dto.SubjectCategory.Replace("-", ""), true, out var cat) ? cat : SubjectCategory.Core,
-            Medium = MapMedium(dto.Medium),
-            AssignedClasses = JsonSerializer.Serialize(dto.AssignedClasses),
-            PeriodsPerWeek = dto.PeriodsPerWeek,
-            PeriodDuration = dto.PeriodDuration,
-            TeachingDays = JsonSerializer.Serialize(dto.TeachingDays),
+            SubjectName = dto.SubjectName.Trim(),
+            SubjectCode = dto.SubjectCode.Trim(),
+            SubjectType = ParseSubjectTypeOrNull(dto.SubjectType),
+            SubjectCategory = ParseSubjectCategoryOrNull(dto.SubjectCategory),
+            Medium = MapMediumOrNull(dto.Medium),
+            AssignedClasses = JsonSerializer.Serialize(dto.AssignedClasses ?? []),
+            PeriodsPerWeek = dto.PeriodsPerWeek > 0 ? dto.PeriodsPerWeek : 1,
+            PeriodDuration = string.IsNullOrWhiteSpace(dto.PeriodDuration) ? "45" : dto.PeriodDuration.Trim(),
+            TeachingDays = JsonSerializer.Serialize(dto.TeachingDays ?? []),
             MaxTheory = dto.MaxTheory,
             MaxPractical = dto.MaxPractical,
             PassingMarks = dto.PassingMarks,
-            GradeSystem = Enum.TryParse<GradeSystem>(dto.GradeSystem, true, out var gs) ? gs : GradeSystem.Marks,
+            GradeSystem = ParseGradeSystem(dto.GradeSystem),
             SyllabusTextbook = dto.SyllabusTextbook,
-            Curriculum = Enum.TryParse<Curriculum>(dto.Curriculum, true, out var curr) ? curr : Curriculum.CBSE,
+            Curriculum = ParseCurriculum(dto.Curriculum),
             Description = dto.Description,
-            IsActive = true
+            IsActive = dto.IsActive
         };
     }
 
-    private static int MapMedium(string medium)
+    private static SubjectType? ParseSubjectTypeOrNull(string? value)
     {
-        return medium switch
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<SubjectType>(value.Trim(), true, out var type) ? type : null;
+    }
+
+    private static SubjectCategory? ParseSubjectCategoryOrNull(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Replace("-", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal);
+
+        return Enum.TryParse<SubjectCategory>(normalized, true, out var category) ? category : null;
+    }
+
+    private static GradeSystem ParseGradeSystem(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        Enum.TryParse<GradeSystem>(value.Trim(), true, out var gs)
+            ? gs
+            : GradeSystem.Marks;
+
+    private static Curriculum ParseCurriculum(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        Enum.TryParse<Curriculum>(value.Trim(), true, out var curr)
+            ? curr
+            : Curriculum.CBSE;
+
+    private static int? MapMediumOrNull(string? medium)
+    {
+        return medium?.Trim() switch
         {
             "English" => 1,
             "Hindi" => 2,
             "Gujarati" => 3,
-            _ => 1
+            _ => null
         };
     }
 }

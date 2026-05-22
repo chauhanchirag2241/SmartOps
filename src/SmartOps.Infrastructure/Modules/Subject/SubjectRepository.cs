@@ -78,23 +78,26 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
                 s.id AS Id,
                 s.subjectname AS SubjectName,
                 s.subjectcode AS SubjectCode,
-                CASE s.subjecttype
-                    WHEN 1 THEN 'Theory'
-                    WHEN 2 THEN 'Practical'
-                    WHEN 3 THEN 'Both'
-                    ELSE 'N/A'
+                CASE
+                    WHEN s.subjecttype IS NULL THEN NULL
+                    WHEN s.subjecttype = 1 THEN 'Theory'
+                    WHEN s.subjecttype = 2 THEN 'Practical'
+                    WHEN s.subjecttype = 3 THEN 'Both'
+                    ELSE NULL
                 END AS SubjectType,
-                CASE s.subjectcategory
-                    WHEN 1 THEN 'Core'
-                    WHEN 2 THEN 'Elective'
-                    WHEN 3 THEN 'Co-curricular'
-                    ELSE 'N/A'
+                CASE
+                    WHEN s.subjectcategory IS NULL THEN NULL
+                    WHEN s.subjectcategory = 1 THEN 'Core'
+                    WHEN s.subjectcategory = 2 THEN 'Elective'
+                    WHEN s.subjectcategory = 3 THEN 'Co-curricular'
+                    ELSE NULL
                 END AS SubjectCategory,
-                CASE s.medium
-                    WHEN 1 THEN 'English'
-                    WHEN 2 THEN 'Hindi'
-                    WHEN 3 THEN 'Gujarati'
-                    ELSE 'N/A'
+                CASE
+                    WHEN s.medium IS NULL THEN NULL
+                    WHEN s.medium = 1 THEN 'English'
+                    WHEN s.medium = 2 THEN 'Hindi'
+                    WHEN s.medium = 3 THEN 'Gujarati'
+                    ELSE NULL
                 END AS Medium,
                 s.isactive AS IsActive
             FROM {schema}.{table} s

@@ -104,7 +104,6 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
                 id, 
                 TRIM(firstname || ' ' || lastname) AS Name, 
                 email, 
-                department AS Dept, 
                 designation, 
                 isactive 
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} 

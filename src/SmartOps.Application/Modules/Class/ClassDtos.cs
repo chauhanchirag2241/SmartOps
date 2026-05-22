@@ -6,13 +6,12 @@ public class CreateClassDto
 {
     public string ClassName { get; set; } = null!;
     public int Section { get; set; }
-    public int StreamGroup { get; set; }
+    public int? StreamGroup { get; set; }
     public Guid AcademicYearId { get; set; }
     public int Capacity { get; set; }
-    public string? ClassTeacher { get; set; }
     public string? RoomNumber { get; set; }
-    public int Shift { get; set; }
-    public int Medium { get; set; }
+    public int? Shift { get; set; }
+    public int? Medium { get; set; }
     public string? Description { get; set; }
 }
 
@@ -27,7 +26,6 @@ public static class ClassMappingExtensions
             StreamGroup = dto.StreamGroup,
             AcademicYearId = dto.AcademicYearId,
             Capacity = dto.Capacity,
-            ClassTeacher = dto.ClassTeacher,
             RoomNumber = dto.RoomNumber,
             Shift = dto.Shift,
             Medium = dto.Medium,

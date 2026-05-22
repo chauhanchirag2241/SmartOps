@@ -18,6 +18,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
         DatabaseConfig.TableStudentFeeConfigs,
+        DatabaseConfig.TableStudentCustomFields,
         DatabaseConfig.TableAttendance,
         DatabaseConfig.TableHomework,
         DatabaseConfig.TableHomeworkDetails,

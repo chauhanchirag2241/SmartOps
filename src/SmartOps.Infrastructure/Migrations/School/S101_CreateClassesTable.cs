@@ -17,14 +17,13 @@ public sealed class S101_CreateClassesTable : Migration
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classname").AsString(50).NotNullable()
                 .WithColumn("section").AsInt32().NotNullable().WithDefaultValue(1)
-                .WithColumn("streamgroup").AsInt32().NotNullable().WithDefaultValue(1)
+                .WithColumn("streamgroup").AsInt32().Nullable()
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                     .ForeignKey("fk_classes_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("capacity").AsInt32().NotNullable().WithDefaultValue(0)
-                .WithColumn("classteacher").AsString(200).Nullable()
                 .WithColumn("roomnumber").AsString(50).Nullable()
-                .WithColumn("shift").AsInt32().NotNullable().WithDefaultValue(1)
-                .WithColumn("medium").AsInt32().NotNullable().WithDefaultValue(1)
+                .WithColumn("shift").AsInt32().Nullable()
+                .WithColumn("medium").AsInt32().Nullable()
                 .WithColumn("description").AsString(1000).Nullable()
                 .WithAuditColumns();
 

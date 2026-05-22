@@ -33,6 +33,12 @@ public static class MenuCodes
 
     public const string Homework = "HOMEWORK";
 
+    public const string FeesStructure = "FEES_STRUCTURE";
+
+    public const string FeesClassAmounts = "FEES_CLASS_AMOUNTS";
+
+    public const string FeesCollection = "FEES_COLLECTION";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -48,6 +54,9 @@ public static class MenuCodes
         Subjects,
         AcademicYears,
         Attendance,
-        Homework
+        Homework,
+        FeesStructure,
+        FeesClassAmounts,
+        FeesCollection
     ];
 }

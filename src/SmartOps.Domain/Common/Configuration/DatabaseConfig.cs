@@ -49,4 +49,11 @@ public static class DatabaseConfig
     public const string TableAttendance = "attendance";
     public const string TableHomework = "homework";
     public const string TableHomeworkDetails = "homeworkdetails";
+
+    // Fees Module
+    public const string TableFeeTypes = "feetypes";
+    public const string TableFeeSettings = "feesettings";
+    public const string TableClassFeeAmounts = "classfeeamounts";
+    public const string TableFeePayments = "feepayments";
+    public const string TableFeePaymentAllocations = "feepaymentallocations";
 }

@@ -12,12 +12,11 @@ public interface IFeeCollectionRepository
     Task<FeeCollectionStudentRow?> GetStudentRowAsync(Guid studentId, Guid academicYearId, CancellationToken ct = default);
 
     Task<IList<StudentClassFeeAmountRow>> GetStudentFeeAmountsAsync(
-        Guid studentId,
         Guid classId,
-        Guid academicYearId,
+        Guid feeStructureVersionId,
         CancellationToken ct = default);
 
-    Task<decimal> GetStudentPaidTotalAsync(Guid studentId, CancellationToken ct = default);
+    Task<decimal> GetStudentPaidTotalAsync(Guid studentId, Guid feeStructureVersionId, CancellationToken ct = default);
 
     Task<IList<StudentFeeHeadPaidRow>> GetPaidByFeeTypeAsync(Guid studentId, CancellationToken ct = default);
 
@@ -25,6 +24,7 @@ public interface IFeeCollectionRepository
 
     Task<(Guid PaymentId, string ReceiptNo)> CreatePaymentAsync(
         Guid studentId,
+        Guid feeStructureVersionId,
         decimal amount,
         int paymentMode,
         string? transactionNo,
@@ -32,6 +32,8 @@ public interface IFeeCollectionRepository
         string? remarks,
         IList<(Guid FeeTypeId, decimal Amount)> allocations,
         CancellationToken ct = default);
+
+    Task AssignStudentFeeStructureVersionAsync(Guid studentId, Guid academicYearId, Guid feeStructureVersionId, CancellationToken ct = default);
 }
 
 public sealed class FeeCollectionStudentRow
@@ -41,6 +43,8 @@ public sealed class FeeCollectionStudentRow
     public string RollNo { get; init; } = string.Empty;
     public Guid ClassId { get; init; }
     public string ClassName { get; init; } = string.Empty;
+    public Guid FeeStructureVersionId { get; init; }
+    public int AssignedVersionNumber { get; init; }
     public decimal TotalFees { get; init; }
     public decimal PaidAmount { get; init; }
 }

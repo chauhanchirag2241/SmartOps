@@ -31,6 +31,15 @@ public static class FeeLabelHelper
         _ => c.ToString()
     };
 
+    public static string VersionStatusLabel(FeeStructureVersionStatus status) => status switch
+    {
+        FeeStructureVersionStatus.Draft => "Draft",
+        FeeStructureVersionStatus.Published => "Published",
+        FeeStructureVersionStatus.Active => "Active",
+        FeeStructureVersionStatus.Archived => "Archived",
+        _ => status.ToString()
+    };
+
     public static string PaymentModeLabel(FeePaymentMode m) => m switch
     {
         FeePaymentMode.Cash => "Cash",

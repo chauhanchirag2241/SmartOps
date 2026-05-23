@@ -48,7 +48,8 @@ public record CollectFeeRequestDto(
     string? TransactionNo,
     DateOnly PaymentDate,
     string? Remarks,
-    IList<CollectFeeAllocationDto> Allocations);
+    IList<CollectFeeAllocationDto> Allocations,
+    Guid? AcademicYearId = null);
 
 public record CollectFeeAllocationDto(Guid FeeTypeId, decimal Amount);
 

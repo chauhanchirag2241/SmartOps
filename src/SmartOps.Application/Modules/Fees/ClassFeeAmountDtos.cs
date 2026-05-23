@@ -17,11 +17,16 @@ public record ClassFeeAmountsResponseDto(
     Guid ClassId,
     string ClassName,
     Guid AcademicYearId,
+    Guid FeeStructureVersionId,
+    int VersionNumber,
+    string VersionStatusLabel,
+    bool IsEditable,
     decimal TotalAmount,
     IList<ClassFeeAmountItemDto> Items);
 
 public record SaveClassFeeAmountsRequestDto(
     Guid AcademicYearId,
+    Guid FeeStructureVersionId,
     IList<SaveClassFeeAmountItemDto> Amounts);
 
 public record SaveClassFeeAmountItemDto(Guid FeeTypeId, decimal Amount);

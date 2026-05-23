@@ -33,3 +33,11 @@ public enum FeePaymentMode
     Cheque = 3,
     Card = 4
 }
+
+public enum FeeStructureVersionStatus
+{
+    Draft = 0,
+    Published = 1,
+    Active = 2,
+    Archived = 3
+}

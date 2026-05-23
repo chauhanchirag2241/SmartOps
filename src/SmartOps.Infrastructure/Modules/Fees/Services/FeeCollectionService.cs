@@ -54,7 +54,13 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<FeeCollectionStudentDetailDto>.Failure("Student not found.");
         }
 
-        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, yearId, ct).ConfigureAwait(false);
+        row = await EnsureStudentVersionAssignedAsync(row, yearId, ct).ConfigureAwait(false);
+        if (row is null || row.FeeStructureVersionId == Guid.Empty)
+        {
+            return Result<FeeCollectionStudentDetailDto>.Failure("No fee structure version is assigned to this student.");
+        }
+
+        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
         return Result<FeeCollectionStudentDetailDto>.Success(detail);
     }
 
@@ -70,18 +76,93 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<CollectFeeResponseDto>.Failure("Amount must be greater than zero.");
         }
 
-        IList<(Guid FeeTypeId, decimal Amount)> allocations = request.Allocations
-            .Where(a => a.Amount > 0)
-            .Select(a => (a.FeeTypeId, a.Amount))
+        Guid yearId = await ResolveAcademicYearIdAsync(request.AcademicYearId, ct).ConfigureAwait(false);
+        if (yearId == Guid.Empty)
+        {
+            return Result<CollectFeeResponseDto>.Failure("Academic year is required.");
+        }
+
+        FeeCollectionStudentRow? studentRow =
+            await _collectionRepo.GetStudentRowAsync(request.StudentId, yearId, ct).ConfigureAwait(false);
+        if (studentRow is null)
+        {
+            return Result<CollectFeeResponseDto>.Failure("Student not found.");
+        }
+
+        studentRow = await EnsureStudentVersionAssignedAsync(studentRow, yearId, ct).ConfigureAwait(false);
+        if (studentRow is null || studentRow.FeeStructureVersionId == Guid.Empty)
+        {
+            return Result<CollectFeeResponseDto>.Failure("No fee structure version is assigned to this student.");
+        }
+
+        decimal dueAmount = Math.Max(0, studentRow.TotalFees - studentRow.PaidAmount);
+        if (dueAmount <= 0)
+        {
+            return Result<CollectFeeResponseDto>.Failure("No due amount remaining for this student.");
+        }
+
+        if (request.Amount > dueAmount)
+        {
+            return Result<CollectFeeResponseDto>.Failure($"Amount cannot exceed due balance of {dueAmount:N2}.");
+        }
+
+        IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
+            .GetStudentFeeAmountsAsync(studentRow.ClassId, studentRow.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+
+        var heads = feeAmounts
+            .Where(f => f.Amount > 0)
+            .Select(f => new FeeAllocationHelper.HeadAmount(f.FeeTypeId, f.Amount))
             .ToList();
+
+        decimal currentPaid = await _collectionRepo
+            .GetStudentPaidTotalAsync(request.StudentId, studentRow.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        IList<FeeAllocationHelper.HeadAllocation> distributed =
+            FeeAllocationHelper.DistributePaid(heads, currentPaid);
+
+        HashSet<Guid> selectedFeeTypeIds = request.Allocations
+            .Where(a => a.FeeTypeId != Guid.Empty)
+            .Select(a => a.FeeTypeId)
+            .ToHashSet();
+
+        if (selectedFeeTypeIds.Count == 0)
+        {
+            foreach (FeeAllocationHelper.HeadAllocation h in distributed)
+            {
+                if (h.DueAmount > 0)
+                {
+                    selectedFeeTypeIds.Add(h.FeeTypeId);
+                }
+            }
+        }
+
+        decimal selectedDue = FeeAllocationHelper.SumDueOnSelected(distributed, selectedFeeTypeIds);
+        if (selectedDue <= 0)
+        {
+            return Result<CollectFeeResponseDto>.Failure(
+                "Selected fee heads have no remaining due. Refresh the student and try again.");
+        }
+
+        if (request.Amount > selectedDue)
+        {
+            return Result<CollectFeeResponseDto>.Failure(
+                $"Amount cannot exceed {selectedDue:N2} due on the selected fee heads.");
+        }
+
+        IList<(Guid FeeTypeId, decimal Amount)> allocations = FeeAllocationHelper.AllocateToSelectedHeads(
+            distributed,
+            request.Amount,
+            selectedFeeTypeIds);
 
         if (allocations.Count == 0)
         {
-            allocations = [(Guid.Empty, request.Amount)];
+            return Result<CollectFeeResponseDto>.Failure("Could not allocate payment to selected fee heads.");
         }
 
         (Guid paymentId, string receiptNo) = await _collectionRepo.CreatePaymentAsync(
             request.StudentId,
+            studentRow.FeeStructureVersionId,
             request.Amount,
             request.PaymentMode,
             request.TransactionNo,
@@ -90,16 +171,34 @@ public sealed class FeeCollectionService : IFeeCollectionService
             allocations.Where(a => a.FeeTypeId != Guid.Empty).ToList(),
             ct).ConfigureAwait(false);
 
-        FeeSettingsEntity? settings = await _structureRepo.GetSettingsAsync(ct).ConfigureAwait(false);
-        Guid yearId = settings?.DefaultAcademicYearId ?? Guid.Empty;
         FeeCollectionStudentRow? row = await _collectionRepo.GetStudentRowAsync(request.StudentId, yearId, ct).ConfigureAwait(false);
         if (row is null)
         {
             return Result<CollectFeeResponseDto>.Failure("Student not found after payment.");
         }
 
-        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, yearId, ct).ConfigureAwait(false);
+        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
         return Result<CollectFeeResponseDto>.Success(new CollectFeeResponseDto(paymentId, receiptNo, detail));
+    }
+
+    private async Task<FeeCollectionStudentRow?> EnsureStudentVersionAssignedAsync(
+        FeeCollectionStudentRow row,
+        Guid academicYearId,
+        CancellationToken ct)
+    {
+        if (row.FeeStructureVersionId != Guid.Empty)
+        {
+            return row;
+        }
+
+        FeeStructureVersionEntity? active = await _structureRepo.GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        if (active is null)
+        {
+            return row;
+        }
+
+        await _collectionRepo.AssignStudentFeeStructureVersionAsync(row.StudentId, academicYearId, active.Id, ct).ConfigureAwait(false);
+        return await _collectionRepo.GetStudentRowAsync(row.StudentId, academicYearId, ct).ConfigureAwait(false);
     }
 
     private async Task<Guid> ResolveAcademicYearIdAsync(Guid? academicYearId, CancellationToken ct)
@@ -115,35 +214,38 @@ public sealed class FeeCollectionService : IFeeCollectionService
 
     private async Task<FeeCollectionStudentDetailDto> BuildStudentDetailAsync(
         FeeCollectionStudentRow row,
-        Guid academicYearId,
         CancellationToken ct)
     {
         IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
-            .GetStudentFeeAmountsAsync(row.StudentId, row.ClassId, academicYearId, ct)
+            .GetStudentFeeAmountsAsync(row.ClassId, row.FeeStructureVersionId, ct)
             .ConfigureAwait(false);
-        IList<StudentFeeHeadPaidRow> paidByHead = await _collectionRepo.GetPaidByFeeTypeAsync(row.StudentId, ct).ConfigureAwait(false);
         IList<FeePaymentHistoryRow> payments = await _collectionRepo.GetPaymentHistoryAsync(row.StudentId, ct).ConfigureAwait(false);
 
         decimal total = feeAmounts.Sum(f => f.Amount);
-        decimal paid = row.PaidAmount;
+        decimal paid = await _collectionRepo.GetStudentPaidTotalAsync(row.StudentId, row.FeeStructureVersionId, ct).ConfigureAwait(false);
         decimal due = Math.Max(0, total - paid);
         int pct = total > 0 ? (int)Math.Min(100, Math.Round(paid / total * 100)) : 0;
 
-        var paidLookup = paidByHead.ToDictionary(p => p.FeeTypeId, p => p.PaidAmount);
-        IList<FeeCollectionHeadStatusDto> heads = feeAmounts.Select(f =>
-        {
-            decimal headPaid = paidLookup.GetValueOrDefault(f.FeeTypeId);
-            decimal headDue = Math.Max(0, f.Amount - headPaid);
-            string status = headDue <= 0 && f.Amount > 0 ? "Paid" : headPaid > 0 ? "Partial" : "Unpaid";
-            return new FeeCollectionHeadStatusDto(
-                f.FeeTypeId,
-                f.FeeTypeName,
-                FeeLabelHelper.FrequencyLabel((FeeFrequency)f.Frequency),
-                f.Amount,
-                headPaid,
-                headDue,
-                status);
-        }).ToList();
+        var headAmounts = feeAmounts
+            .Where(f => f.Amount > 0)
+            .Select(f => new FeeAllocationHelper.HeadAmount(f.FeeTypeId, f.Amount))
+            .ToList();
+
+        IList<FeeCollectionHeadStatusDto> heads = FeeAllocationHelper
+            .DistributePaid(headAmounts, paid)
+            .Select(h =>
+            {
+                StudentClassFeeAmountRow? meta = feeAmounts.FirstOrDefault(f => f.FeeTypeId == h.FeeTypeId);
+                return new FeeCollectionHeadStatusDto(
+                    h.FeeTypeId,
+                    meta?.FeeTypeName ?? string.Empty,
+                    FeeLabelHelper.FrequencyLabel((FeeFrequency)(meta?.Frequency ?? 0)),
+                    h.TotalAmount,
+                    h.PaidAmount,
+                    h.DueAmount,
+                    FeeAllocationHelper.StatusForHead(h.TotalAmount, h.PaidAmount));
+            })
+            .ToList();
 
         IList<FeeCollectionPaymentHistoryDto> history = payments.Select(p => new FeeCollectionPaymentHistoryDto(
             p.PaymentId,

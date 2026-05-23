@@ -22,6 +22,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableAttendance,
         DatabaseConfig.TableHomework,
         DatabaseConfig.TableHomeworkDetails,
+        DatabaseConfig.TableFeeStructureVersions,
         DatabaseConfig.TableFeeTypes,
         DatabaseConfig.TableFeeSettings,
         DatabaseConfig.TableClassFeeAmounts,
@@ -70,11 +71,11 @@ internal static class SchoolSchemaCatalog
             "homeworkid",
             "studentid"),
         new(
-            "uq_classfeeamounts_class_feetype_year",
+            "uq_classfeeamounts_class_feetype_version",
             DatabaseConfig.TableClassFeeAmounts,
             "classid",
             "feetypeid",
-            "academicyearid"),
+            "feestructureversionid"),
     ];
 }
 

@@ -51,6 +51,7 @@ public static class DatabaseConfig
     public const string TableHomeworkDetails = "homeworkdetails";
 
     // Fees Module
+    public const string TableFeeStructureVersions = "feestructureversions";
     public const string TableFeeTypes = "feetypes";
     public const string TableFeeSettings = "feesettings";
     public const string TableClassFeeAmounts = "classfeeamounts";

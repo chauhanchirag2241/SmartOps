@@ -44,21 +44,28 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                    COALESCE(sa.rollnumber, '') AS RollNo,
                    c.id AS ClassId,
                    {ClassDisplayNameSql} AS ClassName,
+                   COALESCE(sa.feestructureversionid, '00000000-0000-0000-0000-000000000000'::uuid) AS FeeStructureVersionId,
+                   COALESCE(fsv.versionnumber, 0) AS AssignedVersionNumber,
                    COALESCE(fee_totals.total_fees, 0) AS TotalFees,
                    COALESCE(paid_totals.paid, 0) AS PaidAmount
             FROM {Schema}.{DatabaseConfig.TableStudents} s
             INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
+            LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
                 SELECT SUM(cfa.amount) AS total_fees
                 FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
                 INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-                WHERE cfa.classid = sa.classid AND cfa.academicyearid = @AcademicYearId AND cfa.isactive = true
+                WHERE cfa.classid = sa.classid
+                  AND cfa.feestructureversionid = sa.feestructureversionid
+                  AND cfa.isactive = true
             ) fee_totals ON true
             LEFT JOIN LATERAL (
                 SELECT SUM(fp.amount) AS paid
                 FROM {Schema}.{DatabaseConfig.TableFeePayments} fp
-                WHERE fp.studentid = s.id AND fp.isactive = true
+                WHERE fp.studentid = s.id
+                  AND fp.feestructureversionid = sa.feestructureversionid
+                  AND fp.isactive = true
             ) paid_totals ON true
             WHERE s.isactive = true AND sa.academicyearid = @AcademicYearId
             {(classId.HasValue ? "AND sa.classid = @ClassId" : string.Empty)}
@@ -85,14 +92,51 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
 
     public async Task<FeeCollectionStudentRow?> GetStudentRowAsync(Guid studentId, Guid academicYearId, CancellationToken ct = default)
     {
-        IList<FeeCollectionStudentRow> rows = await GetStudentsAsync(null, academicYearId, null, null, ct).ConfigureAwait(false);
-        return rows.FirstOrDefault(r => r.StudentId == studentId);
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT s.id AS StudentId,
+                   TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS StudentName,
+                   COALESCE(sa.rollnumber, '') AS RollNo,
+                   c.id AS ClassId,
+                   {ClassDisplayNameSql} AS ClassName,
+                   COALESCE(sa.feestructureversionid, '00000000-0000-0000-0000-000000000000'::uuid) AS FeeStructureVersionId,
+                   COALESCE(fsv.versionnumber, 0) AS AssignedVersionNumber,
+                   COALESCE(fee_totals.total_fees, 0) AS TotalFees,
+                   COALESCE(paid_totals.paid, 0) AS PaidAmount
+            FROM {Schema}.{DatabaseConfig.TableStudents} s
+            INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
+                ON sa.studentid = s.id AND sa.isactive = true AND sa.academicyearid = @AcademicYearId
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+                ON c.id = sa.classid AND c.isactive = true
+            LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
+            LEFT JOIN LATERAL (
+                SELECT SUM(cfa.amount) AS total_fees
+                FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                WHERE cfa.classid = sa.classid
+                  AND cfa.feestructureversionid = sa.feestructureversionid
+                  AND cfa.isactive = true
+            ) fee_totals ON true
+            LEFT JOIN LATERAL (
+                SELECT SUM(fp.amount) AS paid
+                FROM {Schema}.{DatabaseConfig.TableFeePayments} fp
+                WHERE fp.studentid = s.id
+                  AND fp.feestructureversionid = sa.feestructureversionid
+                  AND fp.isactive = true
+            ) paid_totals ON true
+            WHERE s.id = @StudentId AND s.isactive = true
+            LIMIT 1;
+            """;
+
+        return await connection
+            .QueryFirstOrDefaultAsync<FeeCollectionStudentRow>(
+                new CommandDefinition(sql, new { StudentId = studentId, AcademicYearId = academicYearId }, cancellationToken: ct))
+            .ConfigureAwait(false);
     }
 
     public async Task<IList<StudentClassFeeAmountRow>> GetStudentFeeAmountsAsync(
-        Guid studentId,
         Guid classId,
-        Guid academicYearId,
+        Guid feeStructureVersionId,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
@@ -102,31 +146,62 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                    ft.frequency AS Frequency,
                    COALESCE(cfa.amount, 0) AS Amount
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
-            LEFT JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-                ON cfa.feetypeid = ft.id AND cfa.classid = @ClassId AND cfa.academicyearid = @AcademicYearId AND cfa.isactive = true
-            WHERE ft.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                ON cfa.feetypeid = ft.id
+               AND cfa.classid = @ClassId
+               AND cfa.feestructureversionid = @FeeStructureVersionId
+               AND cfa.isactive = true
+            WHERE ft.feestructureversionid = @FeeStructureVersionId AND ft.isactive = true AND cfa.amount > 0
             ORDER BY ft.name;
             """;
         IEnumerable<StudentClassFeeAmountRow> rows = await connection
             .QueryAsync<StudentClassFeeAmountRow>(new CommandDefinition(
                 sql,
-                new { ClassId = classId, AcademicYearId = academicYearId, StudentId = studentId },
+                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
 
-    public async Task<decimal> GetStudentPaidTotalAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<decimal> GetStudentPaidTotalAsync(Guid studentId, Guid feeStructureVersionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT COALESCE(SUM(amount), 0)
             FROM {Schema}.{DatabaseConfig.TableFeePayments}
-            WHERE studentid = @StudentId AND isactive = true;
+            WHERE studentid = @StudentId
+              AND feestructureversionid = @FeeStructureVersionId
+              AND isactive = true;
             """;
         return await connection.ExecuteScalarAsync<decimal>(
-            new CommandDefinition(sql, new { StudentId = studentId }, cancellationToken: ct))
+            new CommandDefinition(sql, new { StudentId = studentId, FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
             .ConfigureAwait(false);
+    }
+
+    public async Task AssignStudentFeeStructureVersionAsync(
+        Guid studentId,
+        Guid academicYearId,
+        Guid feeStructureVersionId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        Guid actorId = ResolveInsertActor();
+        DateTime utcNow = DateTime.UtcNow;
+        string sql = $"""
+            UPDATE {Schema}.{DatabaseConfig.TableStudentAcademics}
+            SET feestructureversionid = @FeeStructureVersionId,
+                updatedby = @UpdatedBy,
+                updatedon = @UpdatedOn,
+                versionno = versionno + 1
+            WHERE studentid = @StudentId
+              AND academicyearid = @AcademicYearId
+              AND isactive = true
+              AND (feestructureversionid IS NULL OR feestructureversionid = '00000000-0000-0000-0000-000000000000'::uuid);
+            """;
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new { StudentId = studentId, AcademicYearId = academicYearId, FeeStructureVersionId = feeStructureVersionId, UpdatedBy = actorId, UpdatedOn = utcNow },
+            cancellationToken: ct)).ConfigureAwait(false);
     }
 
     public async Task<IList<StudentFeeHeadPaidRow>> GetPaidByFeeTypeAsync(Guid studentId, CancellationToken ct = default)
@@ -160,7 +235,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa ON fpa.paymentid = fp.id AND fpa.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = fpa.feetypeid
             WHERE fp.studentid = @StudentId AND fp.isactive = true
-            GROUP BY fp.id, fp.paymentdate, fp.paymentmode, fp.amount, fp.transactionno, fp.receiptno
+            GROUP BY fp.id, fp.paymentdate, fp.paymentmode, fp.amount, fp.transactionno, fp.receiptno, fp.createdon
             ORDER BY fp.paymentdate DESC, fp.createdon DESC;
             """;
         IEnumerable<FeePaymentHistoryRow> rows = await connection
@@ -171,6 +246,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
 
     public async Task<(Guid PaymentId, string ReceiptNo)> CreatePaymentAsync(
         Guid studentId,
+        Guid feeStructureVersionId,
         decimal amount,
         int paymentMode,
         string? transactionNo,
@@ -180,56 +256,74 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
-        Guid actorId = ResolveInsertActor();
-        Guid paymentId = Guid.NewGuid();
-        string receiptNo = $"RCP-{DateTime.UtcNow:yyyyMMdd}-{paymentId.ToString()[..8].ToUpperInvariant()}";
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
+
+        using IDbTransaction transaction = connection.BeginTransaction();
+        try
+        {
+            DateTime utcNow = DateTime.UtcNow;
+            Guid actorId = ResolveInsertActor();
+            Guid paymentId = Guid.NewGuid();
+            string receiptNo = $"RCP-{DateTime.UtcNow:yyyyMMdd}-{paymentId.ToString()[..8].ToUpperInvariant()}";
 
         var payment = new FeePaymentEntity
         {
             Id = paymentId,
             StudentId = studentId,
+            FeeStructureVersionId = feeStructureVersionId,
             Amount = amount,
-            PaymentMode = (FeePaymentMode)paymentMode,
-            TransactionNo = transactionNo,
-            PaymentDate = paymentDate,
-            Remarks = remarks,
-            ReceiptNo = receiptNo
-        };
-        EnsureInsertAudit(payment, utcNow, actorId);
-
-        string paymentSql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableFeePayments}
-                (id, studentid, amount, paymentmode, transactionno, paymentdate, remarks, receiptno,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
-            VALUES
-                (@Id, @StudentId, @Amount, @PaymentMode, @TransactionNo, @PaymentDate, @Remarks, @ReceiptNo,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(paymentSql, payment, cancellationToken: ct)).ConfigureAwait(false);
-
-        foreach ((Guid feeTypeId, decimal allocAmount) in allocations.Where(a => a.Amount > 0))
-        {
-            var alloc = new FeePaymentAllocationEntity
-            {
-                Id = Guid.NewGuid(),
-                PaymentId = paymentId,
-                FeeTypeId = feeTypeId,
-                Amount = allocAmount
+                PaymentMode = (FeePaymentMode)paymentMode,
+                TransactionNo = transactionNo,
+                PaymentDate = paymentDate,
+                Remarks = remarks,
+                ReceiptNo = receiptNo
             };
-            EnsureInsertAudit(alloc, utcNow, actorId);
-            string allocSql = $"""
-                INSERT INTO {Schema}.{DatabaseConfig.TableFeePaymentAllocations}
-                    (id, paymentid, feetypeid, amount,
+            EnsureInsertAudit(payment, utcNow, actorId);
+
+            string paymentSql = $"""
+                INSERT INTO {Schema}.{DatabaseConfig.TableFeePayments}
+                    (id, studentid, feestructureversionid, amount, paymentmode, transactionno, paymentdate, remarks, receiptno,
                      isactive, versionno, createdby, createdon, updatedby, updatedon)
                 VALUES
-                    (@Id, @PaymentId, @FeeTypeId, @Amount,
+                    (@Id, @StudentId, @FeeStructureVersionId, @Amount, @PaymentMode, @TransactionNo, @PaymentDate, @Remarks, @ReceiptNo,
                      @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                 """;
-            await connection.ExecuteAsync(new CommandDefinition(allocSql, alloc, cancellationToken: ct)).ConfigureAwait(false);
-        }
+            await connection.ExecuteAsync(
+                new CommandDefinition(paymentSql, payment, transaction, cancellationToken: ct)).ConfigureAwait(false);
 
-        return (paymentId, receiptNo);
+            foreach ((Guid feeTypeId, decimal allocAmount) in allocations.Where(a => a.Amount > 0))
+            {
+                var alloc = new FeePaymentAllocationEntity
+                {
+                    Id = Guid.NewGuid(),
+                    PaymentId = paymentId,
+                    FeeTypeId = feeTypeId,
+                    Amount = allocAmount
+                };
+                EnsureInsertAudit(alloc, utcNow, actorId);
+                string allocSql = $"""
+                    INSERT INTO {Schema}.{DatabaseConfig.TableFeePaymentAllocations}
+                        (id, paymentid, feetypeid, amount,
+                         isactive, versionno, createdby, createdon, updatedby, updatedon)
+                    VALUES
+                        (@Id, @PaymentId, @FeeTypeId, @Amount,
+                         @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+                    """;
+                await connection.ExecuteAsync(
+                    new CommandDefinition(allocSql, alloc, transaction, cancellationToken: ct)).ConfigureAwait(false);
+            }
+
+            transaction.Commit();
+            return (paymentId, receiptNo);
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     private static bool MatchesStatusFilter(FeeCollectionStudentRow row, string statusFilter)

@@ -2,9 +2,14 @@ namespace SmartOps.Application.Modules.Fees.Interfaces;
 
 public interface IClassFeeAmountRepository
 {
-    Task<IList<ClassFeeSummaryRow>> GetClassSummariesAsync(Guid academicYearId, CancellationToken ct = default);
-    Task<IList<ClassFeeAmountRow>> GetAmountsByClassAsync(Guid classId, Guid academicYearId, CancellationToken ct = default);
-    Task UpsertAmountsAsync(Guid classId, Guid academicYearId, IList<(Guid FeeTypeId, decimal Amount)> amounts, CancellationToken ct = default);
+    Task<IList<ClassFeeSummaryRow>> GetClassSummariesAsync(Guid academicYearId, Guid feeStructureVersionId, CancellationToken ct = default);
+    Task<IList<ClassFeeAmountRow>> GetAmountsByClassAsync(Guid classId, Guid feeStructureVersionId, CancellationToken ct = default);
+    Task UpsertAmountsAsync(
+        Guid classId,
+        Guid academicYearId,
+        Guid feeStructureVersionId,
+        IList<(Guid FeeTypeId, decimal Amount)> amounts,
+        CancellationToken ct = default);
 }
 
 public sealed class ClassFeeSummaryRow

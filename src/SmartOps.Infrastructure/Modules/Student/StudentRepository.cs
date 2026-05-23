@@ -1,6 +1,7 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Domain.Common.Models;
@@ -20,6 +21,7 @@ namespace SmartOps.Infrastructure.Modules.Student;
 public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
     private readonly IUserScopeContext _scope;
+    private readonly IFeeStructureRepository _feeStructureRepo;
 
     private static readonly string[] RelatedTablesForSoftDelete =
     {
@@ -30,9 +32,14 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentCustomFields,
     };
 
-    public StudentRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
+    public StudentRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        IUserScopeContext scope,
+        IFeeStructureRepository feeStructureRepo)
         : base(context, currentUser)
     {
+        _feeStructureRepo = feeStructureRepo;
         _scope = scope;
     }
 
@@ -388,6 +395,17 @@ WHERE id = @StudentId AND isactive = true
         {
             foreach (var academic in student.Academics)
             {
+                if (!academic.FeeStructureVersionId.HasValue || academic.FeeStructureVersionId == Guid.Empty)
+                {
+                    var activeVersion = await _feeStructureRepo
+                        .GetActiveVersionForYearAsync(academic.AcademicYearId, CancellationToken.None)
+                        .ConfigureAwait(false);
+                    if (activeVersion is not null)
+                    {
+                        academic.FeeStructureVersionId = activeVersion.Id;
+                    }
+                }
+
                 academic.Id = Guid.NewGuid();
                 academic.StudentId = studentId;
                 EnsureInsertAudit(academic, utcNow);

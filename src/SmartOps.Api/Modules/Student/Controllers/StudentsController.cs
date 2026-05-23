@@ -11,6 +11,7 @@ using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student;
 using SmartOps.Domain.Modules.Setting;
 using SmartOps.Domain.Modules.AcademicYear;
+using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Student.Controllers;
@@ -25,6 +26,7 @@ public sealed class StudentsController(
     IStudentRepository studentRepository,
     ISettingRepository settingRepository,
     IAcademicYearRepository academicYearRepository,
+    IFeeStructureRepository feeStructureRepository,
     IUserProvisioningService userProvisioning,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
@@ -80,6 +82,24 @@ public sealed class StudentsController(
         }
 
         var entity = request.ToEntity();
+
+        foreach (var academic in entity.Academics)
+        {
+            if (academic.AcademicYearId == Guid.Empty)
+            {
+                continue;
+            }
+
+            var admissionFeeStructure = await feeStructureRepository
+                .GetAdmissionVersionForYearAsync(academic.AcademicYearId, cancellationToken)
+                .ConfigureAwait(false);
+            if (admissionFeeStructure is null)
+            {
+                return BadRequest(
+                    "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first.");
+            }
+        }
+
         var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
         if (entity.PortalAccess && TryGetSchoolId(out Guid schoolId))

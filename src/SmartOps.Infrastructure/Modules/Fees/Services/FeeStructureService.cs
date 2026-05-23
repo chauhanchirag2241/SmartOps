@@ -101,6 +101,7 @@ public sealed class FeeStructureService : IFeeStructureService
             return Result<FeeStructureVersionListItemDto>.Failure("Add at least one fee type before publishing.");
         }
 
+        await _repo.ArchivePublishedVersionsForYearAsync(version.AcademicYearId, versionId, ct).ConfigureAwait(false);
         version.Status = FeeStructureVersionStatus.Published;
         version.PublishedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);

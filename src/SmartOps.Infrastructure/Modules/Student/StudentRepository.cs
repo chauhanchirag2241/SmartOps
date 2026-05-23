@@ -136,6 +136,10 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             var schema = Context.OperationalSchema;
             var students = DatabaseConfig.TableStudents;
             var academics = DatabaseConfig.TableStudentAcademics;
+            var attendance = DatabaseConfig.TableAttendance;
+            var classFeeAmounts = DatabaseConfig.TableClassFeeAmounts;
+            var feeTypes = DatabaseConfig.TableFeeTypes;
+            var feePayments = DatabaseConfig.TableFeePayments;
 
             var countSql = $@"
             SELECT COUNT(*)
@@ -158,15 +162,48 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                         END
                     ELSE 'N/A'
                 END AS Class,
+                COALESCE(att_stats.attendance_pct, 0) AS Attendance,
+                CASE
+                    WHEN COALESCE(fee_totals.total_fees, 0) <= 0 THEN 'Pending'
+                    WHEN COALESCE(paid_totals.paid, 0) >= COALESCE(fee_totals.total_fees, 0) THEN 'Paid'
+                    WHEN COALESCE(paid_totals.paid, 0) > 0 THEN 'Partial'
+                    ELSE 'Overdue'
+                END AS Fees,
                 s.isactive AS IsActive
             FROM {schema}.{students} s
             LEFT JOIN (
-                SELECT studentid, classid, rollnumber,
+                SELECT studentid, classid, rollnumber, feestructureversionid, academicyearid,
                        ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) AS rn
                 FROM {schema}.{academics}
                 WHERE isactive = true
+                  AND (@ScopeAcademicYearId IS NULL OR academicyearid = @ScopeAcademicYearId)
             ) a ON s.id = a.studentid AND a.rn = 1
             LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON a.classid = c.id
+            LEFT JOIN LATERAL (
+                SELECT CAST(ROUND(
+                    100.0 * COUNT(*) FILTER (WHERE att.status IN (1, 4))
+                    / NULLIF(COUNT(*), 0)
+                ) AS INT) AS attendance_pct
+                FROM {schema}.{attendance} att
+                WHERE att.studentid = s.id
+                  AND att.classid = a.classid
+                  AND att.isactive = true
+            ) att_stats ON a.classid IS NOT NULL
+            LEFT JOIN LATERAL (
+                SELECT SUM(cfa.amount) AS total_fees
+                FROM {schema}.{classFeeAmounts} cfa
+                INNER JOIN {schema}.{feeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                WHERE cfa.classid = a.classid
+                  AND cfa.feestructureversionid = a.feestructureversionid
+                  AND cfa.isactive = true
+            ) fee_totals ON a.classid IS NOT NULL AND a.feestructureversionid IS NOT NULL
+            LEFT JOIN LATERAL (
+                SELECT SUM(fp.amount) AS paid
+                FROM {schema}.{feePayments} fp
+                WHERE fp.studentid = s.id
+                  AND fp.feestructureversionid = a.feestructureversionid
+                  AND fp.isactive = true
+            ) paid_totals ON a.feestructureversionid IS NOT NULL
             {whereClause}
             ORDER BY {orderBy}";
 
@@ -187,7 +224,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 .ConfigureAwait(false);
 
             var items = result.Items.ToList();
-            ApplyListDemoProjection(items);
+            NormalizeListItems(items);
             result.Items = items;
             return result;
         }
@@ -265,8 +302,31 @@ WHERE id = @StudentId AND isactive = true
                 where += " AND s.isactive = false";
                 break;
             case StudentFilter.FeeOverdue:
-                var feeTable = $"{Context.OperationalSchema}.{DatabaseConfig.TableStudentFeeConfigs}";
-                where += $" AND s.id IN (SELECT studentid FROM {feeTable} WHERE status = 'Overdue' AND isactive = true)";
+                var g = Context.OperationalSchema;
+                where += $@"
+                AND EXISTS (
+                    SELECT 1
+                    FROM {g}.{DatabaseConfig.TableStudentAcademics} sa
+                    LEFT JOIN LATERAL (
+                        SELECT SUM(cfa.amount) AS total_fees
+                        FROM {g}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                        INNER JOIN {g}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                        WHERE cfa.classid = sa.classid
+                          AND cfa.feestructureversionid = sa.feestructureversionid
+                          AND cfa.isactive = true
+                    ) ft ON true
+                    LEFT JOIN LATERAL (
+                        SELECT SUM(fp.amount) AS paid
+                        FROM {g}.{DatabaseConfig.TableFeePayments} fp
+                        WHERE fp.studentid = sa.studentid
+                          AND fp.feestructureversionid = sa.feestructureversionid
+                          AND fp.isactive = true
+                    ) pt ON true
+                    WHERE sa.studentid = s.id
+                      AND sa.isactive = true
+                      AND COALESCE(ft.total_fees, 0) > 0
+                      AND COALESCE(pt.paid, 0) < COALESCE(ft.total_fees, 0)
+                )";
                 break;
         }
 
@@ -323,26 +383,21 @@ WHERE id = @StudentId AND isactive = true
         return keys.Any(k => string.Equals(sortColumn, k, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// TEMP: attendance / fees / status until sourced from DB joins. Remove when real columns exist.
-    /// </summary>
-    private static void ApplyListDemoProjection(IList<StudentListModel> items)
+    private static void NormalizeListItems(IList<StudentListModel> items)
     {
-        var random = new Random();
         foreach (var student in items)
         {
-            student.Attendance = random.Next(80, 100);
-            student.Fees = "Paid";
-
-            if (string.IsNullOrEmpty(student.Status))
-            {
-                student.Status = "Active";
-            }
-
             if (string.IsNullOrEmpty(student.AdmNo))
             {
                 student.AdmNo = "N/A";
             }
+
+            if (string.IsNullOrEmpty(student.Fees))
+            {
+                student.Fees = "Pending";
+            }
+
+            student.Status = student.IsActive ? "Active" : "Inactive";
         }
     }
 
@@ -397,12 +452,12 @@ WHERE id = @StudentId AND isactive = true
             {
                 if (!academic.FeeStructureVersionId.HasValue || academic.FeeStructureVersionId == Guid.Empty)
                 {
-                    var activeVersion = await _feeStructureRepo
-                        .GetActiveVersionForYearAsync(academic.AcademicYearId, CancellationToken.None)
+                    var admissionVersion = await _feeStructureRepo
+                        .GetAdmissionVersionForYearAsync(academic.AcademicYearId, CancellationToken.None)
                         .ConfigureAwait(false);
-                    if (activeVersion is not null)
+                    if (admissionVersion is not null)
                     {
-                        academic.FeeStructureVersionId = activeVersion.Id;
+                        academic.FeeStructureVersionId = admissionVersion.Id;
                     }
                 }
 

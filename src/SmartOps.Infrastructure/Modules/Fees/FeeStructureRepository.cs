@@ -103,6 +103,37 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             .ConfigureAwait(false);
     }
 
+    public async Task<FeeStructureVersionEntity?> GetAdmissionVersionForYearAsync(
+        Guid academicYearId,
+        CancellationToken ct = default)
+    {
+        FeeStructureVersionEntity? active = await GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        if (active is not null)
+        {
+            return active;
+        }
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
+                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
+                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
+                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            WHERE academicyearid = @AcademicYearId
+              AND status = @PublishedStatus
+              AND isactive = true
+            ORDER BY versionnumber DESC
+            LIMIT 1;
+            """;
+        return await connection
+            .QueryFirstOrDefaultAsync<FeeStructureVersionEntity>(new CommandDefinition(
+                sql,
+                new { AcademicYearId = academicYearId, PublishedStatus = (short)FeeStructureVersionStatus.Published },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
     public async Task<int> GetNextVersionNumberAsync(Guid academicYearId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
@@ -191,6 +222,39 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 AcademicYearId = academicYearId,
                 ExceptVersionId = exceptVersionId,
                 ActiveStatus = (short)FeeStructureVersionStatus.Active,
+                ArchivedStatus = (short)FeeStructureVersionStatus.Archived,
+                UpdatedBy = actorId,
+                UpdatedOn = utcNow
+            },
+            cancellationToken: ct)).ConfigureAwait(false);
+    }
+
+    public async Task ArchivePublishedVersionsForYearAsync(
+        Guid academicYearId,
+        Guid exceptVersionId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        Guid actorId = ResolveInsertActor();
+        DateTime utcNow = DateTime.UtcNow;
+        string sql = $"""
+            UPDATE {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            SET status = @ArchivedStatus,
+                updatedby = @UpdatedBy,
+                updatedon = @UpdatedOn,
+                versionno = versionno + 1
+            WHERE academicyearid = @AcademicYearId
+              AND id <> @ExceptVersionId
+              AND status = @PublishedStatus
+              AND isactive = true;
+            """;
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new
+            {
+                AcademicYearId = academicYearId,
+                ExceptVersionId = exceptVersionId,
+                PublishedStatus = (short)FeeStructureVersionStatus.Published,
                 ArchivedStatus = (short)FeeStructureVersionStatus.Archived,
                 UpdatedBy = actorId,
                 UpdatedOn = utcNow

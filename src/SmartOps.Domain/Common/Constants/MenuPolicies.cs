@@ -163,4 +163,31 @@ public static class MenuPolicies
         public const string Delete = "Menu:FEES_COLLECTION:Delete";
         public const string Export = "Menu:FEES_COLLECTION:Export";
     }
+
+    public static class SalaryStructure
+    {
+        public const string View = "Menu:SALARY_STRUCTURE:View";
+        public const string Add = "Menu:SALARY_STRUCTURE:Add";
+        public const string Edit = "Menu:SALARY_STRUCTURE:Edit";
+        public const string Delete = "Menu:SALARY_STRUCTURE:Delete";
+        public const string Export = "Menu:SALARY_STRUCTURE:Export";
+    }
+
+    public static class SalaryEmployees
+    {
+        public const string View = "Menu:SALARY_EMPLOYEES:View";
+        public const string Add = "Menu:SALARY_EMPLOYEES:Add";
+        public const string Edit = "Menu:SALARY_EMPLOYEES:Edit";
+        public const string Delete = "Menu:SALARY_EMPLOYEES:Delete";
+        public const string Export = "Menu:SALARY_EMPLOYEES:Export";
+    }
+
+    public static class SalaryPayroll
+    {
+        public const string View = "Menu:SALARY_PAYROLL:View";
+        public const string Add = "Menu:SALARY_PAYROLL:Add";
+        public const string Edit = "Menu:SALARY_PAYROLL:Edit";
+        public const string Delete = "Menu:SALARY_PAYROLL:Delete";
+        public const string Export = "Menu:SALARY_PAYROLL:Export";
+    }
 }

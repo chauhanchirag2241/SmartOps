@@ -39,6 +39,15 @@ public static class MenuCodes
 
     public const string FeesCollection = "FEES_COLLECTION";
 
+    public const string SalaryStructure = "SALARY_STRUCTURE";
+
+    /// <summary>Legacy code; use <see cref="SalaryStructure"/>.</summary>
+    public const string SalaryComponents = "SALARY_COMPONENTS";
+
+    public const string SalaryEmployees = "SALARY_EMPLOYEES";
+
+    public const string SalaryPayroll = "SALARY_PAYROLL";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -57,6 +66,9 @@ public static class MenuCodes
         Homework,
         FeesStructure,
         FeesClassAmounts,
-        FeesCollection
+        FeesCollection,
+        SalaryStructure,
+        SalaryEmployees,
+        SalaryPayroll
     ];
 }

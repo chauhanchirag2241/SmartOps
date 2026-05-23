@@ -28,6 +28,13 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableClassFeeAmounts,
         DatabaseConfig.TableFeePayments,
         DatabaseConfig.TableFeePaymentAllocations,
+        DatabaseConfig.TableSalaryStructureVersions,
+        DatabaseConfig.TableSalaryVersionComponents,
+        DatabaseConfig.TableEmployeeSalaries,
+        DatabaseConfig.TableEmployeeSalaryComponents,
+        DatabaseConfig.TablePayrollRuns,
+        DatabaseConfig.TablePayrollEntries,
+        DatabaseConfig.TablePayrollEntryLines,
         DatabaseConfig.TableSettings,
         DatabaseConfig.TableAlerts,
         DatabaseConfig.TableDepartments,
@@ -76,6 +83,21 @@ internal static class SchoolSchemaCatalog
             "classid",
             "feetypeid",
             "feestructureversionid"),
+        new(
+            "uq_payrollruns_year_month",
+            DatabaseConfig.TablePayrollRuns,
+            "payyear",
+            "paymonth"),
+        new(
+            "uq_salarystructureversions_year_version",
+            DatabaseConfig.TableSalaryStructureVersions,
+            "academicyearid",
+            "versionnumber"),
+        new(
+            "uq_employeesalarycomponents_assignment_version_component",
+            DatabaseConfig.TableEmployeeSalaryComponents,
+            "employeesalaryid",
+            "salaryversioncomponentid"),
     ];
 }
 

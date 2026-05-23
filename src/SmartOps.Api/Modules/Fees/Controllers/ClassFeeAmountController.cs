@@ -40,6 +40,18 @@ public sealed class ClassFeeAmountController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpGet("{classId:guid}/admission-preview")]
+    [Authorize(Policy = MenuPolicies.Students.Add)]
+    [ProducesResponseType(typeof(ClassFeeAmountsResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetClassAmountsForAdmission(
+        Guid classId,
+        [FromQuery] Guid academicYearId,
+        CancellationToken ct)
+    {
+        var result = await _service.GetClassAmountsForAdmissionAsync(classId, academicYearId, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPut("{classId:guid}")]
     [Authorize(Policy = MenuPolicies.FeesClassAmounts.Edit)]
     [ProducesResponseType(typeof(ClassFeeAmountsResponseDto), StatusCodes.Status200OK)]

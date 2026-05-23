@@ -13,6 +13,9 @@ public interface IFeeStructureRepository
 
     Task<FeeStructureVersionEntity?> GetActiveVersionForYearAsync(Guid academicYearId, CancellationToken ct = default);
 
+    /// <summary>Active version if any, otherwise latest published (never draft).</summary>
+    Task<FeeStructureVersionEntity?> GetAdmissionVersionForYearAsync(Guid academicYearId, CancellationToken ct = default);
+
     Task<int> GetNextVersionNumberAsync(Guid academicYearId, CancellationToken ct = default);
 
     Task<Guid> CreateVersionAsync(FeeStructureVersionEntity entity, CancellationToken ct = default);
@@ -22,6 +25,8 @@ public interface IFeeStructureRepository
     Task SoftDeleteVersionAsync(Guid id, CancellationToken ct = default);
 
     Task ArchiveActiveVersionsForYearAsync(Guid academicYearId, Guid exceptVersionId, CancellationToken ct = default);
+
+    Task ArchivePublishedVersionsForYearAsync(Guid academicYearId, Guid exceptVersionId, CancellationToken ct = default);
 
     Task<bool> VersionHasPaymentsAsync(Guid versionId, CancellationToken ct = default);
 

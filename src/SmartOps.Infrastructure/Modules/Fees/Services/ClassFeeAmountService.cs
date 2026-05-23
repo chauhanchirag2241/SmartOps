@@ -30,7 +30,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         if (versionId == Guid.Empty)
         {
             return Result<IList<ClassFeeSummaryDto>>.Failure(
-                "No active fee structure for this academic year. Publish and activate the fee structure first.");
+                "No published fee structure for this academic year. Publish the fee structure first.");
         }
 
         IList<ClassFeeSummaryRow> rows = await _repo.GetClassSummariesAsync(academicYearId, versionId, ct).ConfigureAwait(false);
@@ -55,7 +55,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         if (versionId == Guid.Empty)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure(
-                "No active fee structure for this academic year. Publish and activate the fee structure first.");
+                "No published fee structure for this academic year. Publish the fee structure first.");
         }
 
         FeeStructureVersionEntity? version = await _feeStructureRepo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
@@ -118,9 +118,55 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         return await GetClassAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, ct).ConfigureAwait(false);
     }
 
+    public async Task<Result<ClassFeeAmountsResponseDto>> GetClassAmountsForAdmissionAsync(
+        Guid classId,
+        Guid academicYearId,
+        CancellationToken ct = default)
+    {
+        if (classId == Guid.Empty || academicYearId == Guid.Empty)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure("Class and academic year are required.");
+        }
+
+        FeeStructureVersionEntity? admissionVersion = await _feeStructureRepo
+            .GetAdmissionVersionForYearAsync(academicYearId, ct)
+            .ConfigureAwait(false);
+        if (admissionVersion is null)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure(
+                "No published fee structure for this academic year. Publish the fee structure before admitting students.");
+        }
+
+        Result<ClassFeeAmountsResponseDto> result = await GetClassAmountsAsync(
+            classId,
+            academicYearId,
+            admissionVersion.Id,
+            ct).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return result;
+        }
+
+        if (!IsAdmissionFeeStructureStatus(admissionVersion.Status))
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure(
+                "No published fee structure for this academic year. Publish the fee structure before admitting students.");
+        }
+
+        if (result.Value.Items.Count == 0)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure(
+                "Published fee structure has no fee heads configured for this class.");
+        }
+
+        return result;
+    }
+
+    private static bool IsAdmissionFeeStructureStatus(FeeStructureVersionStatus status) =>
+        status is FeeStructureVersionStatus.Published or FeeStructureVersionStatus.Active;
+
     /// <summary>
-    /// When no version is specified (e.g. student admission preview), only the active structure applies.
-    /// Draft (and published-but-not-active) versions are never used implicitly.
+    /// When no version is specified (e.g. student admission preview), use active or latest published — never draft.
     /// </summary>
     private async Task<Guid> ResolveVersionIdAsync(Guid academicYearId, Guid? feeStructureVersionId, CancellationToken ct)
     {
@@ -129,7 +175,9 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return feeStructureVersionId.Value;
         }
 
-        FeeStructureVersionEntity? active = await _feeStructureRepo.GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
-        return active?.Id ?? Guid.Empty;
+        FeeStructureVersionEntity? admissionVersion = await _feeStructureRepo
+            .GetAdmissionVersionForYearAsync(academicYearId, ct)
+            .ConfigureAwait(false);
+        return admissionVersion?.Id ?? Guid.Empty;
     }
 }

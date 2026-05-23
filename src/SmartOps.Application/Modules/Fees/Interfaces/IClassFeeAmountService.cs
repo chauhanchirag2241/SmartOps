@@ -15,6 +15,12 @@ public interface IClassFeeAmountService
         Guid? feeStructureVersionId,
         CancellationToken ct = default);
 
+    /// <summary>Active fee structure only — for student admission preview (never draft/published-only).</summary>
+    Task<Result<ClassFeeAmountsResponseDto>> GetClassAmountsForAdmissionAsync(
+        Guid classId,
+        Guid academicYearId,
+        CancellationToken ct = default);
+
     Task<Result<ClassFeeAmountsResponseDto>> SaveClassAmountsAsync(
         Guid classId,
         SaveClassFeeAmountsRequestDto request,

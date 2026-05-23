@@ -57,4 +57,13 @@ public static class DatabaseConfig
     public const string TableClassFeeAmounts = "classfeeamounts";
     public const string TableFeePayments = "feepayments";
     public const string TableFeePaymentAllocations = "feepaymentallocations";
+
+    // Salary Module
+    public const string TableSalaryStructureVersions = "salarystructureversions";
+    public const string TableSalaryVersionComponents = "salaryversioncomponents";
+    public const string TableEmployeeSalaries = "employeesalaries";
+    public const string TableEmployeeSalaryComponents = "employeesalarycomponents";
+    public const string TablePayrollRuns = "payrollruns";
+    public const string TablePayrollEntries = "payrollentries";
+    public const string TablePayrollEntryLines = "payrollentrylines";
 }

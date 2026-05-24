@@ -19,6 +19,29 @@ public record FeeCollectionPaymentHistoryDto(
     string FeeHeadsSummary,
     string? ReceiptNo);
 
+public record FeeCollectionInstallmentDto(
+    Guid InstallmentId,
+    Guid FeeTypeId,
+    string PeriodLabel,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
+    decimal TotalAmount,
+    decimal PaidAmount,
+    decimal DueAmount,
+    string Status);
+
+public record FeeCollectionHeadDto(
+    Guid FeeTypeId,
+    string FeeTypeName,
+    string FrequencyLabel,
+    string AmountBasisLabel,
+    decimal TotalAmount,
+    decimal PaidAmount,
+    decimal DueAmount,
+    string Status,
+    IList<FeeCollectionInstallmentDto> Installments);
+
+/// <summary>Legacy flat head row — kept for backward-compatible API clients.</summary>
 public record FeeCollectionHeadStatusDto(
     Guid FeeTypeId,
     string FeeTypeName,
@@ -38,7 +61,7 @@ public record FeeCollectionStudentDetailDto(
     decimal DueAmount,
     int PaymentProgressPercent,
     string PaymentStatus,
-    IList<FeeCollectionHeadStatusDto> FeeHeads,
+    IList<FeeCollectionHeadDto> FeeHeads,
     IList<FeeCollectionPaymentHistoryDto> Payments);
 
 public record CollectFeeRequestDto(
@@ -51,7 +74,10 @@ public record CollectFeeRequestDto(
     IList<CollectFeeAllocationDto> Allocations,
     Guid? AcademicYearId = null);
 
-public record CollectFeeAllocationDto(Guid FeeTypeId, decimal Amount);
+public record CollectFeeAllocationDto(
+    Guid FeeTypeId,
+    Guid? InstallmentId,
+    decimal Amount);
 
 public record CollectFeeResponseDto(
     Guid PaymentId,

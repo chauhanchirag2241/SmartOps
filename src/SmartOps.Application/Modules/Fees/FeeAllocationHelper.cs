@@ -63,6 +63,44 @@ public static class FeeAllocationHelper
     public static decimal SumDueOnSelected(IEnumerable<HeadAllocation> distributed, IReadOnlySet<Guid> selectedFeeTypeIds) =>
         distributed.Where(h => selectedFeeTypeIds.Contains(h.FeeTypeId)).Sum(h => h.DueAmount);
 
+    public sealed record InstallmentDue(Guid InstallmentId, Guid FeeTypeId, decimal DueAmount);
+
+    /// <summary>
+    /// Allocate payment across explicitly selected installments (exact selection).
+    /// </summary>
+    public static IList<(Guid FeeTypeId, Guid InstallmentId, decimal Amount)> AllocateToSelectedInstallments(
+        IEnumerable<InstallmentDue> installments,
+        decimal paymentAmount,
+        IReadOnlySet<Guid> selectedInstallmentIds)
+    {
+        decimal remaining = Math.Max(0, paymentAmount);
+        var allocations = new List<(Guid FeeTypeId, Guid InstallmentId, decimal Amount)>();
+
+        foreach (InstallmentDue inst in installments.OrderBy(i => i.InstallmentId))
+        {
+            if (!selectedInstallmentIds.Contains(inst.InstallmentId) || inst.DueAmount <= 0)
+            {
+                continue;
+            }
+
+            decimal alloc = Math.Min(inst.DueAmount, remaining);
+            if (alloc <= 0)
+            {
+                break;
+            }
+
+            allocations.Add((inst.FeeTypeId, inst.InstallmentId, alloc));
+            remaining -= alloc;
+        }
+
+        return allocations;
+    }
+
+    public static decimal SumDueOnSelectedInstallments(
+        IEnumerable<InstallmentDue> installments,
+        IReadOnlySet<Guid> selectedInstallmentIds) =>
+        installments.Where(i => selectedInstallmentIds.Contains(i.InstallmentId)).Sum(i => i.DueAmount);
+
     public static string StatusForHead(decimal total, decimal paid)
     {
         decimal due = Math.Max(0, total - paid);

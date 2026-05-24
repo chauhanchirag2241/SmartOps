@@ -12,6 +12,13 @@ public static class FeeLabelHelper
         _ => "Other"
     };
 
+    public static string AmountBasisLabel(FeeAmountBasis b) => b switch
+    {
+        FeeAmountBasis.AnnualTotal => "Annual total",
+        FeeAmountBasis.PerInstallment => "Per installment",
+        _ => b.ToString()
+    };
+
     public static string FrequencyLabel(FeeFrequency f) => f switch
     {
         FeeFrequency.Annual => "Annual",

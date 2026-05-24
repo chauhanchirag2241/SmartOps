@@ -74,6 +74,7 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                    ft.name AS FeeTypeName,
                    ft.category AS Category,
                    ft.frequency AS Frequency,
+                   ft.amountbasis AS AmountBasis,
                    COALESCE(cfa.amount, 0) AS Amount
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
             LEFT JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
@@ -130,7 +131,7 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                     new { Id = existingId.Value, Amount = amount, UpdatedBy = actorId, UpdatedOn = utcNow },
                     cancellationToken: ct)).ConfigureAwait(false);
             }
-            else
+            else if (amount > 0)
             {
                 var entity = new ClassFeeAmountEntity
                 {
@@ -156,7 +157,7 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
         }
     }
 
-    public async Task<bool> ClassHasSavedAmountsAsync(
+    public async Task<bool> ClassHasConfiguredAmountsAsync(
         Guid classId,
         Guid feeStructureVersionId,
         CancellationToken ct = default)
@@ -169,6 +170,14 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                 WHERE classid = @ClassId
                   AND feestructureversionid = @FeeStructureVersionId
                   AND isactive = true
+                  AND amount > 0
+            ) OR EXISTS (
+                SELECT 1
+                FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments}
+                WHERE classid = @ClassId
+                  AND feestructureversionid = @FeeStructureVersionId
+                  AND isactive = true
+                  AND amount > 0
             );
             """;
         return await connection.ExecuteScalarAsync<bool>(

@@ -8,8 +8,13 @@ namespace SmartOps.Infrastructure.Modules.Fees.Services;
 public sealed class FeeStructureService : IFeeStructureService
 {
     private readonly IFeeStructureRepository _repo;
+    private readonly IClassFeeInstallmentService _installmentService;
 
-    public FeeStructureService(IFeeStructureRepository repo) => _repo = repo;
+    public FeeStructureService(IFeeStructureRepository repo, IClassFeeInstallmentService installmentService)
+    {
+        _repo = repo;
+        _installmentService = installmentService;
+    }
 
     public async Task<Result<IList<FeeStructureVersionListItemDto>>> GetVersionsAsync(
         Guid? academicYearId,
@@ -125,6 +130,9 @@ public sealed class FeeStructureService : IFeeStructureService
         version.Status = FeeStructureVersionStatus.Active;
         version.ActivatedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
+        await _installmentService
+            .RegenerateForVersionAsync(versionId, version.AcademicYearId, ct)
+            .ConfigureAwait(false);
         return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
     }
 
@@ -195,6 +203,7 @@ public sealed class FeeStructureService : IFeeStructureService
             Name = request.Name.Trim(),
             Category = request.Category,
             Frequency = request.Frequency,
+            AmountBasis = request.AmountBasis,
             IsMandatory = request.IsMandatory,
             IsRefundable = request.IsRefundable
         };
@@ -227,6 +236,7 @@ public sealed class FeeStructureService : IFeeStructureService
         existing.Name = request.Name.Trim();
         existing.Category = request.Category;
         existing.Frequency = request.Frequency;
+        existing.AmountBasis = request.AmountBasis;
         existing.IsMandatory = request.IsMandatory;
         existing.IsRefundable = request.IsRefundable;
         await _repo.UpdateFeeTypeAsync(existing, ct).ConfigureAwait(false);
@@ -410,6 +420,8 @@ public sealed class FeeStructureService : IFeeStructureService
         FeeLabelHelper.CategoryLabel(row.Category),
         row.Frequency,
         FeeLabelHelper.FrequencyLabel(row.Frequency),
+        row.AmountBasis,
+        FeeLabelHelper.AmountBasisLabel(row.AmountBasis),
         row.IsMandatory,
         row.IsRefundable,
         row.IsActive,
@@ -423,6 +435,8 @@ public sealed class FeeStructureService : IFeeStructureService
         FeeLabelHelper.CategoryLabel(entity.Category),
         entity.Frequency,
         FeeLabelHelper.FrequencyLabel(entity.Frequency),
+        entity.AmountBasis,
+        FeeLabelHelper.AmountBasisLabel(entity.AmountBasis),
         entity.IsMandatory,
         entity.IsRefundable,
         entity.IsActive,

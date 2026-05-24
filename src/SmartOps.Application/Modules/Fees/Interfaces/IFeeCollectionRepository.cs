@@ -18,6 +18,8 @@ public interface IFeeCollectionRepository
 
     Task<decimal> GetStudentPaidTotalAsync(Guid studentId, Guid feeStructureVersionId, CancellationToken ct = default);
 
+    Task<decimal> GetStudentTotalFeesAsync(Guid classId, Guid feeStructureVersionId, CancellationToken ct = default);
+
     Task<IList<StudentFeeHeadPaidRow>> GetPaidByFeeTypeAsync(Guid studentId, CancellationToken ct = default);
 
     Task<IList<FeePaymentHistoryRow>> GetPaymentHistoryAsync(Guid studentId, CancellationToken ct = default);
@@ -30,7 +32,7 @@ public interface IFeeCollectionRepository
         string? transactionNo,
         DateOnly paymentDate,
         string? remarks,
-        IList<(Guid FeeTypeId, decimal Amount)> allocations,
+        IList<(Guid FeeTypeId, Guid? InstallmentId, decimal Amount)> allocations,
         CancellationToken ct = default);
 
     Task AssignStudentFeeStructureVersionAsync(Guid studentId, Guid academicYearId, Guid feeStructureVersionId, CancellationToken ct = default);
@@ -54,6 +56,7 @@ public sealed class StudentClassFeeAmountRow
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
     public int Frequency { get; init; }
+    public int AmountBasis { get; init; }
     public decimal Amount { get; init; }
 }
 

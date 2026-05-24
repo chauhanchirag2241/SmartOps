@@ -305,8 +305,8 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             IList<FeeTypeEntity> sourceTypes = (await connection.QueryAsync<FeeTypeEntity>(new CommandDefinition(
                 $"""
                 SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
-                       category AS Category, frequency AS Frequency, ismandatory AS IsMandatory,
-                       isrefundable AS IsRefundable, isactive AS IsActive
+                       category AS Category, frequency AS Frequency, amountbasis AS AmountBasis,
+                       ismandatory AS IsMandatory, isrefundable AS IsRefundable, isactive AS IsActive
                 FROM {Schema}.{DatabaseConfig.TableFeeTypes}
                 WHERE feestructureversionid = @SourceVersionId AND isactive = true;
                 """,
@@ -324,6 +324,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                     Name = sourceType.Name,
                     Category = sourceType.Category,
                     Frequency = sourceType.Frequency,
+                    AmountBasis = sourceType.AmountBasis,
                     IsMandatory = sourceType.IsMandatory,
                     IsRefundable = sourceType.IsRefundable
                 };
@@ -331,10 +332,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                        (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+                        (id, feestructureversionid, name, category, frequency, amountbasis, ismandatory, isrefundable,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @IsMandatory, @IsRefundable,
+                        (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @AmountBasis, @IsMandatory, @IsRefundable,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneType,
@@ -404,6 +405,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                    ft.name AS Name,
                    ft.category AS Category,
                    ft.frequency AS Frequency,
+                   ft.amountbasis AS AmountBasis,
                    ft.ismandatory AS IsMandatory,
                    ft.isrefundable AS IsRefundable,
                    ft.isactive AS IsActive,
@@ -432,9 +434,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
-                   category AS Category, frequency AS Frequency, ismandatory AS IsMandatory,
-                   isrefundable AS IsRefundable, isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
+                   category AS Category, frequency AS Frequency, amountbasis AS AmountBasis,
+                   ismandatory AS IsMandatory, isrefundable AS IsRefundable, isactive AS IsActive,
+                   versionno AS VersionNo, createdby AS CreatedBy, createdon AS CreatedOn,
+                   updatedby AS UpdatedBy, updatedon AS UpdatedOn
             FROM {Schema}.{DatabaseConfig.TableFeeTypes}
             WHERE id = @Id;
             """;
@@ -453,10 +456,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+                (id, feestructureversionid, name, category, frequency, amountbasis, ismandatory, isrefundable,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @IsMandatory, @IsRefundable,
+                (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @AmountBasis, @IsMandatory, @IsRefundable,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
@@ -472,6 +475,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             SET name = @Name,
                 category = @Category,
                 frequency = @Frequency,
+                amountbasis = @AmountBasis,
                 ismandatory = @IsMandatory,
                 isrefundable = @IsRefundable,
                 updatedby = @UpdatedBy,

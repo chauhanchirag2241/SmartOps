@@ -77,6 +77,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IFeeStructureRepository, FeeStructureRepository>();
         services.AddScoped<IClassFeeAmountRepository, ClassFeeAmountRepository>();
+        services.AddScoped<IClassFeeInstallmentRepository, ClassFeeInstallmentRepository>();
+        services.AddScoped<IClassFeeInstallmentService, ClassFeeInstallmentService>();
         services.AddScoped<IFeeCollectionRepository, FeeCollectionRepository>();
         services.AddScoped<IFeeStructureService, FeeStructureService>();
         services.AddScoped<IClassFeeAmountService, ClassFeeAmountService>();

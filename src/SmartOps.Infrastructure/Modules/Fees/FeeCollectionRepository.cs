@@ -53,12 +53,19 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
-                SELECT SUM(cfa.amount) AS total_fees
-                FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-                INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-                WHERE cfa.classid = sa.classid
-                  AND cfa.feestructureversionid = sa.feestructureversionid
-                  AND cfa.isactive = true
+                SELECT COALESCE(
+                    (SELECT SUM(cfi.amount)
+                     FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
+                     WHERE cfi.classid = sa.classid
+                       AND cfi.feestructureversionid = sa.feestructureversionid
+                       AND cfi.isactive = true),
+                    (SELECT SUM(cfa.amount)
+                     FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                     INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                     WHERE cfa.classid = sa.classid
+                       AND cfa.feestructureversionid = sa.feestructureversionid
+                       AND cfa.isactive = true)
+                ) AS total_fees
             ) fee_totals ON true
             LEFT JOIN LATERAL (
                 SELECT SUM(fp.amount) AS paid
@@ -110,12 +117,19 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                 ON c.id = sa.classid AND c.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
-                SELECT SUM(cfa.amount) AS total_fees
-                FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-                INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-                WHERE cfa.classid = sa.classid
-                  AND cfa.feestructureversionid = sa.feestructureversionid
-                  AND cfa.isactive = true
+                SELECT COALESCE(
+                    (SELECT SUM(cfi.amount)
+                     FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
+                     WHERE cfi.classid = sa.classid
+                       AND cfi.feestructureversionid = sa.feestructureversionid
+                       AND cfi.isactive = true),
+                    (SELECT SUM(cfa.amount)
+                     FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                     INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                     WHERE cfa.classid = sa.classid
+                       AND cfa.feestructureversionid = sa.feestructureversionid
+                       AND cfa.isactive = true)
+                ) AS total_fees
             ) fee_totals ON true
             LEFT JOIN LATERAL (
                 SELECT SUM(fp.amount) AS paid
@@ -144,6 +158,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             SELECT ft.id AS FeeTypeId,
                    ft.name AS FeeTypeName,
                    ft.frequency AS Frequency,
+                   ft.amountbasis AS AmountBasis,
                    COALESCE(cfa.amount, 0) AS Amount
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
             INNER JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
@@ -161,6 +176,27 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
+    }
+
+    public async Task<decimal> GetStudentTotalFeesAsync(
+        Guid classId,
+        Guid feeStructureVersionId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT COALESCE(
+                (SELECT SUM(amount) FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments}
+                 WHERE classid = @ClassId AND feestructureversionid = @FeeStructureVersionId AND isactive = true),
+                (SELECT SUM(cfa.amount)
+                 FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+                 INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
+                 WHERE cfa.classid = @ClassId AND cfa.feestructureversionid = @FeeStructureVersionId AND cfa.isactive = true)
+            );
+            """;
+        return await connection.ExecuteScalarAsync<decimal>(
+            new CommandDefinition(sql, new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
+            .ConfigureAwait(false);
     }
 
     public async Task<decimal> GetStudentPaidTotalAsync(Guid studentId, Guid feeStructureVersionId, CancellationToken ct = default)
@@ -230,10 +266,17 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                    fp.amount AS Amount,
                    fp.transactionno AS TransactionNo,
                    fp.receiptno AS ReceiptNo,
-                   COALESCE(string_agg(ft.name, ', ' ORDER BY ft.name), 'Fee collected') AS FeeHeadsSummary
+                   COALESCE(string_agg(
+                       CASE
+                           WHEN cfi.periodlabel IS NOT NULL AND cfi.periodlabel <> ''
+                           THEN ft.name || ' — ' || cfi.periodlabel
+                           ELSE ft.name
+                       END,
+                       ', ' ORDER BY ft.name, cfi.periodindex), 'Fee collected') AS FeeHeadsSummary
             FROM {Schema}.{DatabaseConfig.TableFeePayments} fp
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa ON fpa.paymentid = fp.id AND fpa.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = fpa.feetypeid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi ON cfi.id = fpa.installmentid
             WHERE fp.studentid = @StudentId AND fp.isactive = true
             GROUP BY fp.id, fp.paymentdate, fp.paymentmode, fp.amount, fp.transactionno, fp.receiptno, fp.createdon
             ORDER BY fp.paymentdate DESC, fp.createdon DESC;
@@ -252,7 +295,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         string? transactionNo,
         DateOnly paymentDate,
         string? remarks,
-        IList<(Guid FeeTypeId, decimal Amount)> allocations,
+        IList<(Guid FeeTypeId, Guid? InstallmentId, decimal Amount)> allocations,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
@@ -294,22 +337,23 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             await connection.ExecuteAsync(
                 new CommandDefinition(paymentSql, payment, transaction, cancellationToken: ct)).ConfigureAwait(false);
 
-            foreach ((Guid feeTypeId, decimal allocAmount) in allocations.Where(a => a.Amount > 0))
+            foreach ((Guid feeTypeId, Guid? installmentId, decimal allocAmount) in allocations.Where(a => a.Amount > 0))
             {
                 var alloc = new FeePaymentAllocationEntity
                 {
                     Id = Guid.NewGuid(),
                     PaymentId = paymentId,
                     FeeTypeId = feeTypeId,
+                    InstallmentId = installmentId,
                     Amount = allocAmount
                 };
                 EnsureInsertAudit(alloc, utcNow, actorId);
                 string allocSql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableFeePaymentAllocations}
-                        (id, paymentid, feetypeid, amount,
+                        (id, paymentid, feetypeid, installmentid, amount,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @PaymentId, @FeeTypeId, @Amount,
+                        (@Id, @PaymentId, @FeeTypeId, @InstallmentId, @Amount,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """;
                 await connection.ExecuteAsync(

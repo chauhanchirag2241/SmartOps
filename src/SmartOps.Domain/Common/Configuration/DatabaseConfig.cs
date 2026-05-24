@@ -11,6 +11,8 @@ public static class DatabaseConfig
     public const string TableMenus = "menus";
     public const string TableUserRoles = "userroles";
     public const string TableRoleMenuPermissions = "rolemenupermissions";
+    public const string TableDashboardWidgets = "dashboard_widgets";
+    public const string TableRoleDashboardWidgetPermissions = "roledashboardwidgetpermissions";
     public const string TableSchools = "schools";
     public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserSchoolMappings = "userschoolmappings";
@@ -55,6 +57,7 @@ public static class DatabaseConfig
     public const string TableFeeTypes = "feetypes";
     public const string TableFeeSettings = "feesettings";
     public const string TableClassFeeAmounts = "classfeeamounts";
+    public const string TableClassFeeInstallments = "classfeeinstallments";
     public const string TableFeePayments = "feepayments";
     public const string TableFeePaymentAllocations = "feepaymentallocations";
 

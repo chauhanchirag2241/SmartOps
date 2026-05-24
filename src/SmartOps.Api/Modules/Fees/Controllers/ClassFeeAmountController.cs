@@ -52,6 +52,19 @@ public sealed class ClassFeeAmountController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpGet("{classId:guid}/installments")]
+    [Authorize(Policy = MenuPolicies.FeesClassAmounts.View)]
+    [ProducesResponseType(typeof(IList<ClassFeeInstallmentPreviewDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetInstallmentPreview(
+        Guid classId,
+        [FromQuery] Guid academicYearId,
+        [FromQuery] Guid? feeStructureVersionId,
+        CancellationToken ct)
+    {
+        var result = await _service.GetInstallmentPreviewAsync(classId, academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPut("{classId:guid}")]
     [Authorize(Policy = MenuPolicies.FeesClassAmounts.Edit)]
     [ProducesResponseType(typeof(ClassFeeAmountsResponseDto), StatusCodes.Status200OK)]

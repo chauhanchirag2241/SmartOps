@@ -20,6 +20,7 @@ public class FeeTypeEntity : AuditableEntity
     public string Name { get; set; } = null!;
     public FeeCategory Category { get; set; }
     public FeeFrequency Frequency { get; set; }
+    public FeeAmountBasis AmountBasis { get; set; } = FeeAmountBasis.AnnualTotal;
     public bool IsMandatory { get; set; } = true;
     public bool IsRefundable { get; set; }
 }
@@ -60,5 +61,20 @@ public class FeePaymentAllocationEntity : AuditableEntity
     public Guid Id { get; set; }
     public Guid PaymentId { get; set; }
     public Guid FeeTypeId { get; set; }
+    public Guid? InstallmentId { get; set; }
+    public decimal Amount { get; set; }
+}
+
+public class ClassFeeInstallmentEntity : AuditableEntity
+{
+    public Guid Id { get; set; }
+    public Guid FeeStructureVersionId { get; set; }
+    public Guid ClassId { get; set; }
+    public Guid FeeTypeId { get; set; }
+    public Guid AcademicYearId { get; set; }
+    public int PeriodIndex { get; set; }
+    public string PeriodLabel { get; set; } = null!;
+    public DateOnly PeriodStart { get; set; }
+    public DateOnly PeriodEnd { get; set; }
     public decimal Amount { get; set; }
 }

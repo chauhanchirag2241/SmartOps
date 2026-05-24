@@ -17,6 +17,12 @@ public enum FeeFrequency
     OneTime = 4
 }
 
+public enum FeeAmountBasis
+{
+    AnnualTotal = 0,
+    PerInstallment = 1
+}
+
 public enum FeePaymentCycle
 {
     Annual = 0,

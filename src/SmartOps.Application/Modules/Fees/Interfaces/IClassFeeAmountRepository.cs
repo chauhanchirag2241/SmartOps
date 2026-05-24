@@ -11,8 +11,8 @@ public interface IClassFeeAmountRepository
         IList<(Guid FeeTypeId, decimal Amount)> amounts,
         CancellationToken ct = default);
 
-    /// <summary>True when at least one classfeeamounts row exists for this class and version.</summary>
-    Task<bool> ClassHasSavedAmountsAsync(Guid classId, Guid feeStructureVersionId, CancellationToken ct = default);
+    /// <summary>True when this class has fee amounts or installments with amount &gt; 0 (not merely zero placeholder rows).</summary>
+    Task<bool> ClassHasConfiguredAmountsAsync(Guid classId, Guid feeStructureVersionId, CancellationToken ct = default);
 }
 
 public sealed class ClassFeeSummaryRow
@@ -29,5 +29,6 @@ public sealed class ClassFeeAmountRow
     public string FeeTypeName { get; init; } = string.Empty;
     public int Category { get; init; }
     public int Frequency { get; init; }
+    public int AmountBasis { get; init; }
     public decimal Amount { get; init; }
 }

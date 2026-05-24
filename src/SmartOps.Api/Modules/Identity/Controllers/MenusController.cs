@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Constants;
@@ -10,7 +11,9 @@ namespace SmartOps.Api.Modules.Identity.Controllers;
 [ApiController]
 [Route("api/menus")]
 [Authorize]
-public sealed class MenusController(IMenuRepository menuRepository) : ControllerBase
+public sealed class MenusController(
+    IMenuRepository menuRepository,
+    IDashboardWidgetRepository dashboardWidgetRepository) : ControllerBase
 {
     [HttpGet("all")]
     [Authorize(Policy = MenuPolicies.Roles.View)]
@@ -45,6 +48,18 @@ public sealed class MenusController(IMenuRepository menuRepository) : Controller
             .ConfigureAwait(false);
 
         return Ok(menus);
+    }
+
+    [HttpGet("dashboard-widgets")]
+    [Authorize(Policy = MenuPolicies.Roles.View)]
+    [ProducesResponseType(typeof(IReadOnlyList<RoleDashboardWidgetPermissionDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<RoleDashboardWidgetPermissionDto>>> GetDashboardWidgetTemplates(
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<RoleDashboardWidgetPermissionDto> widgets = await dashboardWidgetRepository
+            .GetWidgetTemplatesAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return Ok(widgets);
     }
 
     private Guid? GetCurrentUserId()

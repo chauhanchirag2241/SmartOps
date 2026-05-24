@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
@@ -14,7 +15,8 @@ namespace SmartOps.Api.Modules.Identity.Controllers;
 public sealed class RolesController(
     IRoleRepository roleRepository,
     IUserRepository userRepository,
-    ITenantProvider tenantProvider) : ControllerBase
+    ITenantProvider tenantProvider,
+    IDashboardWidgetRepository dashboardWidgetRepository) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = MenuPolicies.Roles.View)]
@@ -28,6 +30,9 @@ public sealed class RolesController(
             IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
                 .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
                 .ConfigureAwait(false);
+            IReadOnlyList<RoleDashboardWidgetPermissionDto> widgetPermissions = await dashboardWidgetRepository
+                .GetWidgetPermissionsForRoleAsync(role.Id, cancellationToken)
+                .ConfigureAwait(false);
 
             result.Add(new RoleDto
             {
@@ -35,7 +40,8 @@ public sealed class RolesController(
                 Name = role.Name,
                 Code = role.Code,
                 Description = role.Description,
-                MenuPermissions = permissions
+                MenuPermissions = permissions,
+                DashboardWidgetPermissions = widgetPermissions
             });
         }
 
@@ -55,6 +61,9 @@ public sealed class RolesController(
         IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
             .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
             .ConfigureAwait(false);
+        IReadOnlyList<RoleDashboardWidgetPermissionDto> widgetPermissions = await dashboardWidgetRepository
+            .GetWidgetPermissionsForRoleAsync(role.Id, cancellationToken)
+            .ConfigureAwait(false);
 
         return Ok(new RoleDto
         {
@@ -62,7 +71,8 @@ public sealed class RolesController(
             Name = role.Name,
             Code = role.Code,
             Description = role.Description,
-            MenuPermissions = permissions
+            MenuPermissions = permissions,
+            DashboardWidgetPermissions = widgetPermissions
         });
     }
 
@@ -96,9 +106,15 @@ public sealed class RolesController(
         await roleRepository
             .SetRoleMenuPermissionsAsync(role.Id, request.MenuPermissions, cancellationToken)
             .ConfigureAwait(false);
+        await dashboardWidgetRepository
+            .SetRoleWidgetPermissionsAsync(role.Id, request.DashboardWidgetPermissions, cancellationToken)
+            .ConfigureAwait(false);
 
         IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
             .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<RoleDashboardWidgetPermissionDto> widgetPermissions = await dashboardWidgetRepository
+            .GetWidgetPermissionsForRoleAsync(role.Id, cancellationToken)
             .ConfigureAwait(false);
 
         return CreatedAtAction(
@@ -111,6 +127,7 @@ public sealed class RolesController(
                 Code = role.Code,
                 Description = role.Description,
                 MenuPermissions = permissions,
+                DashboardWidgetPermissions = widgetPermissions,
             });
     }
 
@@ -251,6 +268,26 @@ public sealed class RolesController(
 
         await roleRepository
             .SetRoleMenuPermissionsAsync(id, request.Permissions, cancellationToken)
+            .ConfigureAwait(false);
+
+        return NoContent();
+    }
+
+    [HttpPut("{id:guid}/dashboard-widgets")]
+    [Authorize(Policy = MenuPolicies.Roles.Edit)]
+    public async Task<IActionResult> UpdateDashboardWidgets(
+        Guid id,
+        [FromBody] UpdateRoleDashboardWidgetPermissionsDto request,
+        CancellationToken cancellationToken)
+    {
+        ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (role is null)
+        {
+            return NotFound();
+        }
+
+        await dashboardWidgetRepository
+            .SetRoleWidgetPermissionsAsync(id, request.Permissions, cancellationToken)
             .ConfigureAwait(false);
 
         return NoContent();

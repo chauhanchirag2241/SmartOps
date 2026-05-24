@@ -43,6 +43,8 @@ public record FeeTypeDto(
     string CategoryLabel,
     FeeFrequency Frequency,
     string FrequencyLabel,
+    FeeAmountBasis AmountBasis,
+    string AmountBasisLabel,
     bool IsMandatory,
     bool IsRefundable,
     bool IsActive,
@@ -71,6 +73,7 @@ public record CreateFeeTypeRequestDto(
     string Name,
     FeeCategory Category,
     FeeFrequency Frequency,
+    FeeAmountBasis AmountBasis,
     bool IsMandatory,
     bool IsRefundable);
 
@@ -78,5 +81,6 @@ public record UpdateFeeTypeRequestDto(
     string Name,
     FeeCategory Category,
     FeeFrequency Frequency,
+    FeeAmountBasis AmountBasis,
     bool IsMandatory,
     bool IsRefundable);

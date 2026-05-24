@@ -9,11 +9,16 @@ public sealed class FeeCollectionService : IFeeCollectionService
 {
     private readonly IFeeCollectionRepository _collectionRepo;
     private readonly IFeeStructureRepository _structureRepo;
+    private readonly IClassFeeInstallmentRepository _installmentRepo;
 
-    public FeeCollectionService(IFeeCollectionRepository collectionRepo, IFeeStructureRepository structureRepo)
+    public FeeCollectionService(
+        IFeeCollectionRepository collectionRepo,
+        IFeeStructureRepository structureRepo,
+        IClassFeeInstallmentRepository installmentRepo)
     {
         _collectionRepo = collectionRepo;
         _structureRepo = structureRepo;
+        _installmentRepo = installmentRepo;
     }
 
     public async Task<Result<IList<FeeCollectionStudentListItemDto>>> GetStudentsAsync(
@@ -95,7 +100,10 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<CollectFeeResponseDto>.Failure("No fee structure version is assigned to this student.");
         }
 
-        decimal dueAmount = Math.Max(0, studentRow.TotalFees - studentRow.PaidAmount);
+        FeeCollectionStudentDetailDto currentDetail =
+            await BuildStudentDetailAsync(studentRow, ct).ConfigureAwait(false);
+
+        decimal dueAmount = currentDetail.DueAmount;
         if (dueAmount <= 0)
         {
             return Result<CollectFeeResponseDto>.Failure("No due amount remaining for this student.");
@@ -106,6 +114,98 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<CollectFeeResponseDto>.Failure($"Amount cannot exceed due balance of {dueAmount:N2}.");
         }
 
+        IList<FeeAllocationHelper.InstallmentDue> openInstallments = currentDetail.FeeHeads
+            .SelectMany(h => h.Installments)
+            .Where(i => i.DueAmount > 0)
+            .Select(i => new FeeAllocationHelper.InstallmentDue(i.InstallmentId, i.FeeTypeId, i.DueAmount))
+            .ToList();
+
+        HashSet<Guid> selectedInstallmentIds = request.Allocations
+            .Where(a => a.InstallmentId.HasValue && a.InstallmentId.Value != Guid.Empty)
+            .Select(a => a.InstallmentId!.Value)
+            .ToHashSet();
+
+        IList<(Guid FeeTypeId, Guid? InstallmentId, decimal Amount)> allocations;
+
+        if (openInstallments.Count > 0)
+        {
+            if (selectedInstallmentIds.Count == 0)
+            {
+                foreach (FeeAllocationHelper.InstallmentDue inst in openInstallments)
+                {
+                    selectedInstallmentIds.Add(inst.InstallmentId);
+                }
+            }
+
+            decimal selectedDue = FeeAllocationHelper.SumDueOnSelectedInstallments(openInstallments, selectedInstallmentIds);
+            if (selectedDue <= 0)
+            {
+                return Result<CollectFeeResponseDto>.Failure(
+                    "Selected installments have no remaining due. Refresh the student and try again.");
+            }
+
+            if (request.Amount > selectedDue)
+            {
+                return Result<CollectFeeResponseDto>.Failure(
+                    $"Amount cannot exceed {selectedDue:N2} due on the selected installments.");
+            }
+
+            foreach (Guid installmentId in selectedInstallmentIds)
+            {
+                bool valid = await _installmentRepo.InstallmentBelongsToClassVersionAsync(
+                    installmentId,
+                    studentRow.ClassId,
+                    studentRow.FeeStructureVersionId,
+                    ct).ConfigureAwait(false);
+                if (!valid)
+                {
+                    return Result<CollectFeeResponseDto>.Failure("Invalid installment selection.");
+                }
+            }
+
+            allocations = FeeAllocationHelper.AllocateToSelectedInstallments(
+                    openInstallments,
+                    request.Amount,
+                    selectedInstallmentIds)
+                .Select(a => (a.FeeTypeId, (Guid?)a.InstallmentId, a.Amount))
+                .ToList();
+        }
+        else
+        {
+            allocations = await CollectLegacyAsync(request, studentRow, ct).ConfigureAwait(false);
+        }
+
+        if (allocations.Count == 0)
+        {
+            return Result<CollectFeeResponseDto>.Failure("Could not allocate payment.");
+        }
+
+        (Guid paymentId, string receiptNo) = await _collectionRepo.CreatePaymentAsync(
+            request.StudentId,
+            studentRow.FeeStructureVersionId,
+            request.Amount,
+            request.PaymentMode,
+            request.TransactionNo,
+            request.PaymentDate,
+            request.Remarks,
+            allocations,
+            ct).ConfigureAwait(false);
+
+        FeeCollectionStudentRow? row = await _collectionRepo.GetStudentRowAsync(request.StudentId, yearId, ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            return Result<CollectFeeResponseDto>.Failure("Student not found after payment.");
+        }
+
+        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
+        return Result<CollectFeeResponseDto>.Success(new CollectFeeResponseDto(paymentId, receiptNo, detail));
+    }
+
+    private async Task<IList<(Guid FeeTypeId, Guid? InstallmentId, decimal Amount)>> CollectLegacyAsync(
+        CollectFeeRequestDto request,
+        FeeCollectionStudentRow studentRow,
+        CancellationToken ct)
+    {
         IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
             .GetStudentFeeAmountsAsync(studentRow.ClassId, studentRow.FeeStructureVersionId, ct)
             .ConfigureAwait(false);
@@ -137,48 +237,12 @@ public sealed class FeeCollectionService : IFeeCollectionService
             }
         }
 
-        decimal selectedDue = FeeAllocationHelper.SumDueOnSelected(distributed, selectedFeeTypeIds);
-        if (selectedDue <= 0)
-        {
-            return Result<CollectFeeResponseDto>.Failure(
-                "Selected fee heads have no remaining due. Refresh the student and try again.");
-        }
-
-        if (request.Amount > selectedDue)
-        {
-            return Result<CollectFeeResponseDto>.Failure(
-                $"Amount cannot exceed {selectedDue:N2} due on the selected fee heads.");
-        }
-
-        IList<(Guid FeeTypeId, decimal Amount)> allocations = FeeAllocationHelper.AllocateToSelectedHeads(
+        IList<(Guid FeeTypeId, decimal Amount)> legacy = FeeAllocationHelper.AllocateToSelectedHeads(
             distributed,
             request.Amount,
             selectedFeeTypeIds);
 
-        if (allocations.Count == 0)
-        {
-            return Result<CollectFeeResponseDto>.Failure("Could not allocate payment to selected fee heads.");
-        }
-
-        (Guid paymentId, string receiptNo) = await _collectionRepo.CreatePaymentAsync(
-            request.StudentId,
-            studentRow.FeeStructureVersionId,
-            request.Amount,
-            request.PaymentMode,
-            request.TransactionNo,
-            request.PaymentDate,
-            request.Remarks,
-            allocations.Where(a => a.FeeTypeId != Guid.Empty).ToList(),
-            ct).ConfigureAwait(false);
-
-        FeeCollectionStudentRow? row = await _collectionRepo.GetStudentRowAsync(request.StudentId, yearId, ct).ConfigureAwait(false);
-        if (row is null)
-        {
-            return Result<CollectFeeResponseDto>.Failure("Student not found after payment.");
-        }
-
-        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
-        return Result<CollectFeeResponseDto>.Success(new CollectFeeResponseDto(paymentId, receiptNo, detail));
+        return legacy.Select(a => (a.FeeTypeId, (Guid?)null, a.Amount)).ToList();
     }
 
     private async Task<FeeCollectionStudentRow?> EnsureStudentVersionAssignedAsync(
@@ -216,36 +280,33 @@ public sealed class FeeCollectionService : IFeeCollectionService
         FeeCollectionStudentRow row,
         CancellationToken ct)
     {
-        IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
-            .GetStudentFeeAmountsAsync(row.ClassId, row.FeeStructureVersionId, ct)
+        IList<ClassFeeInstallmentRow> installmentRows = await _installmentRepo
+            .GetByClassVersionAsync(row.ClassId, row.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        IList<InstallmentPaidRow> paidRows = await _installmentRepo
+            .GetPaidByInstallmentAsync(row.StudentId, row.FeeStructureVersionId, ct)
             .ConfigureAwait(false);
         IList<FeePaymentHistoryRow> payments = await _collectionRepo.GetPaymentHistoryAsync(row.StudentId, ct).ConfigureAwait(false);
 
-        decimal total = feeAmounts.Sum(f => f.Amount);
-        decimal paid = await _collectionRepo.GetStudentPaidTotalAsync(row.StudentId, row.FeeStructureVersionId, ct).ConfigureAwait(false);
+        var paidByInstallment = paidRows.ToDictionary(p => p.InstallmentId, p => p.PaidAmount);
+
+        IList<FeeCollectionHeadDto> heads;
+        decimal total;
+        decimal paid;
+
+        if (installmentRows.Count > 0)
+        {
+            heads = BuildHeadsFromInstallments(installmentRows, paidByInstallment);
+            total = heads.Sum(h => h.TotalAmount);
+            paid = heads.Sum(h => h.PaidAmount);
+        }
+        else
+        {
+            (heads, total, paid) = await BuildLegacyHeadsAsync(row, ct).ConfigureAwait(false);
+        }
+
         decimal due = Math.Max(0, total - paid);
         int pct = total > 0 ? (int)Math.Min(100, Math.Round(paid / total * 100)) : 0;
-
-        var headAmounts = feeAmounts
-            .Where(f => f.Amount > 0)
-            .Select(f => new FeeAllocationHelper.HeadAmount(f.FeeTypeId, f.Amount))
-            .ToList();
-
-        IList<FeeCollectionHeadStatusDto> heads = FeeAllocationHelper
-            .DistributePaid(headAmounts, paid)
-            .Select(h =>
-            {
-                StudentClassFeeAmountRow? meta = feeAmounts.FirstOrDefault(f => f.FeeTypeId == h.FeeTypeId);
-                return new FeeCollectionHeadStatusDto(
-                    h.FeeTypeId,
-                    meta?.FeeTypeName ?? string.Empty,
-                    FeeLabelHelper.FrequencyLabel((FeeFrequency)(meta?.Frequency ?? 0)),
-                    h.TotalAmount,
-                    h.PaidAmount,
-                    h.DueAmount,
-                    FeeAllocationHelper.StatusForHead(h.TotalAmount, h.PaidAmount));
-            })
-            .ToList();
 
         IList<FeeCollectionPaymentHistoryDto> history = payments.Select(p => new FeeCollectionPaymentHistoryDto(
             p.PaymentId,
@@ -268,6 +329,101 @@ public sealed class FeeCollectionService : IFeeCollectionService
             FeeLabelHelper.PaymentStatus(total, paid),
             heads,
             history);
+    }
+
+    private static IList<FeeCollectionHeadDto> BuildHeadsFromInstallments(
+        IList<ClassFeeInstallmentRow> installmentRows,
+        IReadOnlyDictionary<Guid, decimal> paidByInstallment)
+    {
+        return installmentRows
+            .GroupBy(i => i.FeeTypeId)
+            .Select(g =>
+            {
+                ClassFeeInstallmentRow first = g.First();
+                IList<FeeCollectionInstallmentDto> installments = g
+                    .OrderBy(i => i.PeriodIndex)
+                    .Select(i =>
+                    {
+                        decimal instPaid = paidByInstallment.GetValueOrDefault(i.Id, 0m);
+                        decimal instDue = Math.Max(0, i.Amount - instPaid);
+                        return new FeeCollectionInstallmentDto(
+                            i.Id,
+                            i.FeeTypeId,
+                            i.PeriodLabel,
+                            i.PeriodStart,
+                            i.PeriodEnd,
+                            i.Amount,
+                            instPaid,
+                            instDue,
+                            FeeAllocationHelper.StatusForHead(i.Amount, instPaid));
+                    })
+                    .ToList();
+
+                decimal headTotal = installments.Sum(x => x.TotalAmount);
+                decimal headPaid = installments.Sum(x => x.PaidAmount);
+                decimal headDue = installments.Sum(x => x.DueAmount);
+
+                return new FeeCollectionHeadDto(
+                    first.FeeTypeId,
+                    first.FeeTypeName,
+                    FeeLabelHelper.FrequencyLabel((FeeFrequency)first.Frequency),
+                    FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)first.AmountBasis),
+                    headTotal,
+                    headPaid,
+                    headDue,
+                    FeeAllocationHelper.StatusForHead(headTotal, headPaid),
+                    installments);
+            })
+            .OrderBy(h => h.FeeTypeName)
+            .ToList();
+    }
+
+    private async Task<(IList<FeeCollectionHeadDto> Heads, decimal Total, decimal Paid)> BuildLegacyHeadsAsync(
+        FeeCollectionStudentRow row,
+        CancellationToken ct)
+    {
+        IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
+            .GetStudentFeeAmountsAsync(row.ClassId, row.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+
+        decimal paid = await _collectionRepo.GetStudentPaidTotalAsync(row.StudentId, row.FeeStructureVersionId, ct).ConfigureAwait(false);
+
+        var headAmounts = feeAmounts
+            .Where(f => f.Amount > 0)
+            .Select(f => new FeeAllocationHelper.HeadAmount(f.FeeTypeId, f.Amount))
+            .ToList();
+
+        IList<FeeCollectionHeadDto> heads = FeeAllocationHelper
+            .DistributePaid(headAmounts, paid)
+            .Select(h =>
+            {
+                StudentClassFeeAmountRow? meta = feeAmounts.FirstOrDefault(f => f.FeeTypeId == h.FeeTypeId);
+                var legacyInstallment = new FeeCollectionInstallmentDto(
+                    Guid.Empty,
+                    h.FeeTypeId,
+                    "Full year",
+                    default,
+                    default,
+                    h.TotalAmount,
+                    h.PaidAmount,
+                    h.DueAmount,
+                    FeeAllocationHelper.StatusForHead(h.TotalAmount, h.PaidAmount));
+
+                return new FeeCollectionHeadDto(
+                    h.FeeTypeId,
+                    meta?.FeeTypeName ?? string.Empty,
+                    FeeLabelHelper.FrequencyLabel((FeeFrequency)(meta?.Frequency ?? 0)),
+                    FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)(meta?.AmountBasis ?? 0)),
+                    h.TotalAmount,
+                    h.PaidAmount,
+                    h.DueAmount,
+                    FeeAllocationHelper.StatusForHead(h.TotalAmount, h.PaidAmount),
+                    new[] { legacyInstallment });
+            })
+            .ToList();
+
+        decimal total = headAmounts.Sum(h => h.Amount);
+        return (heads, total, paid);
     }
 
     private static FeeCollectionStudentListItemDto MapListItem(FeeCollectionStudentRow r)

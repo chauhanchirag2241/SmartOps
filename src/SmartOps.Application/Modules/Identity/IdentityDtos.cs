@@ -104,6 +104,31 @@ public sealed class RoleMenuPermissionDto
     public bool CanExport { get; set; }
 }
 
+public sealed class RoleDashboardWidgetPermissionDto
+{
+    public Guid WidgetId { get; set; }
+
+    public string WidgetCode { get; set; } = string.Empty;
+
+    public string WidgetName { get; set; } = string.Empty;
+
+    public string Category { get; set; } = string.Empty;
+
+    public string RequiredMenuCode { get; set; } = string.Empty;
+
+    public int DisplayOrder { get; set; }
+
+    public string DefaultSize { get; set; } = "stat";
+
+    public bool CanView { get; set; }
+}
+
+public sealed class UpdateRoleDashboardWidgetPermissionsDto
+{
+    public IReadOnlyList<RoleDashboardWidgetPermissionDto> Permissions { get; set; } =
+        Array.Empty<RoleDashboardWidgetPermissionDto>();
+}
+
 public sealed class UpdateRoleMenuPermissionsDto
 {
     public IReadOnlyList<RoleMenuPermissionDto> Permissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
@@ -125,6 +150,9 @@ public sealed class RoleDto
     public string? Description { get; set; }
 
     public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
+
+    public IReadOnlyList<RoleDashboardWidgetPermissionDto> DashboardWidgetPermissions { get; set; } =
+        Array.Empty<RoleDashboardWidgetPermissionDto>();
 }
 
 public sealed class CreateRoleDto
@@ -136,6 +164,9 @@ public sealed class CreateRoleDto
     public string? Description { get; set; }
 
     public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
+
+    public IReadOnlyList<RoleDashboardWidgetPermissionDto> DashboardWidgetPermissions { get; set; } =
+        Array.Empty<RoleDashboardWidgetPermissionDto>();
 }
 
 public sealed class UpdateRoleDto

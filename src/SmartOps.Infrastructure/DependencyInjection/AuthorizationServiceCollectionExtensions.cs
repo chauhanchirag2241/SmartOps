@@ -21,6 +21,8 @@ public static class AuthorizationServiceCollectionExtensions
         services.AddScoped<IUserScopeService, UserScopeService>();
         services.AddScoped<IUserScopeContext, UserScopeContext>();
         services.AddScoped<IResourceAuthorizationService, ResourceAuthorizationService>();
+        services.AddScoped<IDashboardWidgetRepository, DashboardWidgetRepository>();
+        services.AddScoped<IDashboardWidgetPermissionService, DashboardWidgetPermissionService>();
         services.AddScoped<IDashboardService, DashboardService>();
 
         return services;

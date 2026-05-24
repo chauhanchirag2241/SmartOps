@@ -9,11 +9,19 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
 {
     private readonly IClassFeeAmountRepository _repo;
     private readonly IFeeStructureRepository _feeStructureRepo;
+    private readonly IClassFeeInstallmentService _installmentService;
+    private readonly IClassFeeInstallmentRepository _installmentRepo;
 
-    public ClassFeeAmountService(IClassFeeAmountRepository repo, IFeeStructureRepository feeStructureRepo)
+    public ClassFeeAmountService(
+        IClassFeeAmountRepository repo,
+        IFeeStructureRepository feeStructureRepo,
+        IClassFeeInstallmentService installmentService,
+        IClassFeeInstallmentRepository installmentRepo)
     {
         _repo = repo;
         _feeStructureRepo = feeStructureRepo;
+        _installmentService = installmentService;
+        _installmentRepo = installmentRepo;
     }
 
     public async Task<Result<IList<ClassFeeSummaryDto>>> GetClassSummariesAsync(
@@ -74,11 +82,12 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 r.FeeTypeName,
                 FeeLabelHelper.CategoryLabel((FeeCategory)r.Category),
                 FeeLabelHelper.FrequencyLabel((FeeFrequency)r.Frequency),
+                FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)r.AmountBasis),
                 r.Amount))
             .ToList();
 
-        bool classHasSavedAmounts = await _repo
-            .ClassHasSavedAmountsAsync(classId, versionId, ct)
+        bool classHasConfiguredAmounts = await _repo
+            .ClassHasConfiguredAmountsAsync(classId, versionId, ct)
             .ConfigureAwait(false);
 
         return Result<ClassFeeAmountsResponseDto>.Success(new ClassFeeAmountsResponseDto(
@@ -88,7 +97,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             versionId,
             version.VersionNumber,
             FeeLabelHelper.VersionStatusLabel(version.Status),
-            IsClassAmountsEditable(version.Status, classHasSavedAmounts),
+            IsClassAmountsEditable(version.Status, classHasConfiguredAmounts),
             items.Sum(i => i.Amount),
             items));
     }
@@ -109,14 +118,14 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee structure version not found.");
         }
 
-        bool classHasSavedAmounts = await _repo
-            .ClassHasSavedAmountsAsync(classId, request.FeeStructureVersionId, ct)
+        bool classHasConfiguredAmounts = await _repo
+            .ClassHasConfiguredAmountsAsync(classId, request.FeeStructureVersionId, ct)
             .ConfigureAwait(false);
-        if (!IsClassAmountsEditable(version.Status, classHasSavedAmounts))
+        if (!IsClassAmountsEditable(version.Status, classHasConfiguredAmounts))
         {
             return Result<ClassFeeAmountsResponseDto>.Failure(
                 version.Status == FeeStructureVersionStatus.Active
-                    ? "This class already has fee amounts on the active structure. Create a new draft version from Fee Structure to change them."
+                    ? "This class already has fee amounts configured on the active structure. Create a new draft version from Fee Structure to change them."
                     : "This fee structure version cannot be edited.");
         }
 
@@ -125,7 +134,46 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             .ToList();
 
         await _repo.UpsertAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, amounts, ct).ConfigureAwait(false);
+        await _installmentService
+            .RegenerateForClassVersionAsync(classId, request.FeeStructureVersionId, request.AcademicYearId, ct)
+            .ConfigureAwait(false);
         return await GetClassAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<Result<IList<ClassFeeInstallmentPreviewDto>>> GetInstallmentPreviewAsync(
+        Guid classId,
+        Guid academicYearId,
+        Guid? feeStructureVersionId,
+        CancellationToken ct = default)
+    {
+        if (classId == Guid.Empty || academicYearId == Guid.Empty)
+        {
+            return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Class and academic year are required.");
+        }
+
+        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        if (versionId == Guid.Empty)
+        {
+            return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Fee structure version not found.");
+        }
+
+        IList<ClassFeeInstallmentRow> rows = await _installmentRepo
+            .GetByClassVersionAsync(classId, versionId, ct)
+            .ConfigureAwait(false);
+        IList<ClassFeeInstallmentPreviewDto> dtos = rows
+            .Select(r => new ClassFeeInstallmentPreviewDto(
+                r.Id,
+                r.FeeTypeId,
+                r.FeeTypeName,
+                FeeLabelHelper.FrequencyLabel((FeeFrequency)r.Frequency),
+                FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)r.AmountBasis),
+                r.PeriodIndex,
+                r.PeriodLabel,
+                r.PeriodStart,
+                r.PeriodEnd,
+                r.Amount))
+            .ToList();
+        return Result<IList<ClassFeeInstallmentPreviewDto>>.Success(dtos);
     }
 
     public async Task<Result<ClassFeeAmountsResponseDto>> GetClassAmountsForAdmissionAsync(
@@ -176,14 +224,14 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         status is FeeStructureVersionStatus.Published or FeeStructureVersionStatus.Active;
 
     /// <summary>
-    /// Draft and Published: full edit. Active: only classes with no saved amounts (e.g. newly added classes).
+    /// Draft and Published: full edit. Active: only classes not yet configured (e.g. newly added classes).
     /// </summary>
-    private static bool IsClassAmountsEditable(FeeStructureVersionStatus status, bool classHasSavedAmounts) =>
+    private static bool IsClassAmountsEditable(FeeStructureVersionStatus status, bool classHasConfiguredAmounts) =>
         status switch
         {
             FeeStructureVersionStatus.Draft => true,
             FeeStructureVersionStatus.Published => true,
-            FeeStructureVersionStatus.Active => !classHasSavedAmounts,
+            FeeStructureVersionStatus.Active => !classHasConfiguredAmounts,
             _ => false
         };
 

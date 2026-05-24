@@ -11,6 +11,19 @@ public record ClassFeeAmountItemDto(
     string FeeTypeName,
     string CategoryLabel,
     string FrequencyLabel,
+    string AmountBasisLabel,
+    decimal Amount);
+
+public record ClassFeeInstallmentPreviewDto(
+    Guid InstallmentId,
+    Guid FeeTypeId,
+    string FeeTypeName,
+    string FrequencyLabel,
+    string AmountBasisLabel,
+    int PeriodIndex,
+    string PeriodLabel,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
     decimal Amount);
 
 public record ClassFeeAmountsResponseDto(

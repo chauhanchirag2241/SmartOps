@@ -78,6 +78,7 @@ public sealed class FeeTypeListRow
     public string Name { get; init; } = string.Empty;
     public FeeCategory Category { get; init; }
     public FeeFrequency Frequency { get; init; }
+    public FeeAmountBasis AmountBasis { get; init; }
     public bool IsMandatory { get; init; }
     public bool IsRefundable { get; init; }
     public bool IsActive { get; init; }

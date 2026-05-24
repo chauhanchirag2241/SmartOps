@@ -2,10 +2,13 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Infrastructure.Persistence.Context;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Enums;
+using SmartOps.Infrastructure.Persistence.Context;
 using System.Data;
+using System.Globalization;
 
 namespace SmartOps.Infrastructure.Modules.Authorization.Services;
 
@@ -14,24 +17,194 @@ public sealed class DashboardService : IDashboardService
     private readonly DapperContext _context;
     private readonly IUserScopeContext _scope;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDashboardWidgetPermissionService _widgetPermissions;
+    private readonly ITenantProvider _tenantProvider;
 
-    public DashboardService(DapperContext context, IUserScopeContext scope, ICurrentUserService currentUser)
+    public DashboardService(
+        DapperContext context,
+        IUserScopeContext scope,
+        ICurrentUserService currentUser,
+        IDashboardWidgetPermissionService widgetPermissions,
+        ITenantProvider tenantProvider)
     {
         _context = context;
         _scope = scope;
         _currentUser = currentUser;
+        _widgetPermissions = widgetPermissions;
+        _tenantProvider = tenantProvider;
     }
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
-        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        DashboardResponseDto dashboard = await GetDashboardAsync(null, cancellationToken).ConfigureAwait(false);
+        DashboardSummaryDto? summary = dashboard.Summary;
+        if (summary is not null)
+        {
+            return summary;
+        }
 
+        return new DashboardSummaryDto
+        {
+            ScopeLabel = dashboard.ScopeLabel,
+            AverageAttendancePercent = dashboard.AttendanceToday?.PresentPercent ?? 0
+        };
+    }
+
+    public async Task<DashboardLayoutDto> GetLayoutAsync(CancellationToken cancellationToken = default)
+    {
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<DashboardWidgetLayoutItemDto> widgets = await _widgetPermissions
+            .GetVisibleWidgetsAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        (string? academicYearLabel, string? schoolName) = await LoadContextLabelsAsync(cancellationToken).ConfigureAwait(false);
+
+        return new DashboardLayoutDto
+        {
+            ScopeLabel = BuildScopeLabel(),
+            AcademicYearLabel = academicYearLabel,
+            SchoolName = schoolName,
+            Widgets = widgets
+        };
+    }
+
+    public async Task<DashboardResponseDto> GetDashboardAsync(
+        DashboardQueryDto? query = null,
+        CancellationToken cancellationToken = default)
+    {
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<DashboardWidgetLayoutItemDto> widgets = await _widgetPermissions
+            .GetVisibleWidgetsAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        HashSet<string> visible = widgets.Select(w => w.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
         string schema = _context.OperationalSchema;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        bool hasAttendanceWidgets = HasAny(visible, DashboardWidgetCodes.AttendanceDetail, DashboardWidgetCodes.AttendanceRate);
+        DashboardAttendanceDateRange attendanceRange = DashboardAttendanceFilter.Resolve(
+            query?.AttendancePreset,
+            query?.AttendanceFrom,
+            query?.AttendanceTo);
+
+        DashboardSummaryDto? summary = null;
+        if (HasAny(visible,
+                DashboardWidgetCodes.StudentsStat,
+                DashboardWidgetCodes.TeachersStat,
+                DashboardWidgetCodes.ClassesStat,
+                DashboardWidgetCodes.AttendanceRate))
+        {
+            summary = await LoadSummaryAsync(
+                connection,
+                schema,
+                hasAttendanceWidgets ? attendanceRange : null,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        AttendanceTodayDto? attendanceToday = null;
+        if (hasAttendanceWidgets)
+        {
+            attendanceToday = await LoadAttendanceAsync(connection, schema, attendanceRange, cancellationToken)
+                .ConfigureAwait(false);
+            if (summary is not null && attendanceToday is not null)
+            {
+                summary = new DashboardSummaryDto
+                {
+                    TotalStudents = summary.TotalStudents,
+                    TotalTeachers = summary.TotalTeachers,
+                    TotalClasses = summary.TotalClasses,
+                    AttendanceMarkedToday = summary.AttendanceMarkedToday,
+                    AverageAttendancePercent = attendanceToday.PresentPercent,
+                    ScopeLabel = summary.ScopeLabel
+                };
+            }
+        }
+
+        FeesDashboardDto? fees = null;
+        if (HasAny(visible,
+                DashboardWidgetCodes.FeesCollected,
+                DashboardWidgetCodes.FeesPending,
+                DashboardWidgetCodes.FeesByClass))
+        {
+            fees = await LoadFeesAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        SalaryDashboardDto? salary = null;
+        if (HasAny(visible, DashboardWidgetCodes.SalaryDisbursed, DashboardWidgetCodes.SalaryStatus))
+        {
+            salary = await LoadSalaryAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        IReadOnlyList<RecentStudentDto>? recentStudents = null;
+        if (visible.Contains(DashboardWidgetCodes.RecentStudents))
+        {
+            recentStudents = await LoadRecentStudentsAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        IReadOnlyList<DashboardTeacherDto>? teachers = null;
+        if (visible.Contains(DashboardWidgetCodes.TeachersList))
+        {
+            teachers = await LoadTeachersAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        IReadOnlyList<HomeworkDueDto>? homework = null;
+        if (visible.Contains(DashboardWidgetCodes.HomeworkDue))
+        {
+            homework = await LoadHomeworkDueAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        IReadOnlyList<ClassOverviewDto>? classesOverview = null;
+        if (visible.Contains(DashboardWidgetCodes.ClassesOverview))
+        {
+            classesOverview = await LoadClassesOverviewAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+        }
+
+        int totalSubjects = 0;
+        if (visible.Contains(DashboardWidgetCodes.SubjectsStat))
+        {
+            totalSubjects = await CountSubjectsAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+            if (summary is not null)
+            {
+                // Subjects count exposed via TotalSubjects on response
+            }
+        }
+
+        DashboardAlertsDto? alerts = null;
+        if (visible.Contains(DashboardWidgetCodes.AlertsActions))
+        {
+            alerts = BuildAlerts(visible, fees, attendanceToday, homework, salary);
+        }
+
+        return new DashboardResponseDto
+        {
+            ScopeLabel = BuildScopeLabel(),
+            VisibleWidgets = widgets.Select(w => w.Code).ToList(),
+            Summary = summary,
+            AttendanceToday = attendanceToday,
+            Fees = fees,
+            Salary = salary,
+            RecentStudents = recentStudents,
+            Teachers = teachers,
+            HomeworkDue = homework,
+            ClassesOverview = classesOverview,
+            Alerts = alerts,
+            TotalSubjects = totalSubjects
+        };
+    }
+
+    private async Task<DashboardSummaryDto> LoadSummaryAsync(
+        IDbConnection connection,
+        string schema,
+        DashboardAttendanceDateRange? attendanceRange,
+        CancellationToken cancellationToken)
+    {
         string studentFilter = BuildStudentExistsFilter(schema, "s");
         string classFilter = BuildClassFilter(schema, "c");
         string teacherFilter = BuildTeacherFilter(schema, "t");
+
+        string attendanceDateFilter = attendanceRange is null
+            ? "a.attendancedate = CURRENT_DATE"
+            : "a.attendancedate >= @AttendanceFromDate AND a.attendancedate <= @AttendanceToDate";
 
         string sql = $"""
 SELECT
@@ -39,23 +212,15 @@ SELECT
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableTeachers} t WHERE t.isactive = true {teacherFilter}) AS TotalTeachers,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableClasses} c WHERE c.isactive = true {classFilter}) AS TotalClasses,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableAttendance} a
-        WHERE a.attendancedate = CURRENT_DATE AND a.isactive = true
+        WHERE {attendanceDateFilter} AND a.isactive = true
         {BuildAttendanceFilter(schema, "a")}) AS AttendanceMarkedToday
 """;
 
-        var row = await connection.QuerySingleAsync<DashboardRow>(
-            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        string scopeLabel = _scope.ScopeType switch
-        {
-            DataScopeType.Global => "All school data",
-            DataScopeType.Class => "Your assigned classes",
-            DataScopeType.Department => "Your department",
-            DataScopeType.LinkedStudents => "Your children",
-            DataScopeType.Self => "Your profile",
-            DataScopeType.ModuleOnly => "Accounts module",
-            _ => "Limited access"
-        };
+        DashboardRow row = await connection.QuerySingleAsync<DashboardRow>(
+            new CommandDefinition(
+                sql,
+                BuildParameters(attendanceRange),
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return new DashboardSummaryDto
         {
@@ -64,13 +229,484 @@ SELECT
             TotalClasses = row.TotalClasses,
             AttendanceMarkedToday = row.AttendanceMarkedToday,
             AverageAttendancePercent = 0,
-            ScopeLabel = scopeLabel
+            ScopeLabel = BuildScopeLabel()
         };
+    }
+
+    private async Task<AttendanceTodayDto?> LoadAttendanceAsync(
+        IDbConnection connection,
+        string schema,
+        DashboardAttendanceDateRange attendanceRange,
+        CancellationToken cancellationToken)
+    {
+        string filter = BuildAttendanceFilter(schema, "a");
+        string sql = $"""
+SELECT
+    COUNT(*) FILTER (WHERE a.status = 1) AS Present,
+    COUNT(*) FILTER (WHERE a.status = 2) AS Absent,
+    COUNT(*) FILTER (WHERE a.status = 3) AS Leave,
+    COUNT(*) FILTER (WHERE a.status = 4) AS Late
+FROM {schema}.{DatabaseConfig.TableAttendance} a
+WHERE a.attendancedate >= @AttendanceFromDate
+  AND a.attendancedate <= @AttendanceToDate
+  AND a.isactive = true {filter}
+""";
+
+        AttendanceRow row = await connection.QuerySingleAsync<AttendanceRow>(
+            new CommandDefinition(
+                sql,
+                BuildParameters(attendanceRange),
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        int total = row.Present + row.Absent + row.Leave + row.Late;
+        double percent = total > 0 ? Math.Round(row.Present * 100.0 / total, 1) : 0;
+
+        return new AttendanceTodayDto
+        {
+            Present = row.Present,
+            Absent = row.Absent,
+            Leave = row.Leave,
+            Late = row.Late,
+            PresentPercent = percent,
+            DateLabel = FormatAttendanceDateLabel(attendanceRange.From, attendanceRange.To),
+            PeriodLabel = attendanceRange.PeriodLabel,
+            FilterPreset = attendanceRange.Preset,
+            FromDate = attendanceRange.From,
+            ToDate = attendanceRange.To
+        };
+    }
+
+    private static string FormatAttendanceDateLabel(DateOnly from, DateOnly to) =>
+        from == to
+            ? from.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)
+            : $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
+
+    private async Task<FeesDashboardDto?> LoadFeesAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        bool schoolWide = UseSchoolWideFinance();
+        string studentScope = schoolWide ? string.Empty : BuildStudentExistsFilter(schema, "s");
+        string classScope = schoolWide ? string.Empty : BuildClassFilter(schema, "c");
+
+        string collectedSql = $"""
+SELECT COALESCE(SUM(fp.amount), 0)
+FROM {schema}.{DatabaseConfig.TableFeePayments} fp
+INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = fp.studentid AND s.isactive = true
+WHERE fp.isactive = true
+  AND fp.paymentdate >= date_trunc('month', CURRENT_DATE)::date
+  {studentScope}
+""";
+
+        decimal collected = await connection.ExecuteScalarAsync<decimal>(
+            new CommandDefinition(collectedSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        decimal pending = Math.Max(0, 0m);
+        if (!schoolWide)
+        {
+            string pendingSql = $"""
+SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
+    SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
+    INNER JOIN {schema}.{DatabaseConfig.TableStudents} s2 ON s2.id = fp.studentid AND s2.isactive = true
+    WHERE fp.isactive = true {studentScope.Replace("s.", "s2.", StringComparison.Ordinal)}
+), 0))
+FROM {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = cfa.classid AND c.isactive = true
+INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = cfa.classid AND sa.isactive = true
+INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = sa.studentid AND s.isactive = true
+WHERE cfa.isactive = true {classScope} {studentScope}
+""";
+            pending = await connection.ExecuteScalarAsync<decimal>(
+                new CommandDefinition(pendingSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+        else
+        {
+            string pendingSql = $"""
+SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
+    SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
+    WHERE fp.isactive = true
+), 0))
+FROM {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+WHERE cfa.isactive = true
+""";
+            pending = await connection.ExecuteScalarAsync<decimal>(
+                new CommandDefinition(pendingSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        string byClassSql = $"""
+SELECT
+    c.classname AS ClassName,
+    CASE WHEN SUM(cfa.amount) > 0 THEN
+        LEAST(100, GREATEST(0, ROUND(
+            COALESCE((
+                SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
+                INNER JOIN {schema}.{DatabaseConfig.TableStudents} st ON st.id = fp.studentid
+                INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st.id AND sa2.classid = c.id AND sa2.isactive = true
+                WHERE fp.isactive = true AND fp.paymentdate >= date_trunc('month', CURRENT_DATE)::date
+            ), 0) * 100.0 / NULLIF(SUM(cfa.amount), 0)
+        )::int))
+    ELSE 0 END AS PercentCollected
+FROM {schema}.{DatabaseConfig.TableClasses} c
+INNER JOIN {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa ON cfa.classid = c.id AND cfa.isactive = true
+WHERE c.isactive = true {classScope}
+GROUP BY c.id, c.classname, c.section
+ORDER BY c.classname, c.section
+LIMIT 8
+""";
+
+        IEnumerable<FeesByClassDto> byClass = await connection.QueryAsync<FeesByClassDto>(
+            new CommandDefinition(byClassSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return new FeesDashboardDto
+        {
+            CollectedAmount = collected,
+            PendingAmount = pending,
+            OverdueCount = pending > 0 ? 1 : 0,
+            ByClass = byClass.ToList()
+        };
+    }
+
+    private async Task<SalaryDashboardDto?> LoadSalaryAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        DateTime now = DateTime.UtcNow;
+        string sql = $"""
+SELECT
+    pr.totalnet AS TotalNet,
+    pr.status AS RunStatus,
+    pr.employeecount AS EmployeeCount
+FROM {schema}.{DatabaseConfig.TablePayrollRuns} pr
+WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pr.isactive = true
+ORDER BY pr.processedon DESC NULLS LAST
+LIMIT 1
+""";
+
+        PayrollRunRow? run = await connection.QuerySingleOrDefaultAsync<PayrollRunRow>(
+            new CommandDefinition(sql, new { Year = now.Year, Month = now.Month }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        string entriesSql = $"""
+SELECT
+    COUNT(*) FILTER (WHERE pe.status >= 1) AS PaidCount,
+    COUNT(*) FILTER (WHERE pe.status < 1) AS PendingCount,
+    COALESCE(SUM(pe.netsalary) FILTER (WHERE pe.status >= 1), 0) AS PaidAmount,
+    COALESCE(SUM(pe.netsalary) FILTER (WHERE pe.status < 1), 0) AS PendingAmount
+FROM {schema}.{DatabaseConfig.TablePayrollEntries} pe
+INNER JOIN {schema}.{DatabaseConfig.TablePayrollRuns} pr ON pr.id = pe.payrollrunid AND pr.isactive = true
+WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pe.isactive = true
+""";
+
+        PayrollStatsRow stats = await connection.QuerySingleOrDefaultAsync<PayrollStatsRow>(
+            new CommandDefinition(entriesSql, new { Year = now.Year, Month = now.Month }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)
+            ?? new PayrollStatsRow();
+
+        decimal disbursed = stats.PaidAmount > 0 ? stats.PaidAmount : run?.TotalNet ?? 0;
+        string period = now.ToString("MMM yyyy", CultureInfo.InvariantCulture);
+
+        return new SalaryDashboardDto
+        {
+            DisbursedAmount = disbursed,
+            PendingAmount = stats.PendingAmount,
+            PaidCount = stats.PaidCount,
+            PendingCount = stats.PendingCount,
+            PeriodLabel = period,
+            Categories =
+            [
+                new SalaryCategoryDto
+                {
+                    Label = "Payroll",
+                    SubLabel = $"{stats.PaidCount + stats.PendingCount} employees",
+                    Amount = disbursed,
+                    IsPaid = stats.PendingCount == 0
+                }
+            ]
+        };
+    }
+
+    private async Task<IReadOnlyList<RecentStudentDto>> LoadRecentStudentsAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        string filter = BuildStudentExistsFilter(schema, "s");
+        string sql = $"""
+SELECT
+    s.id AS Id,
+    TRIM(CONCAT(s.firstname, ' ', s.lastname)) AS Name,
+    c.classname AS ClassName,
+    c.section AS Section,
+    s.createdon AS CreatedOn
+FROM {schema}.{DatabaseConfig.TableStudents} s
+LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
+    AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
+WHERE s.isactive = true {filter}
+ORDER BY s.createdon DESC
+LIMIT 5
+""";
+
+        IEnumerable<RecentStudentRow> rows = await connection.QueryAsync<RecentStudentRow>(
+            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.Select(r => new RecentStudentDto
+        {
+            Id = r.Id,
+            Initials = BuildInitials(r.Name),
+            Name = r.Name,
+            Detail = $"Class {r.ClassName} · Sec {r.Section}",
+            Badge = "New",
+            BadgeTone = "good"
+        }).ToList();
+    }
+
+    private async Task<IReadOnlyList<DashboardTeacherDto>> LoadTeachersAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        string filter = BuildTeacherFilter(schema, "t");
+        string sql = $"""
+SELECT
+    TRIM(CONCAT(t.firstname, ' ', t.lastname)) AS Name
+FROM {schema}.{DatabaseConfig.TableTeachers} t
+WHERE t.isactive = true {filter}
+ORDER BY t.firstname, t.lastname
+LIMIT 5
+""";
+
+        IEnumerable<string> names = await connection.QueryAsync<string>(
+            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return names.Select(n => new DashboardTeacherDto
+        {
+            Initials = BuildInitials(n),
+            Name = n,
+            Detail = "Staff",
+            Status = "Active",
+            StatusTone = "good"
+        }).ToList();
+    }
+
+    private async Task<IReadOnlyList<HomeworkDueDto>> LoadHomeworkDueAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        string classFilter = !_scope.ScopesEnabled || _scope.IsGlobalScope
+            ? string.Empty
+            : _scope.AllowedClassIds.Count == 0
+                ? " AND 1 = 0"
+                : " AND h.classid = ANY(@ScopeClassIds)";
+        string sql = $"""
+SELECT
+    h.title AS Title,
+    c.classname AS ClassName,
+    h.duedate AS DueDate
+FROM {schema}.{DatabaseConfig.TableHomework} h
+INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
+WHERE h.isactive = true
+  AND h.duedate >= CURRENT_DATE
+  AND h.duedate <= CURRENT_DATE + 3
+  {classFilter}
+ORDER BY h.duedate ASC
+LIMIT 5
+""";
+
+        IEnumerable<HomeworkRow> rows = await connection.QueryAsync<HomeworkRow>(
+            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.Select(r =>
+        {
+            int days = (r.DueDate.Date - DateTime.UtcNow.Date).Days;
+            string label = days <= 0 ? "Today" : days == 1 ? "Tomorrow" : r.DueDate.ToString("dd MMM", CultureInfo.InvariantCulture);
+            string tone = days <= 0 ? "alert" : "warn";
+            return new HomeworkDueDto
+            {
+                Title = r.Title,
+                Subtitle = $"Class {r.ClassName}",
+                DueLabel = label,
+                DueTone = tone
+            };
+        }).ToList();
+    }
+
+    private async Task<IReadOnlyList<ClassOverviewDto>> LoadClassesOverviewAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        string classFilter = BuildClassFilter(schema, "c");
+        string sql = $"""
+SELECT
+    c.classname AS ClassName,
+    c.section AS Section,
+    COUNT(DISTINCT sa.studentid) AS StudentCount
+FROM {schema}.{DatabaseConfig.TableClasses} c
+LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id AND sa.isactive = true
+    AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+WHERE c.isactive = true {classFilter}
+GROUP BY c.id, c.classname, c.section
+ORDER BY c.classname, c.section
+LIMIT 6
+""";
+
+        IEnumerable<ClassOverviewRow> rows = await connection.QueryAsync<ClassOverviewRow>(
+            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.Select(r => new ClassOverviewDto
+        {
+            ClassName = r.ClassName,
+            SectionLabel = $"Sec {r.Section}",
+            StudentCount = r.StudentCount
+        }).ToList();
+    }
+
+    private async Task<int> CountSubjectsAsync(
+        IDbConnection connection,
+        string schema,
+        CancellationToken cancellationToken)
+    {
+        string sql = $"""
+SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableSubjects} sub
+WHERE sub.isactive = true
+""";
+        return await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    private async Task<(string? AcademicYear, string? SchoolName)> LoadContextLabelsAsync(CancellationToken cancellationToken)
+    {
+        string schema = _context.OperationalSchema;
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        string? yearLabel = null;
+        if (_scope.ActiveAcademicYearId.HasValue)
+        {
+            yearLabel = await connection.QuerySingleOrDefaultAsync<string>(
+                new CommandDefinition(
+                    $"""
+SELECT title FROM {schema}.{DatabaseConfig.TableAcademicYears}
+WHERE id = @Id AND isactive = true LIMIT 1
+""",
+                    new { Id = _scope.ActiveAcademicYearId },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        string? schoolName = null;
+        string? schoolId = _tenantProvider.GetCurrentSchoolId();
+        if (!string.IsNullOrWhiteSpace(schoolId) && Guid.TryParse(schoolId, out Guid sid))
+        {
+            schoolName = await connection.QuerySingleOrDefaultAsync<string>(
+                new CommandDefinition(
+                    $"""
+SELECT name FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+WHERE id = @Id AND isactive = true LIMIT 1
+""",
+                    new { Id = sid },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        return (yearLabel, schoolName);
+    }
+
+    private static DashboardAlertsDto BuildAlerts(
+        HashSet<string> visible,
+        FeesDashboardDto? fees,
+        AttendanceTodayDto? attendance,
+        IReadOnlyList<HomeworkDueDto>? homework,
+        SalaryDashboardDto? salary)
+    {
+        List<DashboardAlertItemDto> items = new();
+
+        if (visible.Contains(DashboardWidgetCodes.FeesPending) && fees is { PendingAmount: > 0 })
+        {
+            items.Add(new DashboardAlertItemDto
+            {
+                Icon = "cash",
+                Title = "Fees pending",
+                Subtitle = $"₹{fees.PendingAmount:N0} outstanding",
+                Tone = "danger"
+            });
+        }
+
+        if (visible.Contains(DashboardWidgetCodes.AttendanceDetail) && attendance is { Absent: > 0 })
+        {
+            string period = string.IsNullOrWhiteSpace(attendance.PeriodLabel) ? "selected period" : attendance.PeriodLabel.ToLowerInvariant();
+            items.Add(new DashboardAlertItemDto
+            {
+                Icon = "user-x",
+                Title = $"{attendance.Absent} absent",
+                Subtitle = $"Review attendance · {period}",
+                Tone = "warning"
+            });
+        }
+
+        if (visible.Contains(DashboardWidgetCodes.HomeworkDue) && homework is { Count: > 0 })
+        {
+            items.Add(new DashboardAlertItemDto
+            {
+                Icon = "pencil",
+                Title = $"{homework.Count} homework due soon",
+                Subtitle = "Next 3 days",
+                Tone = "success"
+            });
+        }
+
+        if (visible.Contains(DashboardWidgetCodes.SalaryStatus) && salary is { PendingCount: > 0 })
+        {
+            items.Add(new DashboardAlertItemDto
+            {
+                Icon = "report-money",
+                Title = $"{salary.PendingCount} salary pending",
+                Subtitle = salary.PeriodLabel,
+                Tone = "danger"
+            });
+        }
+
+        return new DashboardAlertsDto { Items = items };
+    }
+
+    private string BuildScopeLabel() => _scope.ScopeType switch
+    {
+        DataScopeType.Global => "All school data",
+        DataScopeType.Class => "Your assigned classes",
+        DataScopeType.Department => "Your department",
+        DataScopeType.LinkedStudents => "Your children",
+        DataScopeType.Self => "Your profile",
+        DataScopeType.ModuleOnly => "Accounts module",
+        _ => "Limited access"
+    };
+
+    private bool UseSchoolWideFinance() =>
+        _scope.ScopeType == DataScopeType.ModuleOnly || _scope.IsGlobalScope;
+
+    private static bool HasAny(HashSet<string> visible, params string[] codes) =>
+        codes.Any(visible.Contains);
+
+    private static string BuildInitials(string name)
+    {
+        string[] parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "?";
+        }
+
+        if (parts.Length == 1)
+        {
+            return parts[0].Length >= 2
+                ? parts[0][..2].ToUpperInvariant()
+                : parts[0].ToUpperInvariant();
+        }
+
+        return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[^1][0])}";
     }
 
     private string BuildStudentExistsFilter(string schema, string alias)
     {
-        if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
+        if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
         {
             return string.Empty;
         }
@@ -99,7 +735,7 @@ SELECT
 
     private string BuildClassFilter(string schema, string alias)
     {
-        if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
+        if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
         {
             return string.Empty;
         }
@@ -129,7 +765,12 @@ SELECT
             return $" AND {alias}.departmentid = ANY(@ScopeDepartmentIds)";
         }
 
-        return " AND 1 = 0";
+        if (_scope.ScopeType == DataScopeType.Class)
+        {
+            return " AND 1 = 0";
+        }
+
+        return string.Empty;
     }
 
     private string BuildAttendanceFilter(string schema, string alias)
@@ -137,6 +778,13 @@ SELECT
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
         {
             return string.Empty;
+        }
+
+        if (_scope.ScopeType is DataScopeType.Self or DataScopeType.LinkedStudents)
+        {
+            return _scope.AllowedStudentIds.Count > 0
+                ? $" AND {alias}.studentid = ANY(@ScopeStudentIds)"
+                : " AND 1 = 0";
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -147,13 +795,15 @@ SELECT
         return $" AND {alias}.classid = ANY(@ScopeClassIds)";
     }
 
-    private object BuildParameters() => new
+    private object BuildParameters(DashboardAttendanceDateRange? attendanceRange = null) => new
     {
         ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
         ScopeClassIds = _scope.AllowedClassIds.ToArray(),
         ScopeTeacherIds = _scope.AllowedTeacherIds.ToArray(),
         ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray(),
-        ScopeAcademicYearId = _scope.ActiveAcademicYearId
+        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+        AttendanceFromDate = attendanceRange?.From,
+        AttendanceToDate = attendanceRange?.To
     };
 
     private sealed class DashboardRow
@@ -165,5 +815,67 @@ SELECT
         public int TotalClasses { get; init; }
 
         public int AttendanceMarkedToday { get; init; }
+    }
+
+    private sealed class AttendanceRow
+    {
+        public int Present { get; init; }
+
+        public int Absent { get; init; }
+
+        public int Leave { get; init; }
+
+        public int Late { get; init; }
+    }
+
+    private sealed class PayrollRunRow
+    {
+        public decimal TotalNet { get; init; }
+
+        public int RunStatus { get; init; }
+
+        public int EmployeeCount { get; init; }
+    }
+
+    private sealed class PayrollStatsRow
+    {
+        public int PaidCount { get; init; }
+
+        public int PendingCount { get; init; }
+
+        public decimal PaidAmount { get; init; }
+
+        public decimal PendingAmount { get; init; }
+    }
+
+    private sealed class RecentStudentRow
+    {
+        public Guid Id { get; init; }
+
+        public string Name { get; init; } = string.Empty;
+
+        public string ClassName { get; init; } = string.Empty;
+
+        public int Section { get; init; }
+
+        public DateTime CreatedOn { get; init; }
+    }
+
+    private sealed class HomeworkRow
+    {
+        public string Title { get; init; } = string.Empty;
+
+        public string ClassName { get; init; } = string.Empty;
+
+        public DateTime DueDate { get; init; }
+    }
+
+    private sealed class ClassOverviewRow
+    {
+        public string ClassName { get; init; } = string.Empty;
+
+        public int Section { get; init; }
+
+        public int StudentCount { get; init; }
     }
 }

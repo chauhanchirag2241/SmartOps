@@ -25,4 +25,10 @@ public interface IClassFeeAmountService
         Guid classId,
         SaveClassFeeAmountsRequestDto request,
         CancellationToken ct = default);
+
+    Task<Result<IList<ClassFeeInstallmentPreviewDto>>> GetInstallmentPreviewAsync(
+        Guid classId,
+        Guid academicYearId,
+        Guid? feeStructureVersionId,
+        CancellationToken ct = default);
 }

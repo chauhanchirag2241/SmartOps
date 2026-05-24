@@ -155,4 +155,27 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
             }
         }
     }
+
+    public async Task<bool> ClassHasSavedAmountsAsync(
+        Guid classId,
+        Guid feeStructureVersionId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT EXISTS (
+                SELECT 1
+                FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
+                WHERE classid = @ClassId
+                  AND feestructureversionid = @FeeStructureVersionId
+                  AND isactive = true
+            );
+            """;
+        return await connection.ExecuteScalarAsync<bool>(
+            new CommandDefinition(
+                sql,
+                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
 }

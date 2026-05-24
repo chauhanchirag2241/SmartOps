@@ -77,6 +77,10 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 r.Amount))
             .ToList();
 
+        bool classHasSavedAmounts = await _repo
+            .ClassHasSavedAmountsAsync(classId, versionId, ct)
+            .ConfigureAwait(false);
+
         return Result<ClassFeeAmountsResponseDto>.Success(new ClassFeeAmountsResponseDto(
             classId,
             summary?.ClassName ?? "Class",
@@ -84,7 +88,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             versionId,
             version.VersionNumber,
             FeeLabelHelper.VersionStatusLabel(version.Status),
-            version.Status == FeeStructureVersionStatus.Draft,
+            IsClassAmountsEditable(version.Status, classHasSavedAmounts),
             items.Sum(i => i.Amount),
             items));
     }
@@ -105,9 +109,15 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee structure version not found.");
         }
 
-        if (version.Status != FeeStructureVersionStatus.Draft)
+        bool classHasSavedAmounts = await _repo
+            .ClassHasSavedAmountsAsync(classId, request.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        if (!IsClassAmountsEditable(version.Status, classHasSavedAmounts))
         {
-            return Result<ClassFeeAmountsResponseDto>.Failure("Only draft fee structures can be edited.");
+            return Result<ClassFeeAmountsResponseDto>.Failure(
+                version.Status == FeeStructureVersionStatus.Active
+                    ? "This class already has fee amounts on the active structure. Create a new draft version from Fee Structure to change them."
+                    : "This fee structure version cannot be edited.");
         }
 
         IList<(Guid FeeTypeId, decimal Amount)> amounts = request.Amounts
@@ -164,6 +174,18 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
 
     private static bool IsAdmissionFeeStructureStatus(FeeStructureVersionStatus status) =>
         status is FeeStructureVersionStatus.Published or FeeStructureVersionStatus.Active;
+
+    /// <summary>
+    /// Draft and Published: full edit. Active: only classes with no saved amounts (e.g. newly added classes).
+    /// </summary>
+    private static bool IsClassAmountsEditable(FeeStructureVersionStatus status, bool classHasSavedAmounts) =>
+        status switch
+        {
+            FeeStructureVersionStatus.Draft => true,
+            FeeStructureVersionStatus.Published => true,
+            FeeStructureVersionStatus.Active => !classHasSavedAmounts,
+            _ => false
+        };
 
     /// <summary>
     /// When no version is specified (e.g. student admission preview), use active or latest published — never draft.

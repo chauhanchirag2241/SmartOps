@@ -140,12 +140,29 @@ public static class SalaryCalculationHelper
         return basicComponent is null ? 0 : Round(basicComponent.Value);
     }
 
-    private static bool IsBasicAnchor(SalaryVersionComponentEntity component) =>
-        string.Equals(component.ShortCode, "BASIC", StringComparison.OrdinalIgnoreCase)
-        || component.Name.Contains("basic", StringComparison.OrdinalIgnoreCase);
+    private static bool IsBasicAnchor(SalaryVersionComponentEntity component)
+    {
+        if (!string.IsNullOrWhiteSpace(component.ShortCode))
+        {
+            string code = component.ShortCode.Trim();
+            if (code.Equals("BASIC", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("BASE", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        string normalized = NormalizeComponentName(component.Name);
+        return normalized is "basic" or "base" or "basepay" or "basesalary"
+            || normalized.Contains("basic", StringComparison.Ordinal)
+            || normalized.Contains("basepay", StringComparison.Ordinal);
+    }
 
     private static bool IsBasicLineName(string name) =>
-        name.Contains("basic", StringComparison.OrdinalIgnoreCase);
+        IsBasicAnchor(new SalaryVersionComponentEntity { Name = name });
+
+    private static string NormalizeComponentName(string name) =>
+        new string(name.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
 
     private static decimal ResolveAmount(SalaryVersionComponentEntity component, decimal basic, decimal gross) =>
         component.CalculationType switch

@@ -10,6 +10,9 @@ public interface IClassFeeAmountRepository
         Guid feeStructureVersionId,
         IList<(Guid FeeTypeId, decimal Amount)> amounts,
         CancellationToken ct = default);
+
+    /// <summary>True when at least one classfeeamounts row exists for this class and version.</summary>
+    Task<bool> ClassHasSavedAmountsAsync(Guid classId, Guid feeStructureVersionId, CancellationToken ct = default);
 }
 
 public sealed class ClassFeeSummaryRow

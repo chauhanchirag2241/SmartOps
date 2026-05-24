@@ -14,6 +14,7 @@ public interface IFeeCollectionRepository
     Task<IList<StudentClassFeeAmountRow>> GetStudentFeeAmountsAsync(
         Guid classId,
         Guid feeStructureVersionId,
+        Guid studentId,
         CancellationToken ct = default);
 
     Task<decimal> GetStudentPaidTotalAsync(Guid studentId, Guid feeStructureVersionId, CancellationToken ct = default);

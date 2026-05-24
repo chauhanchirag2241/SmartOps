@@ -47,6 +47,18 @@ public interface IClassFeeInstallmentRepository
         Guid classId,
         Guid feeStructureVersionId,
         CancellationToken ct = default);
+
+    Task<bool> IsInstallmentSchemaReadyAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates installment rows for fee types that have class amounts but no installments yet
+    /// (e.g. a new fee head added after the class was first configured).
+    /// </summary>
+    Task EnsureMissingInstallmentsForClassVersionAsync(
+        Guid classId,
+        Guid feeStructureVersionId,
+        Guid academicYearId,
+        CancellationToken ct = default);
 }
 
 public sealed class ClassFeeInstallmentRow

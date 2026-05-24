@@ -28,6 +28,7 @@ public class CreateStudentDto
     public List<CreateStudentAcademicDto> Academics { get; set; } = new();
     public List<CreateStudentPreviousSchoolDto> PreviousSchools { get; set; } = new();
     public List<CreateStudentFeeConfigDto> FeeConfigs { get; set; } = new();
+    public List<CreateStudentFeeHeadSelectionDto> FeeHeadSelections { get; set; } = new();
     public List<StudentCustomFieldDto> CustomFields { get; set; } = new();
 }
 
@@ -72,6 +73,14 @@ public class CreateStudentFeeConfigDto
     public string? DiscountRemarks { get; set; }
     public string? PaymentMode { get; set; }
     public DateOnly? FirstDueDate { get; set; }
+}
+
+public class CreateStudentFeeHeadSelectionDto
+{
+    public Guid FeeTypeId { get; set; }
+    public bool IsIncluded { get; set; } = true;
+    /// <summary>Per-student annual amount override; omit to use class default.</summary>
+    public decimal? CustomAnnualAmount { get; set; }
 }
 
 public static class StudentMappingExtensions
@@ -127,6 +136,15 @@ public static class StudentMappingExtensions
                 PaymentMode = f.PaymentMode,
                 FirstDueDate = f.FirstDueDate
             }).ToList(),
+            FeeHeadAssignments = dto.FeeHeadSelections
+                .Where(s => s.FeeTypeId != Guid.Empty)
+                .Select(s => new StudentFeeHeadAssignmentEntity
+                {
+                    FeeTypeId = s.FeeTypeId,
+                    IsIncluded = s.IsIncluded,
+                    CustomAnnualAmount = s.CustomAnnualAmount is > 0 ? s.CustomAnnualAmount : null
+                })
+                .ToList(),
             CustomFields = dto.CustomFields
                 .Where(cf => !string.IsNullOrWhiteSpace(cf.Label) || !string.IsNullOrWhiteSpace(cf.Value))
                 .Select(cf => new StudentCustomFieldEntity

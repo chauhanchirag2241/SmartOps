@@ -12,7 +12,8 @@ public record ClassFeeAmountItemDto(
     string CategoryLabel,
     string FrequencyLabel,
     string AmountBasisLabel,
-    decimal Amount);
+    decimal Amount,
+    bool IsMandatory);
 
 public record ClassFeeInstallmentPreviewDto(
     Guid InstallmentId,

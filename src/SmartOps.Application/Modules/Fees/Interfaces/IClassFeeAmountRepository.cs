@@ -31,4 +31,5 @@ public sealed class ClassFeeAmountRow
     public int Frequency { get; init; }
     public int AmountBasis { get; init; }
     public decimal Amount { get; init; }
+    public bool IsMandatory { get; init; }
 }

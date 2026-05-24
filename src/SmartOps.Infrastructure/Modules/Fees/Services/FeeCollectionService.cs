@@ -1,5 +1,6 @@
 using SmartOps.Application.Modules.Fees;
 using SmartOps.Application.Modules.Fees.Interfaces;
+using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.Fees;
 
@@ -10,15 +11,21 @@ public sealed class FeeCollectionService : IFeeCollectionService
     private readonly IFeeCollectionRepository _collectionRepo;
     private readonly IFeeStructureRepository _structureRepo;
     private readonly IClassFeeInstallmentRepository _installmentRepo;
+    private readonly IStudentFeeHeadAssignmentRepository _feeHeadAssignmentRepo;
+    private readonly IStudentFeeInstallmentRepository _studentInstallmentRepo;
 
     public FeeCollectionService(
         IFeeCollectionRepository collectionRepo,
         IFeeStructureRepository structureRepo,
-        IClassFeeInstallmentRepository installmentRepo)
+        IClassFeeInstallmentRepository installmentRepo,
+        IStudentFeeHeadAssignmentRepository feeHeadAssignmentRepo,
+        IStudentFeeInstallmentRepository studentInstallmentRepo)
     {
         _collectionRepo = collectionRepo;
         _structureRepo = structureRepo;
         _installmentRepo = installmentRepo;
+        _feeHeadAssignmentRepo = feeHeadAssignmentRepo;
+        _studentInstallmentRepo = studentInstallmentRepo;
     }
 
     public async Task<Result<IList<FeeCollectionStudentListItemDto>>> GetStudentsAsync(
@@ -35,6 +42,11 @@ public sealed class FeeCollectionService : IFeeCollectionService
         }
 
         IList<FeeCollectionStudentRow> rows = await _collectionRepo
+            .GetStudentsAsync(classId, yearId, search, statusFilter, ct)
+            .ConfigureAwait(false);
+
+        await EnsureInstallmentsForStudentRowsAsync(rows, yearId, ct).ConfigureAwait(false);
+        rows = await _collectionRepo
             .GetStudentsAsync(classId, yearId, search, statusFilter, ct)
             .ConfigureAwait(false);
 
@@ -65,7 +77,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<FeeCollectionStudentDetailDto>.Failure("No fee structure version is assigned to this student.");
         }
 
-        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
+        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, yearId, ct).ConfigureAwait(false);
         return Result<FeeCollectionStudentDetailDto>.Success(detail);
     }
 
@@ -101,7 +113,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
         }
 
         FeeCollectionStudentDetailDto currentDetail =
-            await BuildStudentDetailAsync(studentRow, ct).ConfigureAwait(false);
+            await BuildStudentDetailAsync(studentRow, yearId, ct).ConfigureAwait(false);
 
         decimal dueAmount = currentDetail.DueAmount;
         if (dueAmount <= 0)
@@ -138,6 +150,14 @@ public sealed class FeeCollectionService : IFeeCollectionService
             }
 
             decimal selectedDue = FeeAllocationHelper.SumDueOnSelectedInstallments(openInstallments, selectedInstallmentIds);
+            if (selectedDue <= 0 && openInstallments.Sum(i => i.DueAmount) > 0)
+            {
+                selectedInstallmentIds = openInstallments
+                    .Select(i => i.InstallmentId)
+                    .ToHashSet();
+                selectedDue = openInstallments.Sum(i => i.DueAmount);
+            }
+
             if (selectedDue <= 0)
             {
                 return Result<CollectFeeResponseDto>.Failure(
@@ -152,12 +172,19 @@ public sealed class FeeCollectionService : IFeeCollectionService
 
             foreach (Guid installmentId in selectedInstallmentIds)
             {
-                bool valid = await _installmentRepo.InstallmentBelongsToClassVersionAsync(
+                bool validStudent = await _studentInstallmentRepo
+                    .InstallmentBelongsToStudentAsync(
+                        installmentId,
+                        studentRow.StudentId,
+                        studentRow.FeeStructureVersionId,
+                        ct)
+                    .ConfigureAwait(false);
+                bool validClass = !validStudent && await _installmentRepo.InstallmentBelongsToClassVersionAsync(
                     installmentId,
                     studentRow.ClassId,
                     studentRow.FeeStructureVersionId,
                     ct).ConfigureAwait(false);
-                if (!valid)
+                if (!validStudent && !validClass)
                 {
                     return Result<CollectFeeResponseDto>.Failure("Invalid installment selection.");
                 }
@@ -197,7 +224,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return Result<CollectFeeResponseDto>.Failure("Student not found after payment.");
         }
 
-        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, ct).ConfigureAwait(false);
+        FeeCollectionStudentDetailDto detail = await BuildStudentDetailAsync(row, yearId, ct).ConfigureAwait(false);
         return Result<CollectFeeResponseDto>.Success(new CollectFeeResponseDto(paymentId, receiptNo, detail));
     }
 
@@ -207,7 +234,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
         CancellationToken ct)
     {
         IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
-            .GetStudentFeeAmountsAsync(studentRow.ClassId, studentRow.FeeStructureVersionId, ct)
+            .GetStudentFeeAmountsAsync(studentRow.ClassId, studentRow.FeeStructureVersionId, studentRow.StudentId, ct)
             .ConfigureAwait(false);
 
         var heads = feeAmounts
@@ -278,11 +305,47 @@ public sealed class FeeCollectionService : IFeeCollectionService
 
     private async Task<FeeCollectionStudentDetailDto> BuildStudentDetailAsync(
         FeeCollectionStudentRow row,
+        Guid academicYearId,
         CancellationToken ct)
     {
-        IList<ClassFeeInstallmentRow> installmentRows = await _installmentRepo
-            .GetByClassVersionAsync(row.ClassId, row.FeeStructureVersionId, ct)
+        await _installmentRepo
+            .EnsureMissingInstallmentsForClassVersionAsync(
+                row.ClassId,
+                row.FeeStructureVersionId,
+                academicYearId,
+                ct)
             .ConfigureAwait(false);
+
+        await _studentInstallmentRepo
+            .EnsureForStudentAsync(
+                row.StudentId,
+                row.ClassId,
+                row.FeeStructureVersionId,
+                academicYearId,
+                ct)
+            .ConfigureAwait(false);
+
+        IList<ClassFeeInstallmentRow> installmentRows;
+        if (await _studentInstallmentRepo
+                .StudentHasInstallmentsAsync(row.StudentId, row.FeeStructureVersionId, ct)
+                .ConfigureAwait(false))
+        {
+            installmentRows = await _studentInstallmentRepo
+                .GetByStudentVersionAsync(row.StudentId, row.FeeStructureVersionId, ct)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            installmentRows = await _installmentRepo
+                .GetByClassVersionAsync(row.ClassId, row.FeeStructureVersionId, ct)
+                .ConfigureAwait(false);
+            installmentRows = await FilterInstallmentsByStudentSelectionAsync(
+                    row.StudentId,
+                    row.FeeStructureVersionId,
+                    installmentRows,
+                    ct)
+                .ConfigureAwait(false);
+        }
         IList<InstallmentPaidRow> paidRows = await _installmentRepo
             .GetPaidByInstallmentAsync(row.StudentId, row.FeeStructureVersionId, ct)
             .ConfigureAwait(false);
@@ -383,7 +446,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
         CancellationToken ct)
     {
         IList<StudentClassFeeAmountRow> feeAmounts = await _collectionRepo
-            .GetStudentFeeAmountsAsync(row.ClassId, row.FeeStructureVersionId, ct)
+            .GetStudentFeeAmountsAsync(row.ClassId, row.FeeStructureVersionId, row.StudentId, ct)
             .ConfigureAwait(false);
 
         decimal paid = await _collectionRepo.GetStudentPaidTotalAsync(row.StudentId, row.FeeStructureVersionId, ct).ConfigureAwait(false);
@@ -438,5 +501,46 @@ public sealed class FeeCollectionService : IFeeCollectionService
             r.PaidAmount,
             due,
             FeeLabelHelper.PaymentStatus(r.TotalFees, r.PaidAmount));
+    }
+
+    private async Task EnsureInstallmentsForStudentRowsAsync(
+        IList<FeeCollectionStudentRow> rows,
+        Guid academicYearId,
+        CancellationToken ct)
+    {
+        foreach (var group in rows
+                     .Where(r => r.FeeStructureVersionId != Guid.Empty)
+                     .GroupBy(r => (r.ClassId, r.FeeStructureVersionId)))
+        {
+            await _installmentRepo
+                .EnsureMissingInstallmentsForClassVersionAsync(
+                    group.Key.ClassId,
+                    group.Key.FeeStructureVersionId,
+                    academicYearId,
+                    ct)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task<IList<ClassFeeInstallmentRow>> FilterInstallmentsByStudentSelectionAsync(
+        Guid studentId,
+        Guid feeStructureVersionId,
+        IList<ClassFeeInstallmentRow> installmentRows,
+        CancellationToken ct)
+    {
+        if (installmentRows.Count == 0)
+        {
+            return installmentRows;
+        }
+
+        IReadOnlySet<Guid>? included = await _feeHeadAssignmentRepo
+            .GetIncludedFeeTypeIdsAsync(studentId, feeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        if (included is null)
+        {
+            return installmentRows;
+        }
+
+        return installmentRows.Where(r => included.Contains(r.FeeTypeId)).ToList();
     }
 }

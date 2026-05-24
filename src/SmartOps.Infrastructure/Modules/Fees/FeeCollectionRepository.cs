@@ -38,6 +38,8 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string feeTypeIncluded = StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(
+            Schema, "fee_row.feetypeid", "sa.studentid", "sa.feestructureversionid");
         string sql = $"""
             SELECT s.id AS StudentId,
                    TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS StudentName,
@@ -54,17 +56,26 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
                 SELECT COALESCE(
+                    NULLIF((
+                        SELECT SUM(sfi.amount)
+                        FROM {Schema}.{DatabaseConfig.TableStudentFeeInstallments} sfi
+                        WHERE sfi.studentid = s.id
+                          AND sfi.feestructureversionid = sa.feestructureversionid
+                          AND sfi.isactive = true
+                    ), 0),
                     (SELECT SUM(cfi.amount)
                      FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
                      WHERE cfi.classid = sa.classid
                        AND cfi.feestructureversionid = sa.feestructureversionid
-                       AND cfi.isactive = true),
+                       AND cfi.isactive = true
+                       AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(Schema, "cfi.feetypeid", "sa.studentid", "sa.feestructureversionid")}),
                     (SELECT SUM(cfa.amount)
                      FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
                      INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
                      WHERE cfa.classid = sa.classid
                        AND cfa.feestructureversionid = sa.feestructureversionid
-                       AND cfa.isactive = true)
+                       AND cfa.isactive = true
+                       AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(Schema, "cfa.feetypeid", "sa.studentid", "sa.feestructureversionid")})
                 ) AS total_fees
             ) fee_totals ON true
             LEFT JOIN LATERAL (
@@ -118,17 +129,26 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
                 SELECT COALESCE(
+                    NULLIF((
+                        SELECT SUM(sfi.amount)
+                        FROM {Schema}.{DatabaseConfig.TableStudentFeeInstallments} sfi
+                        WHERE sfi.studentid = s.id
+                          AND sfi.feestructureversionid = sa.feestructureversionid
+                          AND sfi.isactive = true
+                    ), 0),
                     (SELECT SUM(cfi.amount)
                      FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
                      WHERE cfi.classid = sa.classid
                        AND cfi.feestructureversionid = sa.feestructureversionid
-                       AND cfi.isactive = true),
+                       AND cfi.isactive = true
+                       AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(Schema, "cfi.feetypeid", "sa.studentid", "sa.feestructureversionid")}),
                     (SELECT SUM(cfa.amount)
                      FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
                      INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
                      WHERE cfa.classid = sa.classid
                        AND cfa.feestructureversionid = sa.feestructureversionid
-                       AND cfa.isactive = true)
+                       AND cfa.isactive = true
+                       AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(Schema, "cfa.feetypeid", "sa.studentid", "sa.feestructureversionid")})
                 ) AS total_fees
             ) fee_totals ON true
             LEFT JOIN LATERAL (
@@ -151,9 +171,12 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
     public async Task<IList<StudentClassFeeAmountRow>> GetStudentFeeAmountsAsync(
         Guid classId,
         Guid feeStructureVersionId,
+        Guid studentId,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string feeTypeIncluded = StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(
+            Schema, "ft.id", "@StudentId", "@FeeStructureVersionId");
         string sql = $"""
             SELECT ft.id AS FeeTypeId,
                    ft.name AS FeeTypeName,
@@ -166,13 +189,16 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                AND cfa.classid = @ClassId
                AND cfa.feestructureversionid = @FeeStructureVersionId
                AND cfa.isactive = true
-            WHERE ft.feestructureversionid = @FeeStructureVersionId AND ft.isactive = true AND cfa.amount > 0
+            WHERE ft.feestructureversionid = @FeeStructureVersionId
+              AND ft.isactive = true
+              AND cfa.amount > 0
+              AND {feeTypeIncluded}
             ORDER BY ft.name;
             """;
         IEnumerable<StudentClassFeeAmountRow> rows = await connection
             .QueryAsync<StudentClassFeeAmountRow>(new CommandDefinition(
                 sql,
-                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId, StudentId = studentId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();

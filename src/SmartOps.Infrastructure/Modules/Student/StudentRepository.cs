@@ -2,8 +2,10 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Fees.Interfaces;
+using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
+using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student;
@@ -22,6 +24,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
     private readonly IUserScopeContext _scope;
     private readonly IFeeStructureRepository _feeStructureRepo;
+    private readonly IStudentFeeInstallmentRepository _studentFeeInstallmentRepo;
 
     private static readonly string[] RelatedTablesForSoftDelete =
     {
@@ -29,6 +32,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
         DatabaseConfig.TableStudentFeeConfigs,
+        DatabaseConfig.TableStudentFeeHeadAssignments,
         DatabaseConfig.TableStudentCustomFields,
     };
 
@@ -36,10 +40,12 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DapperContext context,
         ICurrentUserService currentUser,
         IUserScopeContext scope,
-        IFeeStructureRepository feeStructureRepo)
+        IFeeStructureRepository feeStructureRepo,
+        IStudentFeeInstallmentRepository studentFeeInstallmentRepo)
         : base(context, currentUser)
     {
         _feeStructureRepo = feeStructureRepo;
+        _studentFeeInstallmentRepo = studentFeeInstallmentRepo;
         _scope = scope;
     }
 
@@ -58,16 +64,21 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            return await WithTransactionAsync(connection, async (conn, tx) =>
+            Guid studentId = await WithTransactionAsync(connection, async (conn, tx) =>
             {
-                var studentId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx)
+                var id = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx)
                     .ConfigureAwait(false);
-                student.Id = studentId;
+                student.Id = id;
 
-                await InsertChildCollectionsAsync(conn, tx, studentId, student, utcNow).ConfigureAwait(false);
+                await InsertChildCollectionsAsync(conn, tx, id, student, utcNow).ConfigureAwait(false);
 
-                return studentId;
+                return id;
             }).ConfigureAwait(false);
+
+            await GenerateStudentFeeInstallmentsAfterCreateAsync(studentId, student, cancellationToken)
+                .ConfigureAwait(false);
+
+            return studentId;
         }
         catch (Exception ex)
         {
@@ -93,6 +104,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         student.Parents = (await multi.ReadAsync<StudentParentEntity>().ConfigureAwait(false)).ToList();
         student.Academics = (await multi.ReadAsync<StudentAcademicEntity>().ConfigureAwait(false)).ToList();
         student.FeeConfigs = (await multi.ReadAsync<StudentFeeConfigEntity>().ConfigureAwait(false)).ToList();
+        student.FeeHeadAssignments = (await multi.ReadAsync<StudentFeeHeadAssignmentEntity>().ConfigureAwait(false)).ToList();
         student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
         student.CustomFields = (await multi.ReadAsync<StudentCustomFieldEntity>().ConfigureAwait(false)).ToList();
 
@@ -196,6 +208,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 WHERE cfa.classid = a.classid
                   AND cfa.feestructureversionid = a.feestructureversionid
                   AND cfa.isactive = true
+                  AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(schema, "cfa.feetypeid", "s.id", "a.feestructureversionid")}
             ) fee_totals ON a.classid IS NOT NULL AND a.feestructureversionid IS NOT NULL
             LEFT JOIN LATERAL (
                 SELECT SUM(fp.amount) AS paid
@@ -413,6 +426,7 @@ WHERE id = @StudentId AND isactive = true
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeConfigs} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
         ";
@@ -508,7 +522,71 @@ WHERE id = @StudentId AND isactive = true
             }
         }
 
+        StudentAcademicEntity? admissionAcademic = student.Academics.FirstOrDefault();
+        Guid? feeVersionId = admissionAcademic?.FeeStructureVersionId;
+        if (!feeVersionId.HasValue || feeVersionId.Value == Guid.Empty)
+        {
+            feeVersionId = student.Academics
+                .Select(a => a.FeeStructureVersionId)
+                .FirstOrDefault(v => v.HasValue && v.Value != Guid.Empty);
+        }
+
+        if (student.FeeHeadAssignments is { Count: > 0 } && feeVersionId.HasValue)
+        {
+            foreach (var assignment in student.FeeHeadAssignments)
+            {
+                assignment.Id = Guid.NewGuid();
+                assignment.StudentId = studentId;
+                assignment.FeeStructureVersionId = feeVersionId.Value;
+                EnsureInsertAudit(assignment, utcNow);
+                await InsertWithoutReturnAsync(
+                        connection,
+                        Context.OperationalSchema,
+                        DatabaseConfig.TableStudentFeeHeadAssignments,
+                        assignment,
+                        transaction)
+                    .ConfigureAwait(false);
+            }
+        }
+
         await InsertCustomFieldsAsync(connection, transaction, studentId, student.CustomFields, utcNow)
+            .ConfigureAwait(false);
+    }
+
+    private async Task GenerateStudentFeeInstallmentsAfterCreateAsync(
+        Guid studentId,
+        StudentEntity student,
+        CancellationToken cancellationToken)
+    {
+        StudentAcademicEntity? academic = student.Academics.FirstOrDefault();
+        if (academic is null || academic.ClassId == Guid.Empty || academic.AcademicYearId == Guid.Empty)
+        {
+            return;
+        }
+
+        Guid versionId = academic.FeeStructureVersionId ?? Guid.Empty;
+        if (versionId == Guid.Empty)
+        {
+            var admissionVersion = await _feeStructureRepo
+                .GetAdmissionVersionForYearAsync(academic.AcademicYearId, cancellationToken)
+                .ConfigureAwait(false);
+            versionId = admissionVersion?.Id ?? Guid.Empty;
+        }
+
+        if (versionId == Guid.Empty)
+        {
+            return;
+        }
+
+        IList<StudentFeeHeadAssignmentEntity> assignments = student.FeeHeadAssignments;
+        await _studentFeeInstallmentRepo
+            .GenerateForStudentAdmissionAsync(
+                studentId,
+                academic.ClassId,
+                versionId,
+                academic.AcademicYearId,
+                assignments,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 

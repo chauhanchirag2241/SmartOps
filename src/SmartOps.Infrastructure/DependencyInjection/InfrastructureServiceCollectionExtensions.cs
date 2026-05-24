@@ -25,6 +25,7 @@ using SmartOps.Domain.Modules.School;
 using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Fees.Interfaces;
+using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Infrastructure.Modules.AcademicYear;
 using SmartOps.Infrastructure.Modules.Attendance;
@@ -67,6 +68,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<DapperContext>();
         
         services.AddScoped<IStudentRepository, StudentRepository>();
+        services.AddScoped<IStudentFeeHeadAssignmentRepository, StudentFeeHeadAssignmentRepository>();
+        services.AddScoped<IStudentFeeInstallmentRepository, StudentFeeInstallmentRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<ITeacherRepository, TeacherRepository>();

@@ -27,6 +27,7 @@ public sealed class StudentsController(
     ISettingRepository settingRepository,
     IAcademicYearRepository academicYearRepository,
     IFeeStructureRepository feeStructureRepository,
+    IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider) : ControllerBase
@@ -97,6 +98,32 @@ public sealed class StudentsController(
             {
                 return BadRequest(
                     "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first.");
+            }
+        }
+
+        if (request.FeeHeadSelections.Count > 0)
+        {
+            CreateStudentAcademicDto? admissionAcademic = request.Academics.FirstOrDefault(a => a.ClassId != Guid.Empty);
+            if (admissionAcademic is not null && admissionAcademic.AcademicYearId != Guid.Empty)
+            {
+                var admissionVersion = await feeStructureRepository
+                    .GetAdmissionVersionForYearAsync(admissionAcademic.AcademicYearId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (admissionVersion is not null)
+                {
+                    IList<ClassFeeAmountRow> classAmounts = await classFeeAmountRepository
+                        .GetAmountsByClassAsync(admissionAcademic.ClassId, admissionVersion.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                    foreach (ClassFeeAmountRow mandatoryRow in classAmounts.Where(r => r.IsMandatory && r.Amount > 0))
+                    {
+                        CreateStudentFeeHeadSelectionDto? selection = request.FeeHeadSelections
+                            .FirstOrDefault(s => s.FeeTypeId == mandatoryRow.FeeTypeId);
+                        if (selection is { IsIncluded: false })
+                        {
+                            return BadRequest($"Mandatory fee '{mandatoryRow.FeeTypeName}' cannot be excluded.");
+                        }
+                    }
+                }
             }
         }
 

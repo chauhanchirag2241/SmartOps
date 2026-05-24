@@ -72,6 +72,10 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee structure version not found.");
         }
 
+        await _installmentService
+            .EnsureMissingInstallmentsForClassVersionAsync(classId, versionId, academicYearId, ct)
+            .ConfigureAwait(false);
+
         IList<ClassFeeSummaryRow> summaries = await _repo.GetClassSummariesAsync(academicYearId, versionId, ct).ConfigureAwait(false);
         ClassFeeSummaryRow? summary = summaries.FirstOrDefault(s => s.ClassId == classId);
         IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classId, versionId, ct).ConfigureAwait(false);
@@ -83,7 +87,8 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 FeeLabelHelper.CategoryLabel((FeeCategory)r.Category),
                 FeeLabelHelper.FrequencyLabel((FeeFrequency)r.Frequency),
                 FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)r.AmountBasis),
-                r.Amount))
+                r.Amount,
+                r.IsMandatory))
             .ToList();
 
         bool classHasConfiguredAmounts = await _repo
@@ -134,9 +139,14 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             .ToList();
 
         await _repo.UpsertAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, amounts, ct).ConfigureAwait(false);
-        await _installmentService
-            .RegenerateForClassVersionAsync(classId, request.FeeStructureVersionId, request.AcademicYearId, ct)
-            .ConfigureAwait(false);
+
+        if (await _installmentRepo.IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
+        {
+            await _installmentService
+                .RegenerateForClassVersionAsync(classId, request.FeeStructureVersionId, request.AcademicYearId, ct)
+                .ConfigureAwait(false);
+        }
+
         return await GetClassAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, ct).ConfigureAwait(false);
     }
 
@@ -156,6 +166,10 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         {
             return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Fee structure version not found.");
         }
+
+        await _installmentService
+            .EnsureMissingInstallmentsForClassVersionAsync(classId, versionId, academicYearId, ct)
+            .ConfigureAwait(false);
 
         IList<ClassFeeInstallmentRow> rows = await _installmentRepo
             .GetByClassVersionAsync(classId, versionId, ct)

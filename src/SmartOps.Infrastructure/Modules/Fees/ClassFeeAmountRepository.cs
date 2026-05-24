@@ -74,8 +74,9 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                    ft.name AS FeeTypeName,
                    ft.category AS Category,
                    ft.frequency AS Frequency,
-                   ft.amountbasis AS AmountBasis,
-                   COALESCE(cfa.amount, 0) AS Amount
+                   COALESCE(ft.amountbasis, 0) AS AmountBasis,
+                   COALESCE(cfa.amount, 0) AS Amount,
+                   ft.ismandatory AS IsMandatory
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
             LEFT JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
                 ON cfa.feetypeid = ft.id
@@ -163,21 +164,17 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        // Only classfeeamounts — avoids failure when migration S122 (classfeeinstallments) is not applied yet.
         string sql = $"""
-            SELECT EXISTS (
-                SELECT 1
-                FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                WHERE classid = @ClassId
-                  AND feestructureversionid = @FeeStructureVersionId
-                  AND isactive = true
-                  AND amount > 0
-            ) OR EXISTS (
-                SELECT 1
-                FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments}
-                WHERE classid = @ClassId
-                  AND feestructureversionid = @FeeStructureVersionId
-                  AND isactive = true
-                  AND amount > 0
+            SELECT (
+                EXISTS (
+                    SELECT 1
+                    FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
+                    WHERE classid = @ClassId
+                      AND feestructureversionid = @FeeStructureVersionId
+                      AND isactive = true
+                      AND amount > 0
+                )
             );
             """;
         return await connection.ExecuteScalarAsync<bool>(

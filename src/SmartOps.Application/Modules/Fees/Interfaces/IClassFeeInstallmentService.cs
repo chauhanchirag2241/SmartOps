@@ -12,4 +12,10 @@ public interface IClassFeeInstallmentService
         Guid feeStructureVersionId,
         Guid academicYearId,
         CancellationToken ct = default);
+
+    Task EnsureMissingInstallmentsForClassVersionAsync(
+        Guid classId,
+        Guid feeStructureVersionId,
+        Guid academicYearId,
+        CancellationToken ct = default);
 }

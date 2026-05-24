@@ -16,6 +16,11 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
         Guid academicYearId,
         CancellationToken ct = default)
     {
+        if (!await _installmentRepo.IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
         if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureVersionId, ct).ConfigureAwait(false))
         {
             return;
@@ -30,6 +35,11 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
         Guid academicYearId,
         CancellationToken ct = default)
     {
+        if (!await _installmentRepo.IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
         if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureVersionId, ct).ConfigureAwait(false))
         {
             return;
@@ -38,4 +48,15 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
         await _installmentRepo.RegenerateForVersionAsync(feeStructureVersionId, academicYearId, ct)
             .ConfigureAwait(false);
     }
+
+    public Task EnsureMissingInstallmentsForClassVersionAsync(
+        Guid classId,
+        Guid feeStructureVersionId,
+        Guid academicYearId,
+        CancellationToken ct = default) =>
+        _installmentRepo.EnsureMissingInstallmentsForClassVersionAsync(
+            classId,
+            feeStructureVersionId,
+            academicYearId,
+            ct);
 }

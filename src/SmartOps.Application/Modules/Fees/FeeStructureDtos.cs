@@ -41,30 +41,25 @@ public record FeeTypeDto(
     string Name,
     FeeCategory Category,
     string CategoryLabel,
-    FeeFrequency Frequency,
-    string FrequencyLabel,
-    FeeAmountBasis AmountBasis,
-    string AmountBasisLabel,
+    FeeCollectionType CollectionType,
+    string CollectionTypeLabel,
     bool IsMandatory,
     bool IsRefundable,
+    bool StudentWiseDifferentAmount,
     bool IsActive,
     bool HasStudentPayments);
 
 public record FeeStructureStatsDto(
     int FeeTypeCount,
     int ClassesConfigured,
-    string PaymentCycleLabel,
     decimal LateFeePerDay);
 
 public record FeeSettingsDto(
     Guid Id,
-    FeePaymentCycle PaymentCycle,
-    string PaymentCycleLabel,
     decimal LateFeePerDay,
     Guid? DefaultAcademicYearId);
 
 public record UpsertFeeSettingsRequestDto(
-    FeePaymentCycle PaymentCycle,
     decimal LateFeePerDay,
     Guid? DefaultAcademicYearId);
 
@@ -72,15 +67,15 @@ public record CreateFeeTypeRequestDto(
     Guid FeeStructureVersionId,
     string Name,
     FeeCategory Category,
-    FeeFrequency Frequency,
-    FeeAmountBasis AmountBasis,
+    FeeCollectionType CollectionType,
     bool IsMandatory,
-    bool IsRefundable);
+    bool IsRefundable,
+    bool StudentWiseDifferentAmount);
 
 public record UpdateFeeTypeRequestDto(
     string Name,
     FeeCategory Category,
-    FeeFrequency Frequency,
-    FeeAmountBasis AmountBasis,
+    FeeCollectionType CollectionType,
     bool IsMandatory,
-    bool IsRefundable);
+    bool IsRefundable,
+    bool StudentWiseDifferentAmount);

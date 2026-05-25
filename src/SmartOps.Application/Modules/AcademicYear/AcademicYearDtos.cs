@@ -1,3 +1,4 @@
+using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
 
 namespace SmartOps.Application.Modules.AcademicYear;
@@ -24,3 +25,28 @@ public static class AcademicYearMappingExtensions
 }
 
 public sealed record CreateAcademicYearResponse(string Message, Guid AcademicYearId);
+
+public sealed record AcademicYearSemesterDto(
+    Guid Id,
+    Guid AcademicYearId,
+    int SemesterIndex,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDate);
+
+public sealed record UpsertAcademicYearSemesterDto(
+    int SemesterIndex,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDate);
+
+public sealed record SaveAcademicYearSemestersRequest(IList<UpsertAcademicYearSemesterDto> Semesters);
+
+public static class AcademicYearSemesterMapping
+{
+    public static AcademicYearSemesterDto ToDto(this AcademicYearSemesterEntity entity) =>
+        new(entity.Id, entity.AcademicYearId, entity.SemesterIndex, entity.Name, entity.StartDate, entity.EndDate);
+
+    public static AcademicYearSemesterInput ToInput(this UpsertAcademicYearSemesterDto dto) =>
+        new(dto.SemesterIndex, dto.Name, dto.StartDate, dto.EndDate);
+}

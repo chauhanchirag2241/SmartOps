@@ -50,10 +50,6 @@ public interface IClassFeeInstallmentRepository
 
     Task<bool> IsInstallmentSchemaReadyAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Creates installment rows for fee types that have class amounts but no installments yet
-    /// (e.g. a new fee head added after the class was first configured).
-    /// </summary>
     Task EnsureMissingInstallmentsForClassVersionAsync(
         Guid classId,
         Guid feeStructureVersionId,
@@ -66,8 +62,7 @@ public sealed class ClassFeeInstallmentRow
     public Guid Id { get; init; }
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
-    public int Frequency { get; init; }
-    public int AmountBasis { get; init; }
+    public int CollectionType { get; init; }
     public int PeriodIndex { get; init; }
     public string PeriodLabel { get; init; } = string.Empty;
     public DateOnly PeriodStart { get; init; }
@@ -79,9 +74,10 @@ public sealed class ClassFeeAmountForInstallmentRow
 {
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
-    public int Frequency { get; init; }
-    public int AmountBasis { get; init; }
+    public int CollectionType { get; init; }
     public decimal Amount { get; init; }
+    public decimal Semester1Amount { get; init; }
+    public decimal Semester2Amount { get; init; }
 }
 
 public sealed class InstallmentPaidRow

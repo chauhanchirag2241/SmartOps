@@ -8,27 +8,11 @@ public enum FeeCategory
     Other = 3
 }
 
-public enum FeeFrequency
+/// <summary>How a fee head is collected: per semester or once per academic year.</summary>
+public enum FeeCollectionType
 {
-    Annual = 0,
-    SemiAnnual = 1,
-    Quarterly = 2,
-    Monthly = 3,
-    OneTime = 4
-}
-
-public enum FeeAmountBasis
-{
-    AnnualTotal = 0,
-    PerInstallment = 1
-}
-
-public enum FeePaymentCycle
-{
-    Annual = 0,
-    SemiAnnual = 1,
-    Quarterly = 2,
-    Monthly = 3
+    SemesterWise = 0,
+    OneTime = 1
 }
 
 public enum FeePaymentMode

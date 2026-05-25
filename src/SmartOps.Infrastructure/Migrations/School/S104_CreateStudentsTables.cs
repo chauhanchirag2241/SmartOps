@@ -92,8 +92,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStudents}
                 .WithColumn("discountvalue").AsDecimal(18, 2).Nullable()
                 .WithColumn("ispercentage").AsBoolean().Nullable()
                 .WithColumn("discountremarks").AsString(500).Nullable()
-                .WithColumn("paymentmode").AsString(50).Nullable()
-                .WithColumn("firstduedate").AsDate().Nullable()
                 .WithAuditColumns();
         }
 

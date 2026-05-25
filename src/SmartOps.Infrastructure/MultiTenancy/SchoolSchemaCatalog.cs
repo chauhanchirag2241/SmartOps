@@ -10,6 +10,7 @@ internal static class SchoolSchemaCatalog
     internal static readonly string[] TemplateTables =
     [
         DatabaseConfig.TableAcademicYears,
+        DatabaseConfig.TableAcademicYearSemesters,
         DatabaseConfig.TableClasses,
         DatabaseConfig.TableSubjects,
         DatabaseConfig.TableTeachers,

@@ -1,3 +1,5 @@
+using SmartOps.Domain.Modules.Fees;
+
 namespace SmartOps.Application.Modules.Fees;
 
 public record ClassFeeSummaryDto(
@@ -10,17 +12,20 @@ public record ClassFeeAmountItemDto(
     Guid FeeTypeId,
     string FeeTypeName,
     string CategoryLabel,
-    string FrequencyLabel,
-    string AmountBasisLabel,
+    FeeCollectionType CollectionType,
+    string CollectionTypeLabel,
     decimal Amount,
-    bool IsMandatory);
+    decimal Semester1Amount,
+    decimal Semester2Amount,
+    decimal AnnualTotal,
+    bool IsMandatory,
+    bool StudentWiseDifferentAmount);
 
 public record ClassFeeInstallmentPreviewDto(
     Guid InstallmentId,
     Guid FeeTypeId,
     string FeeTypeName,
-    string FrequencyLabel,
-    string AmountBasisLabel,
+    string CollectionTypeLabel,
     int PeriodIndex,
     string PeriodLabel,
     DateOnly PeriodStart,
@@ -43,4 +48,8 @@ public record SaveClassFeeAmountsRequestDto(
     Guid FeeStructureVersionId,
     IList<SaveClassFeeAmountItemDto> Amounts);
 
-public record SaveClassFeeAmountItemDto(Guid FeeTypeId, decimal Amount);
+public record SaveClassFeeAmountItemDto(
+    Guid FeeTypeId,
+    decimal Amount,
+    decimal Semester1Amount,
+    decimal Semester2Amount);

@@ -81,14 +81,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classId, versionId, ct).ConfigureAwait(false);
 
         IList<ClassFeeAmountItemDto> items = rows
-            .Select(r => new ClassFeeAmountItemDto(
-                r.FeeTypeId,
-                r.FeeTypeName,
-                FeeLabelHelper.CategoryLabel((FeeCategory)r.Category),
-                FeeLabelHelper.FrequencyLabel((FeeFrequency)r.Frequency),
-                FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)r.AmountBasis),
-                r.Amount,
-                r.IsMandatory))
+            .Select(MapAmountItem)
             .ToList();
 
         bool classHasConfiguredAmounts = await _repo
@@ -103,7 +96,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             version.VersionNumber,
             FeeLabelHelper.VersionStatusLabel(version.Status),
             IsClassAmountsEditable(version.Status, classHasConfiguredAmounts),
-            items.Sum(i => i.Amount),
+            items.Sum(i => i.AnnualTotal),
             items));
     }
 
@@ -134,8 +127,14 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                     : "This fee structure version cannot be edited.");
         }
 
-        IList<(Guid FeeTypeId, decimal Amount)> amounts = request.Amounts
-            .Select(a => (a.FeeTypeId, a.Amount))
+        IList<ClassFeeAmountUpsertRow> amounts = request.Amounts
+            .Select(a => new ClassFeeAmountUpsertRow
+            {
+                FeeTypeId = a.FeeTypeId,
+                Amount = a.Amount,
+                Semester1Amount = a.Semester1Amount,
+                Semester2Amount = a.Semester2Amount
+            })
             .ToList();
 
         await _repo.UpsertAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, amounts, ct).ConfigureAwait(false);
@@ -179,8 +178,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 r.Id,
                 r.FeeTypeId,
                 r.FeeTypeName,
-                FeeLabelHelper.FrequencyLabel((FeeFrequency)r.Frequency),
-                FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)r.AmountBasis),
+                FeeLabelHelper.CollectionTypeLabel((FeeCollectionType)r.CollectionType),
                 r.PeriodIndex,
                 r.PeriodLabel,
                 r.PeriodStart,
@@ -263,5 +261,25 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             .GetAdmissionVersionForYearAsync(academicYearId, ct)
             .ConfigureAwait(false);
         return admissionVersion?.Id ?? Guid.Empty;
+    }
+
+    private static ClassFeeAmountItemDto MapAmountItem(ClassFeeAmountRow r)
+    {
+        var collectionType = (FeeCollectionType)r.CollectionType;
+        decimal annualTotal = collectionType == FeeCollectionType.SemesterWise
+            ? r.Semester1Amount + r.Semester2Amount
+            : r.Amount;
+        return new ClassFeeAmountItemDto(
+            r.FeeTypeId,
+            r.FeeTypeName,
+            FeeLabelHelper.CategoryLabel((FeeCategory)r.Category),
+            collectionType,
+            FeeLabelHelper.CollectionTypeLabel(collectionType),
+            r.Amount,
+            r.Semester1Amount,
+            r.Semester2Amount,
+            annualTotal,
+            r.IsMandatory,
+            r.StudentWiseDifferentAmount);
     }
 }

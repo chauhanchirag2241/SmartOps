@@ -101,19 +101,36 @@ public static class FeeAllocationHelper
         IReadOnlySet<Guid> selectedInstallmentIds) =>
         installments.Where(i => selectedInstallmentIds.Contains(i.InstallmentId)).Sum(i => i.DueAmount);
 
-    public static string StatusForHead(decimal total, decimal paid)
+    public static string StatusForHead(decimal total, decimal paid) =>
+        StatusForPeriod(total, paid, periodEnd: null);
+
+    /// <summary>
+    /// Paid when fully paid; Partial when some payment; Pending when none;
+    /// Overdue when period end has passed and payment is incomplete.
+    /// </summary>
+    public static string StatusForPeriod(decimal total, decimal paid, DateOnly? periodEnd)
     {
-        decimal due = Math.Max(0, total - paid);
         if (total <= 0)
         {
             return "No fees";
         }
 
+        decimal due = Math.Max(0, total - paid);
         if (due <= 0)
         {
             return "Paid";
         }
 
-        return paid > 0 ? "Partial" : "Unpaid";
+        if (paid > 0)
+        {
+            return "Partial";
+        }
+
+        if (periodEnd.HasValue && periodEnd.Value < DateOnly.FromDateTime(DateTime.UtcNow))
+        {
+            return "Overdue";
+        }
+
+        return "Pending";
     }
 }

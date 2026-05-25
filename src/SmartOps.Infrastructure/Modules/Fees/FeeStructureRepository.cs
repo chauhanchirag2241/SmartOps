@@ -305,8 +305,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             IList<FeeTypeEntity> sourceTypes = (await connection.QueryAsync<FeeTypeEntity>(new CommandDefinition(
                 $"""
                 SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
-                       category AS Category, frequency AS Frequency, amountbasis AS AmountBasis,
-                       ismandatory AS IsMandatory, isrefundable AS IsRefundable, isactive AS IsActive
+                       category AS Category, frequency AS CollectionType,
+                       ismandatory AS IsMandatory, isrefundable AS IsRefundable,
+                       COALESCE(studentwisedifferentamount, false) AS StudentWiseDifferentAmount,
+                       isactive AS IsActive
                 FROM {Schema}.{DatabaseConfig.TableFeeTypes}
                 WHERE feestructureversionid = @SourceVersionId AND isactive = true;
                 """,
@@ -323,20 +325,20 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                     FeeStructureVersionId = newVersionId,
                     Name = sourceType.Name,
                     Category = sourceType.Category,
-                    Frequency = sourceType.Frequency,
-                    AmountBasis = sourceType.AmountBasis,
+                    CollectionType = sourceType.CollectionType,
                     IsMandatory = sourceType.IsMandatory,
-                    IsRefundable = sourceType.IsRefundable
+                    IsRefundable = sourceType.IsRefundable,
+                    StudentWiseDifferentAmount = sourceType.StudentWiseDifferentAmount
                 };
                 EnsureInsertAudit(cloneType, utcNow, actorId);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                        (id, feestructureversionid, name, category, frequency, amountbasis, ismandatory, isrefundable,
-                         isactive, versionno, createdby, createdon, updatedby, updatedon)
+                        (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+                         studentwisedifferentamount, isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @AmountBasis, @IsMandatory, @IsRefundable,
-                         @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+                        (@Id, @FeeStructureVersionId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
+                         @StudentWiseDifferentAmount, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneType,
                     transaction,
@@ -347,7 +349,9 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             IList<ClassFeeAmountEntity> sourceAmounts = (await connection.QueryAsync<ClassFeeAmountEntity>(new CommandDefinition(
                 $"""
                 SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, classid AS ClassId,
-                       feetypeid AS FeeTypeId, academicyearid AS AcademicYearId, amount AS Amount
+                       feetypeid AS FeeTypeId, academicyearid AS AcademicYearId, amount AS Amount,
+                       COALESCE(semester1amount, 0) AS Semester1Amount,
+                       COALESCE(semester2amount, 0) AS Semester2Amount
                 FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
                 WHERE feestructureversionid = @SourceVersionId AND isactive = true;
                 """,
@@ -369,16 +373,20 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                     ClassId = sourceAmount.ClassId,
                     FeeTypeId = newFeeTypeId,
                     AcademicYearId = sourceAmount.AcademicYearId,
-                    Amount = sourceAmount.Amount
+                    Amount = sourceAmount.Amount,
+                    Semester1Amount = sourceAmount.Semester1Amount,
+                    Semester2Amount = sourceAmount.Semester2Amount
                 };
                 EnsureInsertAudit(cloneAmount, utcNow, actorId);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableClassFeeAmounts}
                         (id, feestructureversionid, classid, feetypeid, academicyearid, amount,
+                         semester1amount, semester2amount,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
                         (@Id, @FeeStructureVersionId, @ClassId, @FeeTypeId, @AcademicYearId, @Amount,
+                         @Semester1Amount, @Semester2Amount,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneAmount,
@@ -404,9 +412,9 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                    ft.feestructureversionid AS FeeStructureVersionId,
                    ft.name AS Name,
                    ft.category AS Category,
-                   ft.frequency AS Frequency,
-                   ft.amountbasis AS AmountBasis,
+                   ft.frequency AS CollectionType,
                    ft.ismandatory AS IsMandatory,
+                   COALESCE(ft.studentwisedifferentamount, false) AS StudentWiseDifferentAmount,
                    ft.isrefundable AS IsRefundable,
                    ft.isactive AS IsActive,
                    EXISTS (
@@ -434,8 +442,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
-                   category AS Category, frequency AS Frequency, amountbasis AS AmountBasis,
-                   ismandatory AS IsMandatory, isrefundable AS IsRefundable, isactive AS IsActive,
+                   category AS Category, frequency AS CollectionType,
+                   ismandatory AS IsMandatory, isrefundable AS IsRefundable,
+                   COALESCE(studentwisedifferentamount, false) AS StudentWiseDifferentAmount,
+                   isactive AS IsActive,
                    versionno AS VersionNo, createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
             FROM {Schema}.{DatabaseConfig.TableFeeTypes}
@@ -456,11 +466,11 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                (id, feestructureversionid, name, category, frequency, amountbasis, ismandatory, isrefundable,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
+                (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+                 studentwisedifferentamount, isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @FeeStructureVersionId, @Name, @Category, @Frequency, @AmountBasis, @IsMandatory, @IsRefundable,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+                (@Id, @FeeStructureVersionId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
+                 @StudentWiseDifferentAmount, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
         return entity.Id;
@@ -474,9 +484,9 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             UPDATE {Schema}.{DatabaseConfig.TableFeeTypes}
             SET name = @Name,
                 category = @Category,
-                frequency = @Frequency,
-                amountbasis = @AmountBasis,
+                frequency = @CollectionType,
                 ismandatory = @IsMandatory,
+                studentwisedifferentamount = @StudentWiseDifferentAmount,
                 isrefundable = @IsRefundable,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
@@ -544,7 +554,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, paymentcycle AS PaymentCycle, latefeeday AS LateFeePerDay,
+            SELECT id AS Id, latefeeday AS LateFeePerDay,
                    defaultacademicyearid AS DefaultAcademicYearId,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
@@ -574,7 +584,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                     (id, paymentcycle, latefeeday, defaultacademicyearid,
                      isactive, versionno, createdby, createdon, updatedby, updatedon)
                 VALUES
-                    (@Id, @PaymentCycle, @LateFeePerDay, @DefaultAcademicYearId,
+                    (@Id, 0, @LateFeePerDay, @DefaultAcademicYearId,
                      @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                 """;
             await connection.ExecuteAsync(new CommandDefinition(insertSql, entity, cancellationToken: ct)).ConfigureAwait(false);
@@ -587,8 +597,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
         string updateSql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableFeeSettings}
-            SET paymentcycle = @PaymentCycle,
-                latefeeday = @LateFeePerDay,
+            SET latefeeday = @LateFeePerDay,
                 defaultacademicyearid = @DefaultAcademicYearId,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,

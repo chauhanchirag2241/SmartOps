@@ -22,6 +22,7 @@ public record FeeCollectionPaymentHistoryDto(
 public record FeeCollectionInstallmentDto(
     Guid InstallmentId,
     Guid FeeTypeId,
+    int PeriodIndex,
     string PeriodLabel,
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
@@ -33,8 +34,7 @@ public record FeeCollectionInstallmentDto(
 public record FeeCollectionHeadDto(
     Guid FeeTypeId,
     string FeeTypeName,
-    string FrequencyLabel,
-    string AmountBasisLabel,
+    string CollectionTypeLabel,
     decimal TotalAmount,
     decimal PaidAmount,
     decimal DueAmount,
@@ -45,7 +45,17 @@ public record FeeCollectionHeadDto(
 public record FeeCollectionHeadStatusDto(
     Guid FeeTypeId,
     string FeeTypeName,
-    string FrequencyLabel,
+    string CollectionTypeLabel,
+    decimal TotalAmount,
+    decimal PaidAmount,
+    decimal DueAmount,
+    string Status);
+
+public record FeeCollectionSemesterStatusDto(
+    int SemesterIndex,
+    string SemesterName,
+    DateOnly StartDate,
+    DateOnly EndDate,
     decimal TotalAmount,
     decimal PaidAmount,
     decimal DueAmount,
@@ -62,6 +72,7 @@ public record FeeCollectionStudentDetailDto(
     int PaymentProgressPercent,
     string PaymentStatus,
     IList<FeeCollectionHeadDto> FeeHeads,
+    IList<FeeCollectionSemesterStatusDto> SemesterStatuses,
     IList<FeeCollectionPaymentHistoryDto> Payments);
 
 public record CollectFeeRequestDto(

@@ -202,10 +202,10 @@ public sealed class FeeStructureService : IFeeStructureService
             FeeStructureVersionId = request.FeeStructureVersionId,
             Name = request.Name.Trim(),
             Category = request.Category,
-            Frequency = request.Frequency,
-            AmountBasis = request.AmountBasis,
+            CollectionType = request.CollectionType,
             IsMandatory = request.IsMandatory,
-            IsRefundable = request.IsRefundable
+            IsRefundable = request.IsRefundable,
+            StudentWiseDifferentAmount = request.StudentWiseDifferentAmount
         };
         Guid id = await _repo.CreateFeeTypeAsync(entity, ct).ConfigureAwait(false);
         FeeTypeEntity? saved = await _repo.GetFeeTypeByIdAsync(id, ct).ConfigureAwait(false);
@@ -235,10 +235,10 @@ public sealed class FeeStructureService : IFeeStructureService
 
         existing.Name = request.Name.Trim();
         existing.Category = request.Category;
-        existing.Frequency = request.Frequency;
-        existing.AmountBasis = request.AmountBasis;
+        existing.CollectionType = request.CollectionType;
         existing.IsMandatory = request.IsMandatory;
         existing.IsRefundable = request.IsRefundable;
+        existing.StudentWiseDifferentAmount = request.StudentWiseDifferentAmount;
         await _repo.UpdateFeeTypeAsync(existing, ct).ConfigureAwait(false);
         bool hasPayments = await _repo.FeeTypeHasPaymentsAsync(id, ct).ConfigureAwait(false);
         return Result<FeeTypeDto>.Success(MapFeeType(existing, hasPayments));
@@ -283,12 +283,10 @@ public sealed class FeeStructureService : IFeeStructureService
             }
         }
 
-        FeePaymentCycle cycle = settings?.PaymentCycle ?? FeePaymentCycle.Quarterly;
         decimal lateFee = settings?.LateFeePerDay ?? 0;
         return Result<FeeStructureStatsDto>.Success(new FeeStructureStatsDto(
             feeTypeCount,
             classesConfigured,
-            FeeLabelHelper.PaymentCycleLabel(cycle),
             lateFee));
     }
 
@@ -297,12 +295,7 @@ public sealed class FeeStructureService : IFeeStructureService
         FeeSettingsEntity? settings = await _repo.GetSettingsAsync(ct).ConfigureAwait(false);
         if (settings is null)
         {
-            return Result<FeeSettingsDto>.Success(new FeeSettingsDto(
-                Guid.Empty,
-                FeePaymentCycle.Quarterly,
-                FeeLabelHelper.PaymentCycleLabel(FeePaymentCycle.Quarterly),
-                0,
-                null));
+            return Result<FeeSettingsDto>.Success(new FeeSettingsDto(Guid.Empty, 0, null));
         }
 
         return Result<FeeSettingsDto>.Success(MapSettings(settings));
@@ -312,7 +305,6 @@ public sealed class FeeStructureService : IFeeStructureService
     {
         var entity = new FeeSettingsEntity
         {
-            PaymentCycle = request.PaymentCycle,
             LateFeePerDay = request.LateFeePerDay,
             DefaultAcademicYearId = request.DefaultAcademicYearId
         };
@@ -418,12 +410,11 @@ public sealed class FeeStructureService : IFeeStructureService
         row.Name,
         row.Category,
         FeeLabelHelper.CategoryLabel(row.Category),
-        row.Frequency,
-        FeeLabelHelper.FrequencyLabel(row.Frequency),
-        row.AmountBasis,
-        FeeLabelHelper.AmountBasisLabel(row.AmountBasis),
+        row.CollectionType,
+        FeeLabelHelper.CollectionTypeLabel(row.CollectionType),
         row.IsMandatory,
         row.IsRefundable,
+        row.StudentWiseDifferentAmount,
         row.IsActive,
         row.HasStudentPayments);
 
@@ -433,19 +424,16 @@ public sealed class FeeStructureService : IFeeStructureService
         entity.Name,
         entity.Category,
         FeeLabelHelper.CategoryLabel(entity.Category),
-        entity.Frequency,
-        FeeLabelHelper.FrequencyLabel(entity.Frequency),
-        entity.AmountBasis,
-        FeeLabelHelper.AmountBasisLabel(entity.AmountBasis),
+        entity.CollectionType,
+        FeeLabelHelper.CollectionTypeLabel(entity.CollectionType),
         entity.IsMandatory,
         entity.IsRefundable,
+        entity.StudentWiseDifferentAmount,
         entity.IsActive,
         hasStudentPayments);
 
     private static FeeSettingsDto MapSettings(FeeSettingsEntity settings) => new(
         settings.Id,
-        settings.PaymentCycle,
-        FeeLabelHelper.PaymentCycleLabel(settings.PaymentCycle),
         settings.LateFeePerDay,
         settings.DefaultAcademicYearId);
 }

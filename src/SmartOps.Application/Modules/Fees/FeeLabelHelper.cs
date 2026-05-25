@@ -12,30 +12,11 @@ public static class FeeLabelHelper
         _ => "Other"
     };
 
-    public static string AmountBasisLabel(FeeAmountBasis b) => b switch
+    public static string CollectionTypeLabel(FeeCollectionType t) => t switch
     {
-        FeeAmountBasis.AnnualTotal => "Annual total",
-        FeeAmountBasis.PerInstallment => "Per installment",
-        _ => b.ToString()
-    };
-
-    public static string FrequencyLabel(FeeFrequency f) => f switch
-    {
-        FeeFrequency.Annual => "Annual",
-        FeeFrequency.SemiAnnual => "Semi-annual",
-        FeeFrequency.Quarterly => "Quarterly",
-        FeeFrequency.Monthly => "Monthly",
-        FeeFrequency.OneTime => "One-time",
-        _ => f.ToString()
-    };
-
-    public static string PaymentCycleLabel(FeePaymentCycle c) => c switch
-    {
-        FeePaymentCycle.Annual => "Annual",
-        FeePaymentCycle.SemiAnnual => "Semi-annual",
-        FeePaymentCycle.Quarterly => "Quarterly",
-        FeePaymentCycle.Monthly => "Monthly",
-        _ => c.ToString()
+        FeeCollectionType.SemesterWise => "Semester wise",
+        FeeCollectionType.OneTime => "One time",
+        _ => t.ToString()
     };
 
     public static string VersionStatusLabel(FeeStructureVersionStatus status) => status switch

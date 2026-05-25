@@ -37,6 +37,9 @@ public interface IFeeCollectionRepository
         CancellationToken ct = default);
 
     Task AssignStudentFeeStructureVersionAsync(Guid studentId, Guid academicYearId, Guid feeStructureVersionId, CancellationToken ct = default);
+
+    /// <summary>Resolves version from fee assignments/installments when student_academics has none.</summary>
+    Task<Guid?> GetStudentFeeStructureVersionHintAsync(Guid studentId, CancellationToken ct = default);
 }
 
 public sealed class FeeCollectionStudentRow
@@ -56,8 +59,7 @@ public sealed class StudentClassFeeAmountRow
 {
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
-    public int Frequency { get; init; }
-    public int AmountBasis { get; init; }
+    public int CollectionType { get; init; }
     public decimal Amount { get; init; }
 }
 

@@ -32,6 +32,7 @@ public static class DatabaseConfig
 
     // Class Module
     public const string TableAcademicYears = "academicyears";
+    public const string TableAcademicYearSemesters = "academicyearsemesters";
     public const string TableClasses = "classes";
 
     // Subject Module

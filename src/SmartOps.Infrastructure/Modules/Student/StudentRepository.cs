@@ -620,6 +620,27 @@ WHERE id = @StudentId AND isactive = true
             foreach (var academic in student.Academics)
             {
                 academic.StudentId = student.Id;
+
+                StudentAcademicEntity? existingAcademic = await GetAcademicRecordAsync(
+                        connection,
+                        Context.OperationalSchema,
+                        student.Id,
+                        academic.AcademicYearId,
+                        transaction)
+                    .ConfigureAwait(false);
+                if (existingAcademic is not null)
+                {
+                    if (academic.Id == Guid.Empty)
+                    {
+                        academic.Id = existingAcademic.Id;
+                    }
+
+                    if (!academic.FeeStructureVersionId.HasValue || academic.FeeStructureVersionId.Value == Guid.Empty)
+                    {
+                        academic.FeeStructureVersionId = existingAcademic.FeeStructureVersionId;
+                    }
+                }
+
                 ApplyUpdateAudit(academic, actorId, utcNow);
                 await UpdateAsync(
                         connection,
@@ -627,7 +648,8 @@ WHERE id = @StudentId AND isactive = true
                         DatabaseConfig.TableStudentAcademics,
                         academic,
                         transaction,
-                        "StudentId")
+                        "StudentId",
+                        "AcademicYearId")
                     .ConfigureAwait(false);
             }
         }
@@ -723,6 +745,35 @@ WHERE id = @StudentId AND isactive = true
             .ConfigureAwait(false);
 
         await InsertCustomFieldsAsync(connection, transaction, studentId, customFields, utcNow)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<StudentAcademicEntity?> GetAcademicRecordAsync(
+        IDbConnection connection,
+        string schema,
+        Guid studentId,
+        Guid academicYearId,
+        IDbTransaction? transaction)
+    {
+        string sql = $"""
+            SELECT id AS Id, studentid AS StudentId, admissiondate AS AdmissionDate,
+                   academicyearid AS AcademicYearId, classid AS ClassId,
+                   feestructureversionid AS FeeStructureVersionId, rollnumber AS RollNumber,
+                   isactive AS IsActive, versionno AS VersionNo,
+                   createdby AS CreatedBy, createdon AS CreatedOn,
+                   updatedby AS UpdatedBy, updatedon AS UpdatedOn
+            FROM {schema}.{DatabaseConfig.TableStudentAcademics}
+            WHERE studentid = @StudentId
+              AND academicyearid = @AcademicYearId
+              AND isactive = true
+            LIMIT 1;
+            """;
+
+        return await connection
+            .QueryFirstOrDefaultAsync<StudentAcademicEntity>(
+                sql,
+                new { StudentId = studentId, AcademicYearId = academicYearId },
+                transaction)
             .ConfigureAwait(false);
     }
 

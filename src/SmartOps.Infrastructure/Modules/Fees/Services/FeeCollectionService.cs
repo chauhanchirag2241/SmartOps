@@ -282,13 +282,22 @@ public sealed class FeeCollectionService : IFeeCollectionService
             return row;
         }
 
-        FeeStructureVersionEntity? active = await _structureRepo.GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
-        if (active is null)
+        Guid? versionId = await _collectionRepo.GetStudentFeeStructureVersionHintAsync(row.StudentId, ct).ConfigureAwait(false);
+        if (!versionId.HasValue || versionId.Value == Guid.Empty)
+        {
+            FeeStructureVersionEntity? admission = await _structureRepo
+                .GetAdmissionVersionForYearAsync(academicYearId, ct)
+                .ConfigureAwait(false);
+            versionId = admission?.Id;
+        }
+
+        if (!versionId.HasValue || versionId.Value == Guid.Empty)
         {
             return row;
         }
 
-        await _collectionRepo.AssignStudentFeeStructureVersionAsync(row.StudentId, academicYearId, active.Id, ct).ConfigureAwait(false);
+        await _collectionRepo.AssignStudentFeeStructureVersionAsync(row.StudentId, academicYearId, versionId.Value, ct)
+            .ConfigureAwait(false);
         return await _collectionRepo.GetStudentRowAsync(row.StudentId, academicYearId, ct).ConfigureAwait(false);
     }
 
@@ -380,6 +389,8 @@ public sealed class FeeCollectionService : IFeeCollectionService
             p.FeeHeadsSummary,
             p.ReceiptNo)).ToList();
 
+        IList<FeeCollectionSemesterStatusDto> semesterStatuses = BuildSemesterStatuses(heads);
+
         return new FeeCollectionStudentDetailDto(
             row.StudentId,
             row.StudentName,
@@ -391,7 +402,53 @@ public sealed class FeeCollectionService : IFeeCollectionService
             pct,
             FeeLabelHelper.PaymentStatus(total, paid),
             heads,
+            semesterStatuses,
             history);
+    }
+
+    private static IList<FeeCollectionSemesterStatusDto> BuildSemesterStatuses(IList<FeeCollectionHeadDto> heads)
+    {
+        var bySemester = new Dictionary<int, (string Name, DateOnly Start, DateOnly End, decimal Total, decimal Paid)>();
+
+        foreach (FeeCollectionHeadDto head in heads)
+        {
+            foreach (FeeCollectionInstallmentDto inst in head.Installments)
+            {
+                if (inst.PeriodIndex <= 0)
+                {
+                    continue;
+                }
+
+                if (!bySemester.TryGetValue(inst.PeriodIndex, out var agg))
+                {
+                    agg = (inst.PeriodLabel, inst.PeriodStart, inst.PeriodEnd, 0m, 0m);
+                }
+
+                bySemester[inst.PeriodIndex] = (
+                    agg.Name,
+                    agg.Start == default ? inst.PeriodStart : agg.Start,
+                    inst.PeriodEnd,
+                    agg.Total + inst.TotalAmount,
+                    agg.Paid + inst.PaidAmount);
+            }
+        }
+
+        return bySemester
+            .OrderBy(kv => kv.Key)
+            .Select(kv =>
+            {
+                decimal due = Math.Max(0, kv.Value.Total - kv.Value.Paid);
+                return new FeeCollectionSemesterStatusDto(
+                    kv.Key,
+                    kv.Value.Name,
+                    kv.Value.Start,
+                    kv.Value.End,
+                    kv.Value.Total,
+                    kv.Value.Paid,
+                    due,
+                    FeeAllocationHelper.StatusForPeriod(kv.Value.Total, kv.Value.Paid, kv.Value.End));
+            })
+            .ToList();
     }
 
     private static IList<FeeCollectionHeadDto> BuildHeadsFromInstallments(
@@ -412,13 +469,14 @@ public sealed class FeeCollectionService : IFeeCollectionService
                         return new FeeCollectionInstallmentDto(
                             i.Id,
                             i.FeeTypeId,
+                            i.PeriodIndex,
                             i.PeriodLabel,
                             i.PeriodStart,
                             i.PeriodEnd,
                             i.Amount,
                             instPaid,
                             instDue,
-                            FeeAllocationHelper.StatusForHead(i.Amount, instPaid));
+                            FeeAllocationHelper.StatusForPeriod(i.Amount, instPaid, i.PeriodEnd));
                     })
                     .ToList();
 
@@ -429,8 +487,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
                 return new FeeCollectionHeadDto(
                     first.FeeTypeId,
                     first.FeeTypeName,
-                    FeeLabelHelper.FrequencyLabel((FeeFrequency)first.Frequency),
-                    FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)first.AmountBasis),
+                    FeeLabelHelper.CollectionTypeLabel((FeeCollectionType)first.CollectionType),
                     headTotal,
                     headPaid,
                     headDue,
@@ -464,6 +521,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
                 var legacyInstallment = new FeeCollectionInstallmentDto(
                     Guid.Empty,
                     h.FeeTypeId,
+                    1,
                     "Full year",
                     default,
                     default,
@@ -475,8 +533,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
                 return new FeeCollectionHeadDto(
                     h.FeeTypeId,
                     meta?.FeeTypeName ?? string.Empty,
-                    FeeLabelHelper.FrequencyLabel((FeeFrequency)(meta?.Frequency ?? 0)),
-                    FeeLabelHelper.AmountBasisLabel((FeeAmountBasis)(meta?.AmountBasis ?? 0)),
+                    FeeLabelHelper.CollectionTypeLabel((FeeCollectionType)(meta?.CollectionType ?? 0)),
                     h.TotalAmount,
                     h.PaidAmount,
                     h.DueAmount,

@@ -10,6 +10,4 @@ public class StudentFeeConfigEntity : AuditableEntity
     public decimal? DiscountValue { get; set; }
     public bool? IsPercentage { get; set; }
     public string? DiscountRemarks { get; set; }
-    public string? PaymentMode { get; set; }
-    public DateOnly? FirstDueDate { get; set; }
 }

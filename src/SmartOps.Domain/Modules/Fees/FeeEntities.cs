@@ -19,16 +19,16 @@ public class FeeTypeEntity : AuditableEntity
     public Guid FeeStructureVersionId { get; set; }
     public string Name { get; set; } = null!;
     public FeeCategory Category { get; set; }
-    public FeeFrequency Frequency { get; set; }
-    public FeeAmountBasis AmountBasis { get; set; } = FeeAmountBasis.AnnualTotal;
+    /// <summary>Stored in DB column <c>frequency</c> for schema compatibility.</summary>
+    public FeeCollectionType CollectionType { get; set; }
     public bool IsMandatory { get; set; } = true;
     public bool IsRefundable { get; set; }
+    public bool StudentWiseDifferentAmount { get; set; }
 }
 
 public class FeeSettingsEntity : AuditableEntity
 {
     public Guid Id { get; set; }
-    public FeePaymentCycle PaymentCycle { get; set; } = FeePaymentCycle.Quarterly;
     public decimal LateFeePerDay { get; set; }
     public Guid? DefaultAcademicYearId { get; set; }
 }
@@ -40,7 +40,10 @@ public class ClassFeeAmountEntity : AuditableEntity
     public Guid ClassId { get; set; }
     public Guid FeeTypeId { get; set; }
     public Guid AcademicYearId { get; set; }
+    /// <summary>One-time fee amount, or annual total for semester-wise (sem1 + sem2).</summary>
     public decimal Amount { get; set; }
+    public decimal Semester1Amount { get; set; }
+    public decimal Semester2Amount { get; set; }
 }
 
 public class FeePaymentEntity : AuditableEntity

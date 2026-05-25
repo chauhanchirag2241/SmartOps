@@ -95,4 +95,33 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
         await academicYearRepository.DeleteAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
+
+    [HttpGet("{id:guid}/semesters")]
+    [Authorize(Policy = MenuPolicies.AcademicYears.View)]
+    [ProducesResponseType(typeof(IList<AcademicYearSemesterDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSemesters(Guid id, CancellationToken cancellationToken)
+    {
+        var semesters = await academicYearRepository.GetSemestersAsync(id, cancellationToken).ConfigureAwait(false);
+        return Ok(semesters.Select(s => s.ToDto()).ToList());
+    }
+
+    [HttpPut("{id:guid}/semesters")]
+    [Authorize(Policy = MenuPolicies.AcademicYears.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> SaveSemesters(
+        Guid id,
+        [FromBody] SaveAcademicYearSemestersRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Semesters is null || request.Semesters.Count == 0)
+        {
+            return BadRequest("At least one semester is required.");
+        }
+
+        await academicYearRepository.SaveSemestersAsync(
+            id,
+            request.Semesters.Select(s => s.ToInput()).ToList(),
+            cancellationToken).ConfigureAwait(false);
+        return NoContent();
+    }
 }

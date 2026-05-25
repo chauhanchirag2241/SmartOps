@@ -11,137 +11,67 @@ public static class FeeInstallmentGenerator
         DateOnly PeriodEnd,
         decimal Amount);
 
+    public sealed record SemesterWindow(string Label, DateOnly Start, DateOnly End);
+
     public static IList<InstallmentPeriod> Generate(
-        DateOnly yearStart,
-        DateOnly yearEnd,
-        FeeFrequency frequency,
-        FeeAmountBasis amountBasis,
-        decimal classAmount)
-    {
-        if (classAmount <= 0)
-        {
-            return Array.Empty<InstallmentPeriod>();
-        }
-
-        IList<(DateOnly Start, DateOnly End, string Label)> windows = BuildPeriodWindows(yearStart, yearEnd, frequency);
-        if (windows.Count == 0)
-        {
-            return Array.Empty<InstallmentPeriod>();
-        }
-
-        return amountBasis == FeeAmountBasis.PerInstallment
-            ? BuildPerInstallmentAmounts(windows, classAmount)
-            : BuildAnnualTotalAmounts(windows, classAmount);
-    }
-
-    private static IList<InstallmentPeriod> BuildPerInstallmentAmounts(
-        IList<(DateOnly Start, DateOnly End, string Label)> windows,
-        decimal perPeriodAmount)
-    {
-        var result = new List<InstallmentPeriod>(windows.Count);
-        for (int i = 0; i < windows.Count; i++)
-        {
-            (DateOnly start, DateOnly end, string label) = windows[i];
-            result.Add(new InstallmentPeriod(i + 1, label, start, end, perPeriodAmount));
-        }
-
-        return result;
-    }
-
-    private static IList<InstallmentPeriod> BuildAnnualTotalAmounts(
-        IList<(DateOnly Start, DateOnly End, string Label)> windows,
-        decimal annualTotal)
-    {
-        int count = windows.Count;
-        decimal baseShare = Math.Floor(annualTotal / count * 100m) / 100m;
-        decimal assigned = 0m;
-        var result = new List<InstallmentPeriod>(count);
-
-        for (int i = 0; i < count; i++)
-        {
-            (DateOnly start, DateOnly end, string label) = windows[i];
-            decimal amount = i == count - 1 ? annualTotal - assigned : baseShare;
-            assigned += amount;
-            result.Add(new InstallmentPeriod(i + 1, label, start, end, amount));
-        }
-
-        return result;
-    }
-
-    internal static IList<(DateOnly Start, DateOnly End, string Label)> BuildPeriodWindows(
-        DateOnly yearStart,
-        DateOnly yearEnd,
-        FeeFrequency frequency) =>
-        frequency switch
-        {
-            FeeFrequency.Monthly => BuildMonthlyWindows(yearStart, yearEnd),
-            FeeFrequency.Quarterly => BuildChunkedWindows(yearStart, yearEnd, 3, "Q"),
-            FeeFrequency.SemiAnnual => BuildChunkedWindows(yearStart, yearEnd, 6, "H"),
-            FeeFrequency.Annual => new List<(DateOnly, DateOnly, string)>
-            {
-                (yearStart, yearEnd, $"Annual {FormatYearRange(yearStart, yearEnd)}")
-            },
-            FeeFrequency.OneTime => new List<(DateOnly, DateOnly, string)>
-            {
-                (yearStart, yearEnd, $"One-time {FormatYearRange(yearStart, yearEnd)}")
-            },
-            _ => new List<(DateOnly, DateOnly, string)>
-            {
-                (yearStart, yearEnd, $"Annual {FormatYearRange(yearStart, yearEnd)}")
-            }
-        };
-
-    private static IList<(DateOnly Start, DateOnly End, string Label)> BuildMonthlyWindows(
+        FeeCollectionType collectionType,
+        decimal oneTimeAmount,
+        decimal semester1Amount,
+        decimal semester2Amount,
+        IList<SemesterWindow> semesters,
         DateOnly yearStart,
         DateOnly yearEnd)
     {
-        var windows = new List<(DateOnly, DateOnly, string)>();
-        var cursor = new DateOnly(yearStart.Year, yearStart.Month, 1);
-        while (cursor <= yearEnd)
+        return collectionType switch
         {
-            DateOnly periodStart = cursor < yearStart ? yearStart : cursor;
-            DateOnly monthEnd = new DateOnly(cursor.Year, cursor.Month, DateTime.DaysInMonth(cursor.Year, cursor.Month));
-            DateOnly periodEnd = monthEnd > yearEnd ? yearEnd : monthEnd;
-            if (periodStart <= periodEnd)
+            FeeCollectionType.OneTime when oneTimeAmount > 0 => new List<InstallmentPeriod>
             {
-                windows.Add((periodStart, periodEnd, cursor.ToString("MMM yyyy")));
-            }
-
-            cursor = cursor.AddMonths(1);
-        }
-
-        return windows;
+                new(1, $"One-time {FormatYearRange(yearStart, yearEnd)}", yearStart, yearEnd, oneTimeAmount)
+            },
+            FeeCollectionType.SemesterWise => GenerateSemesterWise(semester1Amount, semester2Amount, semesters, yearStart, yearEnd),
+            _ => Array.Empty<InstallmentPeriod>()
+        };
     }
 
-    private static IList<(DateOnly Start, DateOnly End, string Label)> BuildChunkedWindows(
+    private static IList<InstallmentPeriod> GenerateSemesterWise(
+        decimal semester1Amount,
+        decimal semester2Amount,
+        IList<SemesterWindow> semesters,
         DateOnly yearStart,
-        DateOnly yearEnd,
-        int monthsPerChunk,
-        string prefix)
+        DateOnly yearEnd)
     {
-        IList<(DateOnly Start, DateOnly End, string Label)> months = BuildMonthlyWindows(yearStart, yearEnd);
-        if (months.Count == 0)
+        var periods = new List<InstallmentPeriod>();
+        if (semesters.Count >= 2)
         {
-            return Array.Empty<(DateOnly, DateOnly, string)>();
-        }
-
-        var chunks = new List<(DateOnly, DateOnly, string)>();
-        int chunkIndex = 1;
-        for (int i = 0; i < months.Count; i += monthsPerChunk)
-        {
-            DateOnly start = months[i].Start;
-            DateOnly end = months[Math.Min(i + monthsPerChunk - 1, months.Count - 1)].End;
-            string label = prefix switch
+            if (semester1Amount > 0)
             {
-                "Q" => $"{prefix}{chunkIndex} {FormatYearRange(yearStart, yearEnd)}",
-                "H" => $"{prefix}{chunkIndex} {FormatYearRange(yearStart, yearEnd)}",
-                _ => $"{prefix}{chunkIndex}"
-            };
-            chunks.Add((start, end, label));
-            chunkIndex++;
+                SemesterWindow s1 = semesters[0];
+                periods.Add(new InstallmentPeriod(1, s1.Label, s1.Start, s1.End, semester1Amount));
+            }
+
+            if (semester2Amount > 0)
+            {
+                SemesterWindow s2 = semesters[1];
+                periods.Add(new InstallmentPeriod(2, s2.Label, s2.Start, s2.End, semester2Amount));
+            }
+
+            return periods;
         }
 
-        return chunks;
+        // Fallback when semesters are not configured: split academic year in half.
+        int totalDays = Math.Max(1, yearEnd.DayNumber - yearStart.DayNumber);
+        DateOnly mid = yearStart.AddDays(totalDays / 2);
+        if (semester1Amount > 0)
+        {
+            periods.Add(new InstallmentPeriod(1, "Semester 1", yearStart, mid, semester1Amount));
+        }
+
+        if (semester2Amount > 0)
+        {
+            periods.Add(new InstallmentPeriod(2, "Semester 2", mid.AddDays(1), yearEnd, semester2Amount));
+        }
+
+        return periods;
     }
 
     private static string FormatYearRange(DateOnly start, DateOnly end) =>

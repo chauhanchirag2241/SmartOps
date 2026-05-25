@@ -9,103 +9,75 @@ public sealed class FeeInstallmentGeneratorTests
     private static readonly DateOnly YearStart = new(2025, 4, 1);
     private static readonly DateOnly YearEnd = new(2026, 3, 31);
 
-    [Fact]
-    public void Monthly_PerInstallment_uses_amount_each_month()
-    {
-        IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
-            YearStart,
-            YearEnd,
-            FeeFrequency.Monthly,
-            FeeAmountBasis.PerInstallment,
-            2000m);
-
-        Assert.Equal(12, periods.Count);
-        Assert.All(periods, p => Assert.Equal(2000m, p.Amount));
-        Assert.Equal(24000m, periods.Sum(p => p.Amount));
-    }
+    private static readonly IList<FeeInstallmentGenerator.SemesterWindow> Semesters =
+    [
+        new("Semester 1", new DateOnly(2025, 4, 1), new DateOnly(2025, 9, 30)),
+        new("Semester 2", new DateOnly(2025, 10, 1), new DateOnly(2026, 3, 31)),
+    ];
 
     [Fact]
-    public void Monthly_AnnualTotal_splits_across_months()
+    public void SemesterWise_creates_two_periods_with_configured_amounts()
     {
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
+            FeeCollectionType.SemesterWise,
+            oneTimeAmount: 0,
+            semester1Amount: 5000m,
+            semester2Amount: 6000m,
+            Semesters,
             YearStart,
-            YearEnd,
-            FeeFrequency.Monthly,
-            FeeAmountBasis.AnnualTotal,
-            12000m);
-
-        Assert.Equal(12, periods.Count);
-        Assert.Equal(12000m, periods.Sum(p => p.Amount));
-    }
-
-    [Fact]
-    public void Quarterly_AnnualTotal_creates_four_periods()
-    {
-        IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
-            YearStart,
-            YearEnd,
-            FeeFrequency.Quarterly,
-            FeeAmountBasis.AnnualTotal,
-            8000m);
-
-        Assert.Equal(4, periods.Count);
-        Assert.Equal(8000m, periods.Sum(p => p.Amount));
-    }
-
-    [Fact]
-    public void SemiAnnual_PerInstallment_creates_two_periods()
-    {
-        IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
-            YearStart,
-            YearEnd,
-            FeeFrequency.SemiAnnual,
-            FeeAmountBasis.PerInstallment,
-            5000m);
+            YearEnd);
 
         Assert.Equal(2, periods.Count);
-        Assert.All(periods, p => Assert.Equal(5000m, p.Amount));
+        Assert.Equal(5000m, periods[0].Amount);
+        Assert.Equal(6000m, periods[1].Amount);
+        Assert.Equal("Semester 1", periods[0].PeriodLabel);
+        Assert.Equal("Semester 2", periods[1].PeriodLabel);
     }
 
     [Fact]
     public void OneTime_creates_single_period()
     {
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
+            FeeCollectionType.OneTime,
+            oneTimeAmount: 15000m,
+            semester1Amount: 0,
+            semester2Amount: 0,
+            Semesters,
             YearStart,
-            YearEnd,
-            FeeFrequency.OneTime,
-            FeeAmountBasis.PerInstallment,
-            15000m);
+            YearEnd);
 
         Assert.Single(periods);
         Assert.Equal(15000m, periods[0].Amount);
     }
 
     [Fact]
-    public void Zero_amount_returns_empty()
+    public void Zero_amounts_return_empty()
     {
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
+            FeeCollectionType.SemesterWise,
+            0,
+            0,
+            0,
+            Semesters,
             YearStart,
-            YearEnd,
-            FeeFrequency.Monthly,
-            FeeAmountBasis.AnnualTotal,
-            0m);
+            YearEnd);
 
         Assert.Empty(periods);
     }
 
     [Fact]
-    public void Short_academic_year_monthly_counts_partial_months()
+    public void SemesterWise_without_semester_config_splits_year_in_half()
     {
-        var start = new DateOnly(2025, 6, 1);
-        var end = new DateOnly(2025, 8, 31);
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
-            start,
-            end,
-            FeeFrequency.Monthly,
-            FeeAmountBasis.AnnualTotal,
-            3000m);
+            FeeCollectionType.SemesterWise,
+            0,
+            4000m,
+            4000m,
+            Array.Empty<FeeInstallmentGenerator.SemesterWindow>(),
+            YearStart,
+            YearEnd);
 
-        Assert.Equal(3, periods.Count);
-        Assert.Equal(3000m, periods.Sum(p => p.Amount));
+        Assert.Equal(2, periods.Count);
+        Assert.Equal(8000m, periods.Sum(p => p.Amount));
     }
 }

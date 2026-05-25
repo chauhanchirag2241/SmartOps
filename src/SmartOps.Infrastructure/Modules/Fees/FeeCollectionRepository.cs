@@ -180,8 +180,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         string sql = $"""
             SELECT ft.id AS FeeTypeId,
                    ft.name AS FeeTypeName,
-                   ft.frequency AS Frequency,
-                   ft.amountbasis AS AmountBasis,
+                   ft.frequency AS CollectionType,
                    COALESCE(cfa.amount, 0) AS Amount
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
             INNER JOIN {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
@@ -237,6 +236,42 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             """;
         return await connection.ExecuteScalarAsync<decimal>(
             new CommandDefinition(sql, new { StudentId = studentId, FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    public async Task<Guid?> GetStudentFeeStructureVersionHintAsync(Guid studentId, CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT feestructureversionid
+            FROM {Schema}.{DatabaseConfig.TableStudentFeeHeadAssignments}
+            WHERE studentid = @StudentId
+              AND isactive = true
+              AND feestructureversionid IS NOT NULL
+              AND feestructureversionid <> '00000000-0000-0000-0000-000000000000'::uuid
+            ORDER BY createdon DESC
+            LIMIT 1;
+            """;
+        Guid? fromAssignments = await connection
+            .QueryFirstOrDefaultAsync<Guid?>(new CommandDefinition(sql, new { StudentId = studentId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+        if (fromAssignments.HasValue && fromAssignments.Value != Guid.Empty)
+        {
+            return fromAssignments;
+        }
+
+        sql = $"""
+            SELECT feestructureversionid
+            FROM {Schema}.{DatabaseConfig.TableStudentFeeInstallments}
+            WHERE studentid = @StudentId
+              AND isactive = true
+              AND feestructureversionid IS NOT NULL
+              AND feestructureversionid <> '00000000-0000-0000-0000-000000000000'::uuid
+            ORDER BY createdon DESC
+            LIMIT 1;
+            """;
+        return await connection
+            .QueryFirstOrDefaultAsync<Guid?>(new CommandDefinition(sql, new { StudentId = studentId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 

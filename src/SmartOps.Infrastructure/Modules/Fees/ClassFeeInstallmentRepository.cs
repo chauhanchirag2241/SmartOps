@@ -42,8 +42,8 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_schema = @Schema
-                  AND table_name = @FeeTypesTable
-                  AND column_name = 'amountbasis'
+                  AND table_name = @ClassAmountsTable
+                  AND column_name = 'semester1amount'
             )
             AND EXISTS (
                 SELECT 1
@@ -60,7 +60,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 {
                     Schema,
                     InstallmentsTable = DatabaseConfig.TableClassFeeInstallments,
-                    FeeTypesTable = DatabaseConfig.TableFeeTypes,
+                    ClassAmountsTable = DatabaseConfig.TableClassFeeAmounts,
                     AllocationsTable = DatabaseConfig.TableFeePaymentAllocations
                 },
                 cancellationToken: ct))
@@ -82,8 +82,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             SELECT cfi.id AS Id,
                    cfi.feetypeid AS FeeTypeId,
                    ft.name AS FeeTypeName,
-                   ft.frequency AS Frequency,
-                   ft.amountbasis AS AmountBasis,
+                   ft.frequency AS CollectionType,
                    cfi.periodindex AS PeriodIndex,
                    cfi.periodlabel AS PeriodLabel,
                    cfi.periodstart AS PeriodStart,
@@ -114,15 +113,16 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         string sql = $"""
             SELECT ft.id AS FeeTypeId,
                    ft.name AS FeeTypeName,
-                   ft.frequency AS Frequency,
-                   COALESCE(ft.amountbasis, 0) AS AmountBasis,
-                   cfa.amount AS Amount
+                   ft.frequency AS CollectionType,
+                   cfa.amount AS Amount,
+                   COALESCE(cfa.semester1amount, 0) AS Semester1Amount,
+                   COALESCE(cfa.semester2amount, 0) AS Semester2Amount
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
             INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
             WHERE cfa.classid = @ClassId
               AND cfa.feestructureversionid = @FeeStructureVersionId
               AND cfa.isactive = true
-              AND cfa.amount > 0;
+              AND (cfa.amount > 0 OR cfa.semester1amount > 0 OR cfa.semester2amount > 0);
             """;
         IEnumerable<ClassFeeAmountForInstallmentRow> rows = await connection
             .QueryAsync<ClassFeeAmountForInstallmentRow>(new CommandDefinition(
@@ -373,9 +373,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         {
             IList<FeeInstallmentGenerator.InstallmentPeriod> periods = await BuildPeriodsForRowAsync(
                 academicYearId,
-                (FeeFrequency)row.Frequency,
-                (FeeAmountBasis)row.AmountBasis,
-                row.Amount,
+                row,
                 ct).ConfigureAwait(false);
             if (periods.Count == 0)
             {
@@ -415,9 +413,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         {
             IList<FeeInstallmentGenerator.InstallmentPeriod> periods = await BuildPeriodsForRowAsync(
                 academicYearId,
-                (FeeFrequency)row.Frequency,
-                (FeeAmountBasis)row.AmountBasis,
-                row.Amount,
+                row,
                 ct).ConfigureAwait(false);
             await RegenerateForClassFeeTypeAsync(
                 classId,
@@ -431,13 +427,38 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     private async Task<IList<FeeInstallmentGenerator.InstallmentPeriod>> BuildPeriodsForRowAsync(
         Guid academicYearId,
-        FeeFrequency frequency,
-        FeeAmountBasis amountBasis,
-        decimal amount,
+        ClassFeeAmountForInstallmentRow row,
         CancellationToken ct)
     {
         (DateOnly start, DateOnly end) = await GetAcademicYearDatesAsync(academicYearId, ct).ConfigureAwait(false);
-        return FeeInstallmentGenerator.Generate(start, end, frequency, amountBasis, amount);
+        IList<FeeInstallmentGenerator.SemesterWindow> semesters = await GetSemesterWindowsAsync(academicYearId, ct)
+            .ConfigureAwait(false);
+        return FeeInstallmentGenerator.Generate(
+            (FeeCollectionType)row.CollectionType,
+            row.Amount,
+            row.Semester1Amount,
+            row.Semester2Amount,
+            semesters,
+            start,
+            end);
+    }
+
+    private async Task<IList<FeeInstallmentGenerator.SemesterWindow>> GetSemesterWindowsAsync(
+        Guid academicYearId,
+        CancellationToken ct)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT name AS Label, startdate AS Start, enddate AS End
+            FROM {Schema}.{DatabaseConfig.TableAcademicYearSemesters}
+            WHERE academicyearid = @AcademicYearId AND isactive = true
+            ORDER BY semesterindex;
+            """;
+        IEnumerable<(string Label, DateOnly Start, DateOnly End)> rows = await connection
+            .QueryAsync<(string Label, DateOnly Start, DateOnly End)>(
+                new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return rows.Select(r => new FeeInstallmentGenerator.SemesterWindow(r.Label, r.Start, r.End)).ToList();
     }
 
     private async Task<(DateOnly Start, DateOnly End)> GetAcademicYearDatesAsync(Guid academicYearId, CancellationToken ct)

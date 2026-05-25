@@ -61,8 +61,7 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
             SELECT sfi.id AS Id,
                    sfi.feetypeid AS FeeTypeId,
                    ft.name AS FeeTypeName,
-                   ft.frequency AS Frequency,
-                   COALESCE(ft.amountbasis, 0) AS AmountBasis,
+                   ft.frequency AS CollectionType,
                    sfi.periodindex AS PeriodIndex,
                    sfi.periodlabel AS PeriodLabel,
                    sfi.periodstart AS PeriodStart,
@@ -224,9 +223,12 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                     continue;
                 }
 
+                decimal classAnnual = (FeeCollectionType)classAmount.CollectionType == FeeCollectionType.SemesterWise
+                    ? classAmount.Semester1Amount + classAmount.Semester2Amount
+                    : classAmount.Amount;
                 decimal studentAnnual = assignment.CustomAnnualAmount is > 0
                     ? assignment.CustomAnnualAmount.Value
-                    : classAmount.Amount;
+                    : classAnnual;
                 if (studentAnnual <= 0)
                 {
                     continue;
@@ -241,16 +243,37 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
 
                 if (templatePeriods.Count > 0)
                 {
-                    periodsToInsert = ScaleClassPeriods(templatePeriods, classAmount.Amount, studentAnnual);
+                    periodsToInsert = ScaleClassPeriods(templatePeriods, classAnnual, studentAnnual);
                 }
                 else
                 {
+                    IList<FeeInstallmentGenerator.SemesterWindow> semesters = await GetSemesterWindowsAsync(
+                            academicYearId,
+                            conn,
+                            tx,
+                            ct)
+                        .ConfigureAwait(false);
                     IList<FeeInstallmentGenerator.InstallmentPeriod> generated = FeeInstallmentGenerator.Generate(
+                        (FeeCollectionType)classAmount.CollectionType,
+                        classAmount.Amount,
+                        classAmount.Semester1Amount,
+                        classAmount.Semester2Amount,
+                        semesters,
                         yearStart,
-                        yearEnd,
-                        (FeeFrequency)classAmount.Frequency,
-                        (FeeAmountBasis)classAmount.AmountBasis,
-                        studentAnnual);
+                        yearEnd);
+                    if (studentAnnual != classAnnual && classAnnual > 0)
+                    {
+                        decimal ratio = studentAnnual / classAnnual;
+                        generated = generated
+                            .Select(p => new FeeInstallmentGenerator.InstallmentPeriod(
+                                p.PeriodIndex,
+                                p.PeriodLabel,
+                                p.PeriodStart,
+                                p.PeriodEnd,
+                                Math.Round(p.Amount * ratio, 2)))
+                            .ToList();
+                    }
+
                     periodsToInsert = generated
                         .Select(p => (p.PeriodIndex, p.PeriodLabel, p.PeriodStart, p.PeriodEnd, p.Amount))
                         .ToList();
@@ -503,5 +526,24 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
         }
 
         return (row.StartDate, row.EndDate);
+    }
+
+    private async Task<IList<FeeInstallmentGenerator.SemesterWindow>> GetSemesterWindowsAsync(
+        Guid academicYearId,
+        IDbConnection conn,
+        IDbTransaction tx,
+        CancellationToken ct)
+    {
+        string sql = $"""
+            SELECT name AS Label, startdate AS Start, enddate AS End
+            FROM {Schema}.{DatabaseConfig.TableAcademicYearSemesters}
+            WHERE academicyearid = @AcademicYearId AND isactive = true
+            ORDER BY semesterindex;
+            """;
+        IEnumerable<(string Label, DateOnly Start, DateOnly End)> rows = await conn
+            .QueryAsync<(string Label, DateOnly Start, DateOnly End)>(
+                new CommandDefinition(sql, new { AcademicYearId = academicYearId }, transaction: tx, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return rows.Select(r => new FeeInstallmentGenerator.SemesterWindow(r.Label, r.Start, r.End)).ToList();
     }
 }

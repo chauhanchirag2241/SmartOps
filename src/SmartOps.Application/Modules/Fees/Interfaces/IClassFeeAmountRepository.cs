@@ -8,7 +8,7 @@ public interface IClassFeeAmountRepository
         Guid classId,
         Guid academicYearId,
         Guid feeStructureVersionId,
-        IList<(Guid FeeTypeId, decimal Amount)> amounts,
+        IList<ClassFeeAmountUpsertRow> amounts,
         CancellationToken ct = default);
 
     /// <summary>True when this class has fee amounts or installments with amount &gt; 0 (not merely zero placeholder rows).</summary>
@@ -28,8 +28,18 @@ public sealed class ClassFeeAmountRow
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
     public int Category { get; init; }
-    public int Frequency { get; init; }
-    public int AmountBasis { get; init; }
+    public int CollectionType { get; init; }
     public decimal Amount { get; init; }
+    public decimal Semester1Amount { get; init; }
+    public decimal Semester2Amount { get; init; }
     public bool IsMandatory { get; init; }
+    public bool StudentWiseDifferentAmount { get; init; }
+}
+
+public sealed class ClassFeeAmountUpsertRow
+{
+    public Guid FeeTypeId { get; init; }
+    public decimal Amount { get; init; }
+    public decimal Semester1Amount { get; init; }
+    public decimal Semester2Amount { get; init; }
 }

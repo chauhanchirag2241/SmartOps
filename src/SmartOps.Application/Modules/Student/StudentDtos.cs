@@ -71,8 +71,6 @@ public class CreateStudentFeeConfigDto
     public decimal? DiscountValue { get; set; }
     public bool? IsPercentage { get; set; }
     public string? DiscountRemarks { get; set; }
-    public string? PaymentMode { get; set; }
-    public DateOnly? FirstDueDate { get; set; }
 }
 
 public class CreateStudentFeeHeadSelectionDto
@@ -132,9 +130,7 @@ public static class StudentMappingExtensions
                 DiscountType = f.DiscountType,
                 DiscountValue = f.DiscountValue,
                 IsPercentage = f.IsPercentage,
-                DiscountRemarks = f.DiscountRemarks,
-                PaymentMode = f.PaymentMode,
-                FirstDueDate = f.FirstDueDate
+                DiscountRemarks = f.DiscountRemarks
             }).ToList(),
             FeeHeadAssignments = dto.FeeHeadSelections
                 .Where(s => s.FeeTypeId != Guid.Empty)

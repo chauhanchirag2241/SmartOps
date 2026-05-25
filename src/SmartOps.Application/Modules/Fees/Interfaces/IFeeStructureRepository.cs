@@ -77,10 +77,10 @@ public sealed class FeeTypeListRow
     public Guid FeeStructureVersionId { get; init; }
     public string Name { get; init; } = string.Empty;
     public FeeCategory Category { get; init; }
-    public FeeFrequency Frequency { get; init; }
-    public FeeAmountBasis AmountBasis { get; init; }
+    public FeeCollectionType CollectionType { get; init; }
     public bool IsMandatory { get; init; }
     public bool IsRefundable { get; init; }
+    public bool StudentWiseDifferentAmount { get; init; }
     public bool IsActive { get; init; }
     public bool HasStudentPayments { get; init; }
 }

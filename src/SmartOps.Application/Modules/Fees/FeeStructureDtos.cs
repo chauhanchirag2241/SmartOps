@@ -49,11 +49,6 @@ public record FeeTypeDto(
     bool IsActive,
     bool HasStudentPayments);
 
-public record FeeStructureStatsDto(
-    int FeeTypeCount,
-    int ClassesConfigured,
-    decimal LateFeePerDay);
-
 public record FeeSettingsDto(
     Guid Id,
     decimal LateFeePerDay,

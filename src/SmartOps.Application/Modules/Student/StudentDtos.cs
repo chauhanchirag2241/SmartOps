@@ -27,7 +27,6 @@ public class CreateStudentDto
     public List<CreateStudentParentDto> Parents { get; set; } = new();
     public List<CreateStudentAcademicDto> Academics { get; set; } = new();
     public List<CreateStudentPreviousSchoolDto> PreviousSchools { get; set; } = new();
-    public List<CreateStudentFeeConfigDto> FeeConfigs { get; set; } = new();
     public List<CreateStudentFeeHeadSelectionDto> FeeHeadSelections { get; set; } = new();
     public List<StudentCustomFieldDto> CustomFields { get; set; } = new();
 }
@@ -63,14 +62,6 @@ public class CreateStudentPreviousSchoolDto
     public string? LastClassPassed { get; set; }
     public string? PercentageOrCgpa { get; set; }
     public string? TcNumber { get; set; }
-}
-
-public class CreateStudentFeeConfigDto
-{
-    public string? DiscountType { get; set; }
-    public decimal? DiscountValue { get; set; }
-    public bool? IsPercentage { get; set; }
-    public string? DiscountRemarks { get; set; }
 }
 
 public class CreateStudentFeeHeadSelectionDto
@@ -124,13 +115,6 @@ public static class StudentMappingExtensions
                 LastClassPassed = ps.LastClassPassed,
                 PercentageOrCgpa = ps.PercentageOrCgpa,
                 TcNumber = ps.TcNumber
-            }).ToList(),
-            FeeConfigs = dto.FeeConfigs.Select(f => new StudentFeeConfigEntity
-            {
-                DiscountType = f.DiscountType,
-                DiscountValue = f.DiscountValue,
-                IsPercentage = f.IsPercentage,
-                DiscountRemarks = f.DiscountRemarks
             }).ToList(),
             FeeHeadAssignments = dto.FeeHeadSelections
                 .Where(s => s.FeeTypeId != Guid.Empty)

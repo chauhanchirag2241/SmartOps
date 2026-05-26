@@ -28,21 +28,10 @@ public sealed class DashboardController(IDashboardService dashboardService) : Co
 
     [HttpGet]
     [ProducesResponseType(typeof(DashboardResponseDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<DashboardResponseDto>> GetDashboard(
-        [FromQuery] string? attendancePreset,
-        [FromQuery] DateOnly? attendanceFrom,
-        [FromQuery] DateOnly? attendanceTo,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<DashboardResponseDto>> GetDashboard(CancellationToken cancellationToken)
     {
-        var query = new DashboardQueryDto
-        {
-            AttendancePreset = attendancePreset,
-            AttendanceFrom = attendanceFrom,
-            AttendanceTo = attendanceTo
-        };
-
         DashboardResponseDto dashboard = await dashboardService
-            .GetDashboardAsync(query, cancellationToken)
+            .GetDashboardAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return Ok(dashboard);
     }

@@ -17,7 +17,20 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
         "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
 
     private const string EffectiveAmountSql =
-        "CASE WHEN ft.frequency = 0 THEN COALESCE(NULLIF(cfa.semester1amount + cfa.semester2amount, 0), cfa.amount) ELSE cfa.amount END";
+        """
+        CASE
+            WHEN ft.category = 4 THEN -ABS(
+                CASE WHEN ft.frequency = 0
+                    THEN COALESCE(NULLIF(cfa.semester1amount + cfa.semester2amount, 0), cfa.amount)
+                    ELSE cfa.amount
+                END
+            )
+            ELSE CASE WHEN ft.frequency = 0
+                THEN COALESCE(NULLIF(cfa.semester1amount + cfa.semester2amount, 0), cfa.amount)
+                ELSE cfa.amount
+            END
+        END
+        """;
 
     public ClassFeeAmountRepository(
         DapperContext context,
@@ -194,7 +207,8 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                       AND cfa.feestructureversionid = @FeeStructureVersionId
                       AND cfa.isactive = true
                       AND (
-                          cfa.amount > 0
+                          ft.category = 4
+                          OR cfa.amount > 0
                           OR cfa.semester1amount > 0
                           OR cfa.semester2amount > 0
                       )

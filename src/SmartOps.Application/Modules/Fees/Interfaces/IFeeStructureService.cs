@@ -31,8 +31,6 @@ public interface IFeeStructureService
 
     Task<Result<bool>> DeleteFeeTypeAsync(Guid id, CancellationToken ct = default);
 
-    Task<Result<FeeStructureStatsDto>> GetStatsAsync(CancellationToken ct = default);
-
     Task<Result<FeeSettingsDto>> GetSettingsAsync(CancellationToken ct = default);
 
     Task<Result<FeeSettingsDto>> UpsertSettingsAsync(UpsertFeeSettingsRequestDto request, CancellationToken ct = default);

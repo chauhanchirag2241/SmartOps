@@ -5,7 +5,8 @@ public enum FeeCategory
     Academic = 0,
     Development = 1,
     Transport = 2,
-    Other = 3
+    Other = 3,
+    Discount = 4
 }
 
 /// <summary>How a fee head is collected: per semester or once per academic year.</summary>

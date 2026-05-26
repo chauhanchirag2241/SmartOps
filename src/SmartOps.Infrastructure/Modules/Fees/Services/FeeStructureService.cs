@@ -267,29 +267,6 @@ public sealed class FeeStructureService : IFeeStructureService
         return Result<bool>.Success(true);
     }
 
-    public async Task<Result<FeeStructureStatsDto>> GetStatsAsync(CancellationToken ct = default)
-    {
-        FeeSettingsEntity? settings = await _repo.GetSettingsAsync(ct).ConfigureAwait(false);
-        Guid? yearId = settings?.DefaultAcademicYearId;
-        int feeTypeCount = 0;
-        int classesConfigured = 0;
-        if (yearId.HasValue && yearId.Value != Guid.Empty)
-        {
-            FeeStructureVersionEntity? active = await _repo.GetActiveVersionForYearAsync(yearId.Value, ct).ConfigureAwait(false);
-            if (active is not null)
-            {
-                feeTypeCount = await _repo.CountActiveFeeTypesForVersionAsync(active.Id, ct).ConfigureAwait(false);
-                classesConfigured = await _repo.CountClassesWithAmountsForVersionAsync(active.Id, ct).ConfigureAwait(false);
-            }
-        }
-
-        decimal lateFee = settings?.LateFeePerDay ?? 0;
-        return Result<FeeStructureStatsDto>.Success(new FeeStructureStatsDto(
-            feeTypeCount,
-            classesConfigured,
-            lateFee));
-    }
-
     public async Task<Result<FeeSettingsDto>> GetSettingsAsync(CancellationToken ct = default)
     {
         FeeSettingsEntity? settings = await _repo.GetSettingsAsync(ct).ConfigureAwait(false);

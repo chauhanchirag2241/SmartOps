@@ -31,7 +31,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentParents,
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
-        DatabaseConfig.TableStudentFeeConfigs,
         DatabaseConfig.TableStudentFeeHeadAssignments,
         DatabaseConfig.TableStudentCustomFields,
     };
@@ -103,7 +102,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
         student.Parents = (await multi.ReadAsync<StudentParentEntity>().ConfigureAwait(false)).ToList();
         student.Academics = (await multi.ReadAsync<StudentAcademicEntity>().ConfigureAwait(false)).ToList();
-        student.FeeConfigs = (await multi.ReadAsync<StudentFeeConfigEntity>().ConfigureAwait(false)).ToList();
         student.FeeHeadAssignments = (await multi.ReadAsync<StudentFeeHeadAssignmentEntity>().ConfigureAwait(false)).ToList();
         student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
         student.CustomFields = (await multi.ReadAsync<StudentCustomFieldEntity>().ConfigureAwait(false)).ToList();
@@ -425,7 +423,6 @@ WHERE id = @StudentId AND isactive = true
             SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
-            SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeConfigs} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
@@ -500,23 +497,6 @@ WHERE id = @StudentId AND isactive = true
                         Context.OperationalSchema,
                         DatabaseConfig.TableStudentPreviousSchools,
                         prevSchool,
-                        transaction)
-                    .ConfigureAwait(false);
-            }
-        }
-
-        if (student.FeeConfigs is { Count: > 0 })
-        {
-            foreach (var feeConfig in student.FeeConfigs)
-            {
-                feeConfig.Id = Guid.NewGuid();
-                feeConfig.StudentId = studentId;
-                EnsureInsertAudit(feeConfig, utcNow);
-                await InsertWithoutReturnAsync(
-                        connection,
-                        Context.OperationalSchema,
-                        DatabaseConfig.TableStudentFeeConfigs,
-                        feeConfig,
                         transaction)
                     .ConfigureAwait(false);
             }
@@ -665,23 +645,6 @@ WHERE id = @StudentId AND isactive = true
                         Context.OperationalSchema,
                         DatabaseConfig.TableStudentPreviousSchools,
                         prev,
-                        transaction,
-                        "StudentId")
-                    .ConfigureAwait(false);
-            }
-        }
-
-        if (student.FeeConfigs is not null)
-        {
-            foreach (var fee in student.FeeConfigs)
-            {
-                fee.StudentId = student.Id;
-                ApplyUpdateAudit(fee, actorId, utcNow);
-                await UpdateAsync(
-                        connection,
-                        Context.OperationalSchema,
-                        DatabaseConfig.TableStudentFeeConfigs,
-                        fee,
                         transaction,
                         "StudentId")
                     .ConfigureAwait(false);

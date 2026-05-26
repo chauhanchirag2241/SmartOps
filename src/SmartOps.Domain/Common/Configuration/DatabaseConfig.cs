@@ -25,7 +25,6 @@ public static class DatabaseConfig
     public const string TableStudentParents = "studentparents";
     public const string TableStudentAcademics = "studentacademics";
     public const string TableStudentPreviousSchools = "studentpreviousschools";
-    public const string TableStudentFeeConfigs = "studentfeeconfigs";
     public const string TableStudentFeeHeadAssignments = "studentfeeheadassignments";
     public const string TableStudentFeeInstallments = "studentfeeinstallments";
     public const string TableStudentCustomFields = "studentcustomfields";

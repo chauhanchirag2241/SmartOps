@@ -11,6 +11,7 @@ public record ClassFeeSummaryDto(
 public record ClassFeeAmountItemDto(
     Guid FeeTypeId,
     string FeeTypeName,
+    FeeCategory Category,
     string CategoryLabel,
     FeeCollectionType CollectionType,
     string CollectionTypeLabel,

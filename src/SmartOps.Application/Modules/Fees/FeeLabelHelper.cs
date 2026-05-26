@@ -9,6 +9,7 @@ public static class FeeLabelHelper
         FeeCategory.Academic => "Academic",
         FeeCategory.Development => "Development",
         FeeCategory.Transport => "Transport",
+        FeeCategory.Discount => "Discount",
         _ => "Other"
     };
 

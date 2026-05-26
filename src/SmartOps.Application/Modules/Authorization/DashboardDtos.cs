@@ -26,14 +26,7 @@ public sealed class DashboardWidgetLayoutItemDto
     public string RequiredMenuCode { get; init; } = string.Empty;
 }
 
-public sealed class DashboardQueryDto
-{
-    public string? AttendancePreset { get; set; }
-
-    public DateOnly? AttendanceFrom { get; set; }
-
-    public DateOnly? AttendanceTo { get; set; }
-}
+public sealed class DashboardQueryDto;
 
 public sealed class DashboardResponseDto
 {
@@ -45,9 +38,11 @@ public sealed class DashboardResponseDto
 
     public AttendanceTodayDto? AttendanceToday { get; init; }
 
-    public FeesDashboardDto? Fees { get; init; }
-
     public SalaryDashboardDto? Salary { get; init; }
+
+    public decimal? SchoolFeesCollectedTotal { get; init; }
+
+    public decimal? SchoolFeesDueTotal { get; init; }
 
     public IReadOnlyList<RecentStudentDto>? RecentStudents { get; init; }
 
@@ -77,30 +72,6 @@ public sealed class AttendanceTodayDto
     public string DateLabel { get; init; } = string.Empty;
 
     public string PeriodLabel { get; init; } = string.Empty;
-
-    public string FilterPreset { get; init; } = string.Empty;
-
-    public DateOnly FromDate { get; init; }
-
-    public DateOnly ToDate { get; init; }
-}
-
-public sealed class FeesDashboardDto
-{
-    public decimal CollectedAmount { get; init; }
-
-    public decimal PendingAmount { get; init; }
-
-    public int OverdueCount { get; init; }
-
-    public IReadOnlyList<FeesByClassDto> ByClass { get; init; } = [];
-}
-
-public sealed class FeesByClassDto
-{
-    public string ClassName { get; init; } = string.Empty;
-
-    public int PercentCollected { get; init; }
 }
 
 public sealed class SalaryDashboardDto
@@ -170,11 +141,19 @@ public sealed class HomeworkDueDto
 
 public sealed class ClassOverviewDto
 {
-    public string ClassName { get; init; } = string.Empty;
-
-    public string SectionLabel { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 
     public int StudentCount { get; init; }
+
+    public int Present { get; init; }
+
+    public int Late { get; init; }
+
+    public int Absent { get; init; }
+
+    public int OnLeave { get; init; }
+
+    public decimal FeeCollectedToday { get; init; }
 }
 
 public sealed class DashboardAlertsDto

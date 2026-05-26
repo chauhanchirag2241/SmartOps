@@ -116,15 +116,6 @@ public sealed class FeeStructureController : ControllerBase
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
     }
 
-    [HttpGet("stats")]
-    [Authorize(Policy = MenuPolicies.FeesStructure.View)]
-    [ProducesResponseType(typeof(FeeStructureStatsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetStats(CancellationToken ct)
-    {
-        var result = await _service.GetStatsAsync(ct).ConfigureAwait(false);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
-
     [HttpGet("settings")]
     [Authorize(Policy = MenuPolicies.FeesStructure.View)]
     [ProducesResponseType(typeof(FeeSettingsDto), StatusCodes.Status200OK)]

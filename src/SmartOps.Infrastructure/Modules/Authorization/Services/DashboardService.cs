@@ -36,7 +36,7 @@ public sealed class DashboardService : IDashboardService
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
-        DashboardResponseDto dashboard = await GetDashboardAsync(null, cancellationToken).ConfigureAwait(false);
+        DashboardResponseDto dashboard = await GetDashboardAsync(cancellationToken).ConfigureAwait(false);
         DashboardSummaryDto? summary = dashboard.Summary;
         if (summary is not null)
         {
@@ -68,9 +68,7 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    public async Task<DashboardResponseDto> GetDashboardAsync(
-        DashboardQueryDto? query = null,
-        CancellationToken cancellationToken = default)
+    public async Task<DashboardResponseDto> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<DashboardWidgetLayoutItemDto> widgets = await _widgetPermissions
@@ -82,10 +80,8 @@ public sealed class DashboardService : IDashboardService
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         bool hasAttendanceWidgets = HasAny(visible, DashboardWidgetCodes.AttendanceDetail, DashboardWidgetCodes.AttendanceRate);
-        DashboardAttendanceDateRange attendanceRange = DashboardAttendanceFilter.Resolve(
-            query?.AttendancePreset,
-            query?.AttendanceFrom,
-            query?.AttendanceTo);
+        DateOnly schoolToday = await ResolveSchoolTodayAsync(connection, cancellationToken).ConfigureAwait(false);
+        DashboardAttendanceDateRange attendanceRange = BuildTodayRange(schoolToday);
 
         DashboardSummaryDto? summary = null;
         if (HasAny(visible,
@@ -97,6 +93,7 @@ public sealed class DashboardService : IDashboardService
             summary = await LoadSummaryAsync(
                 connection,
                 schema,
+                schoolToday,
                 hasAttendanceWidgets ? attendanceRange : null,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -118,15 +115,6 @@ public sealed class DashboardService : IDashboardService
                     ScopeLabel = summary.ScopeLabel
                 };
             }
-        }
-
-        FeesDashboardDto? fees = null;
-        if (HasAny(visible,
-                DashboardWidgetCodes.FeesCollected,
-                DashboardWidgetCodes.FeesPending,
-                DashboardWidgetCodes.FeesByClass))
-        {
-            fees = await LoadFeesAsync(connection, schema, cancellationToken).ConfigureAwait(false);
         }
 
         SalaryDashboardDto? salary = null;
@@ -154,9 +142,16 @@ public sealed class DashboardService : IDashboardService
         }
 
         IReadOnlyList<ClassOverviewDto>? classesOverview = null;
+        decimal? schoolFeesCollectedTotal = null;
+        decimal? schoolFeesDueTotal = null;
         if (visible.Contains(DashboardWidgetCodes.ClassesOverview))
         {
-            classesOverview = await LoadClassesOverviewAsync(connection, schema, cancellationToken).ConfigureAwait(false);
+            classesOverview = await LoadClassesOverviewAsync(connection, schema, schoolToday, cancellationToken)
+                .ConfigureAwait(false);
+            (schoolFeesCollectedTotal, schoolFeesDueTotal) = await LoadSchoolFeeTotalsAsync(
+                connection,
+                schema,
+                cancellationToken).ConfigureAwait(false);
         }
 
         int totalSubjects = 0;
@@ -172,7 +167,7 @@ public sealed class DashboardService : IDashboardService
         DashboardAlertsDto? alerts = null;
         if (visible.Contains(DashboardWidgetCodes.AlertsActions))
         {
-            alerts = BuildAlerts(visible, fees, attendanceToday, homework, salary);
+            alerts = BuildAlerts(attendanceToday, homework, salary);
         }
 
         return new DashboardResponseDto
@@ -181,8 +176,9 @@ public sealed class DashboardService : IDashboardService
             VisibleWidgets = widgets.Select(w => w.Code).ToList(),
             Summary = summary,
             AttendanceToday = attendanceToday,
-            Fees = fees,
             Salary = salary,
+            SchoolFeesCollectedTotal = schoolFeesCollectedTotal,
+            SchoolFeesDueTotal = schoolFeesDueTotal,
             RecentStudents = recentStudents,
             Teachers = teachers,
             HomeworkDue = homework,
@@ -192,9 +188,40 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
+    private async Task<DateOnly> ResolveSchoolTodayAsync(
+        IDbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        string? timeZoneId = null;
+        string? schoolId = _tenantProvider.GetCurrentSchoolId();
+        if (!string.IsNullOrWhiteSpace(schoolId) && Guid.TryParse(schoolId, out Guid sid))
+        {
+            timeZoneId = await connection.QuerySingleOrDefaultAsync<string>(
+                new CommandDefinition(
+                    $"""
+SELECT timezone FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+WHERE id = @Id AND isactive = true LIMIT 1
+""",
+                    new { Id = sid },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        return SchoolLocalTime.Today(timeZoneId);
+    }
+
+    private static DashboardAttendanceDateRange BuildTodayRange(DateOnly schoolToday) =>
+        new()
+        {
+            Preset = DashboardAttendanceFilterPresets.Today,
+            From = schoolToday,
+            To = schoolToday,
+            PeriodLabel = "Today"
+        };
+
     private async Task<DashboardSummaryDto> LoadSummaryAsync(
         IDbConnection connection,
         string schema,
+        DateOnly schoolToday,
         DashboardAttendanceDateRange? attendanceRange,
         CancellationToken cancellationToken)
     {
@@ -203,7 +230,7 @@ public sealed class DashboardService : IDashboardService
         string teacherFilter = BuildTeacherFilter(schema, "t");
 
         string attendanceDateFilter = attendanceRange is null
-            ? "a.attendancedate = CURRENT_DATE"
+            ? "a.attendancedate = @SchoolToday"
             : "a.attendancedate >= @AttendanceFromDate AND a.attendancedate <= @AttendanceToDate";
 
         string sql = $"""
@@ -219,7 +246,7 @@ SELECT
         DashboardRow row = await connection.QuerySingleAsync<DashboardRow>(
             new CommandDefinition(
                 sql,
-                BuildParameters(attendanceRange),
+                BuildParameters(attendanceRange, schoolToday),
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return new DashboardSummaryDto
@@ -255,11 +282,12 @@ WHERE a.attendancedate >= @AttendanceFromDate
         AttendanceRow row = await connection.QuerySingleAsync<AttendanceRow>(
             new CommandDefinition(
                 sql,
-                BuildParameters(attendanceRange),
+                BuildParameters(attendanceRange, attendanceRange.From),
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         int total = row.Present + row.Absent + row.Leave + row.Late;
-        double percent = total > 0 ? Math.Round(row.Present * 100.0 / total, 1) : 0;
+        int attended = row.Present + row.Late;
+        double percent = total > 0 ? Math.Round(attended * 100.0 / total, 1) : 0;
 
         return new AttendanceTodayDto
         {
@@ -269,10 +297,7 @@ WHERE a.attendancedate >= @AttendanceFromDate
             Late = row.Late,
             PresentPercent = percent,
             DateLabel = FormatAttendanceDateLabel(attendanceRange.From, attendanceRange.To),
-            PeriodLabel = attendanceRange.PeriodLabel,
-            FilterPreset = attendanceRange.Preset,
-            FromDate = attendanceRange.From,
-            ToDate = attendanceRange.To
+            PeriodLabel = attendanceRange.PeriodLabel
         };
     }
 
@@ -281,7 +306,7 @@ WHERE a.attendancedate >= @AttendanceFromDate
             ? from.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)
             : $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
 
-    private async Task<FeesDashboardDto?> LoadFeesAsync(
+    private async Task<(decimal Collected, decimal Due)> LoadSchoolFeeTotalsAsync(
         IDbConnection connection,
         string schema,
         CancellationToken cancellationToken)
@@ -295,17 +320,16 @@ SELECT COALESCE(SUM(fp.amount), 0)
 FROM {schema}.{DatabaseConfig.TableFeePayments} fp
 INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = fp.studentid AND s.isactive = true
 WHERE fp.isactive = true
-  AND fp.paymentdate >= date_trunc('month', CURRENT_DATE)::date
   {studentScope}
 """;
 
         decimal collected = await connection.ExecuteScalarAsync<decimal>(
             new CommandDefinition(collectedSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        decimal pending = Math.Max(0, 0m);
+        decimal due;
         if (!schoolWide)
         {
-            string pendingSql = $"""
+            string dueSql = $"""
 SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
     SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
     INNER JOIN {schema}.{DatabaseConfig.TableStudents} s2 ON s2.id = fp.studentid AND s2.isactive = true
@@ -317,12 +341,12 @@ INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = cf
 INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = sa.studentid AND s.isactive = true
 WHERE cfa.isactive = true {classScope} {studentScope}
 """;
-            pending = await connection.ExecuteScalarAsync<decimal>(
-                new CommandDefinition(pendingSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+            due = await connection.ExecuteScalarAsync<decimal>(
+                new CommandDefinition(dueSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
         else
         {
-            string pendingSql = $"""
+            string dueSql = $"""
 SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
     SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
     WHERE fp.isactive = true
@@ -330,41 +354,11 @@ SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
 FROM {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
 WHERE cfa.isactive = true
 """;
-            pending = await connection.ExecuteScalarAsync<decimal>(
-                new CommandDefinition(pendingSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            due = await connection.ExecuteScalarAsync<decimal>(
+                new CommandDefinition(dueSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
 
-        string byClassSql = $"""
-SELECT
-    c.classname AS ClassName,
-    CASE WHEN SUM(cfa.amount) > 0 THEN
-        LEAST(100, GREATEST(0, ROUND(
-            COALESCE((
-                SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
-                INNER JOIN {schema}.{DatabaseConfig.TableStudents} st ON st.id = fp.studentid
-                INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st.id AND sa2.classid = c.id AND sa2.isactive = true
-                WHERE fp.isactive = true AND fp.paymentdate >= date_trunc('month', CURRENT_DATE)::date
-            ), 0) * 100.0 / NULLIF(SUM(cfa.amount), 0)
-        )::int))
-    ELSE 0 END AS PercentCollected
-FROM {schema}.{DatabaseConfig.TableClasses} c
-INNER JOIN {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa ON cfa.classid = c.id AND cfa.isactive = true
-WHERE c.isactive = true {classScope}
-GROUP BY c.id, c.classname, c.section
-ORDER BY c.classname, c.section
-LIMIT 8
-""";
-
-        IEnumerable<FeesByClassDto> byClass = await connection.QueryAsync<FeesByClassDto>(
-            new CommandDefinition(byClassSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        return new FeesDashboardDto
-        {
-            CollectedAmount = collected,
-            PendingAmount = pending,
-            OverdueCount = pending > 0 ? 1 : 0,
-            ByClass = byClass.ToList()
-        };
+        return (collected, Math.Max(0, due));
     }
 
     private async Task<SalaryDashboardDto?> LoadSalaryAsync(
@@ -456,7 +450,7 @@ LIMIT 5
             Id = r.Id,
             Initials = BuildInitials(r.Name),
             Name = r.Name,
-            Detail = $"Class {r.ClassName} · Sec {r.Section}",
+            Detail = DashboardClassLabel.Format(r.ClassName, r.Section),
             Badge = "New",
             BadgeTone = "good"
         }).ToList();
@@ -504,6 +498,7 @@ LIMIT 5
 SELECT
     h.title AS Title,
     c.classname AS ClassName,
+    c.section AS Section,
     h.duedate AS DueDate
 FROM {schema}.{DatabaseConfig.TableHomework} h
 INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
@@ -526,7 +521,7 @@ LIMIT 5
             return new HomeworkDueDto
             {
                 Title = r.Title,
-                Subtitle = $"Class {r.ClassName}",
+                Subtitle = DashboardClassLabel.Format(r.ClassName, r.Section),
                 DueLabel = label,
                 DueTone = tone
             };
@@ -536,31 +531,53 @@ LIMIT 5
     private async Task<IReadOnlyList<ClassOverviewDto>> LoadClassesOverviewAsync(
         IDbConnection connection,
         string schema,
+        DateOnly schoolToday,
         CancellationToken cancellationToken)
     {
         string classFilter = BuildClassFilter(schema, "c");
+        string studentScope = BuildStudentExistsFilter(schema, "st");
+        string feeStudentScope = studentScope.Replace("st.", "st2.", StringComparison.Ordinal);
         string sql = $"""
 SELECT
     c.classname AS ClassName,
     c.section AS Section,
-    COUNT(DISTINCT sa.studentid) AS StudentCount
+    COUNT(DISTINCT sa.studentid) AS StudentCount,
+    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 1) AS Present,
+    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 4) AS Late,
+    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 2) AS Absent,
+    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 3) AS OnLeave,
+    COALESCE((
+        SELECT SUM(fp.amount)
+        FROM {schema}.{DatabaseConfig.TableFeePayments} fp
+        INNER JOIN {schema}.{DatabaseConfig.TableStudents} st2 ON st2.id = fp.studentid AND st2.isactive = true
+        INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st2.id AND sa2.classid = c.id AND sa2.isactive = true
+            AND (@ScopeAcademicYearId IS NULL OR sa2.academicyearid = @ScopeAcademicYearId)
+        WHERE fp.isactive = true AND fp.paymentdate = @SchoolToday {feeStudentScope}
+    ), 0) AS FeeCollectedToday
 FROM {schema}.{DatabaseConfig.TableClasses} c
 LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id AND sa.isactive = true
     AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+LEFT JOIN {schema}.{DatabaseConfig.TableStudents} st ON st.id = sa.studentid AND st.isactive = true {studentScope}
+LEFT JOIN {schema}.{DatabaseConfig.TableAttendance} a ON a.classid = c.id AND a.studentid = sa.studentid
+    AND a.attendancedate = @SchoolToday AND a.isactive = true
 WHERE c.isactive = true {classFilter}
 GROUP BY c.id, c.classname, c.section
 ORDER BY c.classname, c.section
-LIMIT 6
 """;
 
         IEnumerable<ClassOverviewRow> rows = await connection.QueryAsync<ClassOverviewRow>(
-            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(sql, BuildParameters(schoolToday: schoolToday), cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
 
         return rows.Select(r => new ClassOverviewDto
         {
-            ClassName = r.ClassName,
-            SectionLabel = $"Sec {r.Section}",
-            StudentCount = r.StudentCount
+            DisplayName = DashboardClassLabel.Format(r.ClassName, r.Section),
+            StudentCount = r.StudentCount,
+            Present = r.Present,
+            Late = r.Late,
+            Absent = r.Absent,
+            OnLeave = r.OnLeave,
+            FeeCollectedToday = r.FeeCollectedToday
         }).ToList();
     }
 
@@ -613,26 +630,13 @@ WHERE id = @Id AND isactive = true LIMIT 1
     }
 
     private static DashboardAlertsDto BuildAlerts(
-        HashSet<string> visible,
-        FeesDashboardDto? fees,
         AttendanceTodayDto? attendance,
         IReadOnlyList<HomeworkDueDto>? homework,
         SalaryDashboardDto? salary)
     {
         List<DashboardAlertItemDto> items = new();
 
-        if (visible.Contains(DashboardWidgetCodes.FeesPending) && fees is { PendingAmount: > 0 })
-        {
-            items.Add(new DashboardAlertItemDto
-            {
-                Icon = "cash",
-                Title = "Fees pending",
-                Subtitle = $"₹{fees.PendingAmount:N0} outstanding",
-                Tone = "danger"
-            });
-        }
-
-        if (visible.Contains(DashboardWidgetCodes.AttendanceDetail) && attendance is { Absent: > 0 })
+        if (attendance is { Absent: > 0 })
         {
             string period = string.IsNullOrWhiteSpace(attendance.PeriodLabel) ? "selected period" : attendance.PeriodLabel.ToLowerInvariant();
             items.Add(new DashboardAlertItemDto
@@ -644,7 +648,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
             });
         }
 
-        if (visible.Contains(DashboardWidgetCodes.HomeworkDue) && homework is { Count: > 0 })
+        if (homework is { Count: > 0 })
         {
             items.Add(new DashboardAlertItemDto
             {
@@ -655,7 +659,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
             });
         }
 
-        if (visible.Contains(DashboardWidgetCodes.SalaryStatus) && salary is { PendingCount: > 0 })
+        if (salary is { PendingCount: > 0 })
         {
             items.Add(new DashboardAlertItemDto
             {
@@ -795,13 +799,16 @@ WHERE id = @Id AND isactive = true LIMIT 1
         return $" AND {alias}.classid = ANY(@ScopeClassIds)";
     }
 
-    private object BuildParameters(DashboardAttendanceDateRange? attendanceRange = null) => new
+    private object BuildParameters(
+        DashboardAttendanceDateRange? attendanceRange = null,
+        DateOnly? schoolToday = null) => new
     {
         ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
         ScopeClassIds = _scope.AllowedClassIds.ToArray(),
         ScopeTeacherIds = _scope.AllowedTeacherIds.ToArray(),
         ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray(),
         ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+        SchoolToday = schoolToday ?? attendanceRange?.From,
         AttendanceFromDate = attendanceRange?.From,
         AttendanceToDate = attendanceRange?.To
     };
@@ -867,6 +874,8 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
         public string ClassName { get; init; } = string.Empty;
 
+        public int Section { get; init; }
+
         public DateTime DueDate { get; init; }
     }
 
@@ -877,5 +886,15 @@ WHERE id = @Id AND isactive = true LIMIT 1
         public int Section { get; init; }
 
         public int StudentCount { get; init; }
+
+        public int Present { get; init; }
+
+        public int Late { get; init; }
+
+        public int Absent { get; init; }
+
+        public int OnLeave { get; init; }
+
+        public decimal FeeCollectedToday { get; init; }
     }
 }

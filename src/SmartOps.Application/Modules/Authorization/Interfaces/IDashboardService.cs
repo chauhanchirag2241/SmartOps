@@ -8,7 +8,5 @@ public interface IDashboardService
 
     Task<DashboardLayoutDto> GetLayoutAsync(CancellationToken cancellationToken = default);
 
-    Task<DashboardResponseDto> GetDashboardAsync(
-        DashboardQueryDto? query = null,
-        CancellationToken cancellationToken = default);
+    Task<DashboardResponseDto> GetDashboardAsync(CancellationToken cancellationToken = default);
 }

@@ -62,6 +62,7 @@ public sealed class ClassFeeInstallmentRow
     public Guid Id { get; init; }
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
+    public int Category { get; init; }
     public int CollectionType { get; init; }
     public int PeriodIndex { get; init; }
     public string PeriodLabel { get; init; } = string.Empty;
@@ -74,6 +75,7 @@ public sealed class ClassFeeAmountForInstallmentRow
 {
     public Guid FeeTypeId { get; init; }
     public string FeeTypeName { get; init; } = string.Empty;
+    public int Category { get; init; }
     public int CollectionType { get; init; }
     public decimal Amount { get; init; }
     public decimal Semester1Amount { get; init; }

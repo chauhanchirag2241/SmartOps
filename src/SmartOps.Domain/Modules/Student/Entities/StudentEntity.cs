@@ -30,7 +30,6 @@ public class StudentEntity : AuditableEntity
     [DbIgnore] public List<StudentParentEntity> Parents { get; set; } = new();
     [DbIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();
     [DbIgnore] public List<StudentPreviousSchoolEntity> PreviousSchools { get; set; } = new();
-    [DbIgnore] public List<StudentFeeConfigEntity> FeeConfigs { get; set; } = new();
     [DbIgnore] public List<StudentFeeHeadAssignmentEntity> FeeHeadAssignments { get; set; } = new();
     [DbIgnore]
     [JsonPropertyName("customFields")]

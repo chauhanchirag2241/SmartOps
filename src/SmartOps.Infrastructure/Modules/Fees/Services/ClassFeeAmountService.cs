@@ -96,7 +96,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             version.VersionNumber,
             FeeLabelHelper.VersionStatusLabel(version.Status),
             IsClassAmountsEditable(version.Status, classHasConfiguredAmounts),
-            items.Sum(i => i.AnnualTotal),
+            items.Sum(i => FeeCategoryHelper.SignedAnnualTotal(i.Category, i.AnnualTotal)),
             items));
     }
 
@@ -269,10 +269,12 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         decimal annualTotal = collectionType == FeeCollectionType.SemesterWise
             ? r.Semester1Amount + r.Semester2Amount
             : r.Amount;
+        var category = (FeeCategory)r.Category;
         return new ClassFeeAmountItemDto(
             r.FeeTypeId,
             r.FeeTypeName,
-            FeeLabelHelper.CategoryLabel((FeeCategory)r.Category),
+            category,
+            FeeLabelHelper.CategoryLabel(category),
             collectionType,
             FeeLabelHelper.CollectionTypeLabel(collectionType),
             r.Amount,

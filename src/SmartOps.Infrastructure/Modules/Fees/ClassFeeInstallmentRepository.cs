@@ -82,6 +82,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             SELECT cfi.id AS Id,
                    cfi.feetypeid AS FeeTypeId,
                    ft.name AS FeeTypeName,
+                   ft.category AS Category,
                    ft.frequency AS CollectionType,
                    cfi.periodindex AS PeriodIndex,
                    cfi.periodlabel AS PeriodLabel,
@@ -113,6 +114,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         string sql = $"""
             SELECT ft.id AS FeeTypeId,
                    ft.name AS FeeTypeName,
+                   ft.category AS Category,
                    ft.frequency AS CollectionType,
                    cfa.amount AS Amount,
                    COALESCE(cfa.semester1amount, 0) AS Semester1Amount,
@@ -122,7 +124,12 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             WHERE cfa.classid = @ClassId
               AND cfa.feestructureversionid = @FeeStructureVersionId
               AND cfa.isactive = true
-              AND (cfa.amount > 0 OR cfa.semester1amount > 0 OR cfa.semester2amount > 0);
+              AND (
+                  ft.category = {(int)FeeCategory.Discount}
+                  OR cfa.amount > 0
+                  OR cfa.semester1amount > 0
+                  OR cfa.semester2amount > 0
+              );
             """;
         IEnumerable<ClassFeeAmountForInstallmentRow> rows = await connection
             .QueryAsync<ClassFeeAmountForInstallmentRow>(new CommandDefinition(
@@ -433,7 +440,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         (DateOnly start, DateOnly end) = await GetAcademicYearDatesAsync(academicYearId, ct).ConfigureAwait(false);
         IList<FeeInstallmentGenerator.SemesterWindow> semesters = await GetSemesterWindowsAsync(academicYearId, ct)
             .ConfigureAwait(false);
-        return FeeInstallmentGenerator.Generate(
+        IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
             (FeeCollectionType)row.CollectionType,
             row.Amount,
             row.Semester1Amount,
@@ -441,6 +448,19 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             semesters,
             start,
             end);
+        if (!FeeCategoryHelper.IsDiscount(row.Category))
+        {
+            return periods;
+        }
+
+        return periods
+            .Select(p => new FeeInstallmentGenerator.InstallmentPeriod(
+                p.PeriodIndex,
+                p.PeriodLabel,
+                p.PeriodStart,
+                p.PeriodEnd,
+                FeeCategoryHelper.SignedInstallmentAmount((FeeCategory)row.Category, p.Amount)))
+            .ToList();
     }
 
     private async Task<IList<FeeInstallmentGenerator.SemesterWindow>> GetSemesterWindowsAsync(

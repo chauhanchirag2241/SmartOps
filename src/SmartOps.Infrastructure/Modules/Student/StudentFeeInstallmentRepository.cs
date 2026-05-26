@@ -61,6 +61,7 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
             SELECT sfi.id AS Id,
                    sfi.feetypeid AS FeeTypeId,
                    ft.name AS FeeTypeName,
+                   ft.category AS Category,
                    ft.frequency AS CollectionType,
                    sfi.periodindex AS PeriodIndex,
                    sfi.periodlabel AS PeriodLabel,
@@ -223,6 +224,8 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                     continue;
                 }
 
+                var feeCategory = (FeeCategory)classAmount.Category;
+                bool isDiscount = FeeCategoryHelper.IsDiscount(feeCategory);
                 decimal classAnnual = (FeeCollectionType)classAmount.CollectionType == FeeCollectionType.SemesterWise
                     ? classAmount.Semester1Amount + classAmount.Semester2Amount
                     : classAmount.Amount;
@@ -234,6 +237,9 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                     continue;
                 }
 
+                decimal signedStudentAnnual = FeeCategoryHelper.SignedAnnualTotal(feeCategory, studentAnnual);
+                decimal signedClassAnnual = FeeCategoryHelper.SignedAnnualTotal(feeCategory, classAnnual);
+
                 IList<ClassFeeInstallmentRow> templatePeriods = classInstallments
                     .Where(i => i.FeeTypeId == classAmount.FeeTypeId)
                     .OrderBy(i => i.PeriodIndex)
@@ -243,7 +249,7 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
 
                 if (templatePeriods.Count > 0)
                 {
-                    periodsToInsert = ScaleClassPeriods(templatePeriods, classAnnual, studentAnnual);
+                    periodsToInsert = ScaleClassPeriods(templatePeriods, signedClassAnnual, signedStudentAnnual);
                 }
                 else
                 {
@@ -271,6 +277,18 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                                 p.PeriodStart,
                                 p.PeriodEnd,
                                 Math.Round(p.Amount * ratio, 2)))
+                            .ToList();
+                    }
+
+                    if (isDiscount)
+                    {
+                        generated = generated
+                            .Select(p => new FeeInstallmentGenerator.InstallmentPeriod(
+                                p.PeriodIndex,
+                                p.PeriodLabel,
+                                p.PeriodStart,
+                                p.PeriodEnd,
+                                FeeCategoryHelper.SignedInstallmentAmount(feeCategory, p.Amount)))
                             .ToList();
                     }
 

@@ -82,19 +82,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStudents}
                 .WithAuditColumns();
         }
 
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentFeeConfigs).Exists())
-        {
-            Create.Table(DatabaseConfig.TableStudentFeeConfigs).InSchema(S)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("studentid").AsGuid().NotNullable()
-                    .ForeignKey("fk_studentfeeconfigs_studentid", S, DatabaseConfig.TableStudents, "id").OnDelete(System.Data.Rule.Cascade)
-                .WithColumn("discounttype").AsString(100).Nullable()
-                .WithColumn("discountvalue").AsDecimal(18, 2).Nullable()
-                .WithColumn("ispercentage").AsBoolean().Nullable()
-                .WithColumn("discountremarks").AsString(500).Nullable()
-                .WithAuditColumns();
-        }
-
         EnsureStudentCustomFieldsTable();
     }
 
@@ -122,7 +109,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStudents}
     public override void Down()
     {
         Delete.Table(DatabaseConfig.TableStudentCustomFields).InSchema(S);
-        Delete.Table(DatabaseConfig.TableStudentFeeConfigs).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentPreviousSchools).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentAcademics).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentParents).InSchema(S);

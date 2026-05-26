@@ -164,10 +164,11 @@ public sealed class FeeCollectionService : IFeeCollectionService
                     "Selected installments have no remaining due. Refresh the student and try again.");
             }
 
-            if (request.Amount > selectedDue)
+            decimal maxCollectOnSelection = Math.Min(selectedDue, dueAmount);
+            if (request.Amount > maxCollectOnSelection)
             {
                 return Result<CollectFeeResponseDto>.Failure(
-                    $"Amount cannot exceed {selectedDue:N2} due on the selected installments.");
+                    $"Amount cannot exceed {maxCollectOnSelection:N2} due on the selected installments.");
             }
 
             foreach (Guid installmentId in selectedInstallmentIds)
@@ -465,7 +466,13 @@ public sealed class FeeCollectionService : IFeeCollectionService
                     .Select(i =>
                     {
                         decimal instPaid = paidByInstallment.GetValueOrDefault(i.Id, 0m);
-                        decimal instDue = Math.Max(0, i.Amount - instPaid);
+                        bool isDiscount = FeeCategoryHelper.IsDiscount(i.Category);
+                        decimal signedAmount = isDiscount
+                            ? FeeCategoryHelper.SignedInstallmentAmount((FeeCategory)i.Category, i.Amount)
+                            : i.Amount;
+                        decimal instDue = isDiscount
+                            ? signedAmount - instPaid
+                            : Math.Max(0, i.Amount - instPaid);
                         return new FeeCollectionInstallmentDto(
                             i.Id,
                             i.FeeTypeId,
@@ -473,10 +480,10 @@ public sealed class FeeCollectionService : IFeeCollectionService
                             i.PeriodLabel,
                             i.PeriodStart,
                             i.PeriodEnd,
-                            i.Amount,
+                            signedAmount,
                             instPaid,
                             instDue,
-                            FeeAllocationHelper.StatusForPeriod(i.Amount, instPaid, i.PeriodEnd));
+                            FeeAllocationHelper.StatusForPeriod(signedAmount, instPaid, i.PeriodEnd));
                     })
                     .ToList();
 

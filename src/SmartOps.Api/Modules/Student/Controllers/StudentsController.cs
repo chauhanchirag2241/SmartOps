@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
+using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Student;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
@@ -30,7 +32,8 @@ public sealed class StudentsController(
     IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
     IResourceAuthorizationService resourceAuthorization,
-    ITenantProvider tenantProvider) : ControllerBase
+    ITenantProvider tenantProvider,
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     /// <summary>Generates the next admission number based on settings and year.</summary>
     [HttpGet("next-admission-no")]
@@ -225,5 +228,24 @@ public sealed class StudentsController(
         schoolId = Guid.Empty;
         string? raw = tenantProvider.GetCurrentSchoolId();
         return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
+    }
+
+    /// <summary>
+    /// Returns paginated change history for a specific student.
+    /// </summary>
+    [HttpGet("{id:guid}/history")]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableStudents, id, page, pageSize, cancellationToken);
+
+        return Ok(result);
     }
 }

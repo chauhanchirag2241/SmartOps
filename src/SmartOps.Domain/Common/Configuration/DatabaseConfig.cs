@@ -19,6 +19,7 @@ public static class DatabaseConfig
     public const string TableRefreshTokens = "refreshtokens";
     public const string TableUserScopeVersions = "userscopeversions";
     public const string TableAuthorizationAuditLog = "authorizationauditlog";
+    public const string TableEntityAuditLogs = "entity_audit_logs";
 
     // Students Module
     public const string TableStudents = "students";

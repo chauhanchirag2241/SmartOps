@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Attributes;
 
 namespace SmartOps.Domain.Modules.Student.Entities;
 
+[TrackHistory]
 public class StudentEntity : AuditableEntity
 {
     public Guid Id { get; set; }
@@ -27,11 +28,12 @@ public class StudentEntity : AuditableEntity
     public bool PortalAccess { get; set; } = true;
 
     // Navigation Properties
-    [DbIgnore] public List<StudentParentEntity> Parents { get; set; } = new();
-    [DbIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();
-    [DbIgnore] public List<StudentPreviousSchoolEntity> PreviousSchools { get; set; } = new();
-    [DbIgnore] public List<StudentFeeHeadAssignmentEntity> FeeHeadAssignments { get; set; } = new();
+    [DbIgnore] [TrackHistoryIgnore] public List<StudentParentEntity> Parents { get; set; } = new();
+    [DbIgnore] [TrackHistoryIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();
+    [DbIgnore] [TrackHistoryIgnore] public List<StudentPreviousSchoolEntity> PreviousSchools { get; set; } = new();
+    [DbIgnore] [TrackHistoryIgnore] public List<StudentFeeHeadAssignmentEntity> FeeHeadAssignments { get; set; } = new();
     [DbIgnore]
+    [TrackHistoryIgnore]
     [JsonPropertyName("customFields")]
     public List<StudentCustomFieldEntity> CustomFields { get; set; } = new();
 }

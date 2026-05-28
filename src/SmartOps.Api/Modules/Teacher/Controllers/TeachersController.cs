@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
+using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Teacher.Entities;
@@ -22,7 +24,8 @@ public sealed class TeachersController(
     IUserProvisioningService userProvisioning,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
-    ITenantProvider tenantProvider) : ControllerBase
+    ITenantProvider tenantProvider,
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = MenuPolicies.Teachers.Add)]
@@ -117,6 +120,23 @@ public sealed class TeachersController(
     {
         await teacherRepository.DeleteTeacherAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableTeachers, id, page, pageSize, cancellationToken);
+
+        return Ok(result);
     }
 
     private bool TryGetSchoolId(out Guid schoolId)

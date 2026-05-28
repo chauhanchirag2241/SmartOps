@@ -1,8 +1,10 @@
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Attributes;
 using SmartOps.Domain.Modules.Subject;
 
 namespace SmartOps.Domain.Modules.Subject.Entities;
 
+[TrackHistory]
 public sealed class SubjectEntity : AuditableEntity
 {
     public Guid Id { get; set; }

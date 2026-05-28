@@ -1,7 +1,9 @@
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Attributes;
 
 namespace SmartOps.Domain.Modules.Teacher.Entities;
 
+[TrackHistory]
 public class TeacherEntity : AuditableEntity
 {
     public Guid Id { get; set; }

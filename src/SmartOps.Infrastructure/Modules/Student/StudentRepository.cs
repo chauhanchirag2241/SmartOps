@@ -653,7 +653,7 @@ WHERE id = @StudentId AND isactive = true
                         DatabaseConfig.TableStudentPreviousSchools,
                         prev,
                         transaction,
-                        "StudentId")
+                        "Id")
                     .ConfigureAwait(false);
             }
         }

@@ -45,6 +45,8 @@ using SmartOps.Domain.Modules.Setting;
 using SmartOps.Infrastructure.Modules.Setting;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Infrastructure.Modules.Teacher.Services;
+using SmartOps.Application.Modules.Audit.Interfaces;
+using SmartOps.Infrastructure.Modules.Audit;
 using Dapper;
 
 namespace SmartOps.Infrastructure.DependencyInjection;
@@ -94,6 +96,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IPayrollService, PayrollService>();
         services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<ISchoolRepository, SchoolRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IClassSubjectTeacherMappingRepository, ClassSubjectTeacherMappingRepository>();
         services.AddScoped<IClassSubjectTeacherMappingService, ClassSubjectTeacherMappingService>();
 

@@ -45,6 +45,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableHodDepartmentAssignments,
         DatabaseConfig.TableParentStudentMappings,
         DatabaseConfig.TableStaffScopeAssignments,
+        DatabaseConfig.TableEntityAuditLogs,
     ];
 
     /// <summary>

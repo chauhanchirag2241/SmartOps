@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using System.Data;
 using System.Reflection;
+using System.Text.Json;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Audit;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Attributes;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Infrastructure.Persistence.Context;
-using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Persistence;
 
@@ -81,8 +83,9 @@ public abstract class BaseRepository
 
     /// <summary>
     /// INSERT for <typeparamref name="T"/>; columns = all public properties except <see cref="DbIgnoreAttribute"/>.
+    /// Automatically writes a "Created" audit log if entity has [TrackHistory].
     /// </summary>
-    protected static async Task<Guid> InsertAsync<T>(
+    protected async Task<Guid> InsertAsync<T>(
         IDbConnection connection,
         string schema,
         string tableName,
@@ -90,7 +93,20 @@ public abstract class BaseRepository
         IDbTransaction? transaction = null) where T : AuditableEntity
     {
         var sql = GetInsertSql<T>(schema, tableName);
-        return await connection.ExecuteScalarAsync<Guid>(sql, entity, transaction).ConfigureAwait(false);
+        var id = await connection.ExecuteScalarAsync<Guid>(sql, entity, transaction).ConfigureAwait(false);
+
+        // Audit: Created
+        if (typeof(T).GetCustomAttribute<TrackHistoryAttribute>() is not null)
+        {
+            var entityId = GetEntityId(entity, id);
+            var actor = GetAuditActor(entity);
+            var allFields = GetAuditableFields<T>(entity, null);
+            await WriteAuditLogInternalAsync(
+                connection, schema, tableName, entityId,
+                "Created", actor, entity.CreatedOn, allFields, transaction).ConfigureAwait(false);
+        }
+
+        return id;
     }
 
     /// <summary>INSERT without RETURNING id.</summary>
@@ -111,6 +127,7 @@ public abstract class BaseRepository
 
     /// <summary>
     /// UPDATE with dirty check; increments <c>versionno</c>. Skips if no column changes vs DB row.
+    /// Automatically writes an "Updated" audit log if entity has [TrackHistory].
     /// </summary>
     protected static async Task<bool> UpdateAsync<T>(
         IDbConnection connection,
@@ -129,13 +146,25 @@ public abstract class BaseRepository
             return false;
         }
 
-        if (!HasChanges(existing, entity, keys))
+        var changedFields = GetChangedFields(existing, entity, keys);
+        if (changedFields.Count == 0)
         {
             return false;
         }
 
         var sql = GetUpdateSql<T>(schema, tableName, keys);
         await connection.ExecuteAsync(sql, entity, transaction).ConfigureAwait(false);
+
+        // Audit: Updated
+        if (typeof(T).GetCustomAttribute<TrackHistoryAttribute>() is not null)
+        {
+            var entityId = GetEntityPrimaryId(entity, keys);
+            var actor = entity.UpdatedBy != Guid.Empty ? entity.UpdatedBy : entity.CreatedBy;
+            await WriteAuditLogInternalAsync(
+                connection, schema, tableName, entityId,
+                "Updated", actor, entity.UpdatedOn, changedFields, transaction).ConfigureAwait(false);
+        }
+
         return true;
     }
 
@@ -163,6 +192,16 @@ public abstract class BaseRepository
             WHERE id = @Id AND isactive = true;";
 
         await connection.ExecuteAsync(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, transaction)
+            .ConfigureAwait(false);
+
+        // Audit: Deleted (check if the entity type calling this tracks history)
+        // We write a generic "Deleted" entry with no field diffs (actually we don't have T here directly, so we can't check [TrackHistory] cleanly).
+        // Let's assume SoftDelete is used for main entities and just log it for all.
+        await WriteAuditLogInternalAsync(
+            connection, schema, tableName, id,
+            "Deleted", actorId, utcNow,
+            [new FieldChangeDto { Field = "IsActive", OldValue = "True", NewValue = "False" }],
+            transaction)
             .ConfigureAwait(false);
     }
 
@@ -282,8 +321,10 @@ public abstract class BaseRepository
         string[] keyColumns,
         IDbTransaction? transaction) where T : class
     {
+        var columns = GetDbColumns<T>();
+        var selectCols = string.Join(", ", columns.Select(c => c.ToLowerInvariant()));
         var whereClause = string.Join(" AND ", keyColumns.Select(k => $"{k.ToLowerInvariant()} = @{k}"));
-        var sql = $"SELECT * FROM {schema}.{tableName} WHERE {whereClause} AND isactive = true LIMIT 1;";
+        var sql = $"SELECT {selectCols} FROM {schema}.{tableName} WHERE {whereClause} AND isactive = true LIMIT 1;";
 
         var parameters = new DynamicParameters();
         var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -301,6 +342,11 @@ public abstract class BaseRepository
 
     private static bool HasChanges<T>(T existing, T updated, string[] keyColumns)
     {
+        return GetChangedFields(existing, updated, keyColumns).Count > 0;
+    }
+
+    private static List<FieldChangeDto> GetChangedFields<T>(T existing, T updated, string[] keyColumns)
+    {
         var excludeFromCompare = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Id", "VersionNo", "CreatedBy", "CreatedOn", "IsActive", "UpdatedBy", "UpdatedOn",
@@ -313,7 +359,10 @@ public abstract class BaseRepository
         var props = typeof(T)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.GetCustomAttribute<DbIgnoreAttribute>() == null)
+            .Where(p => p.GetCustomAttribute<TrackHistoryIgnoreAttribute>() == null)
             .Where(p => !excludeFromCompare.Contains(p.Name));
+
+        var changes = new List<FieldChangeDto>();
 
         foreach (var prop in props)
         {
@@ -321,11 +370,46 @@ public abstract class BaseRepository
             var newVal = prop.GetValue(updated);
             if (!Equals(oldVal, newVal))
             {
-                return true;
+                changes.Add(new FieldChangeDto
+                {
+                    Field = prop.Name,
+                    OldValue = oldVal is null ? null : Convert.ToString(oldVal),
+                    NewValue = newVal is null ? null : Convert.ToString(newVal)
+                });
             }
         }
 
-        return false;
+        return changes;
+    }
+
+    private static List<FieldChangeDto> GetAuditableFields<T>(T entity, T? ignoreEntity)
+    {
+        var excludeFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Id", "VersionNo", "CreatedBy", "CreatedOn", "IsActive", "UpdatedBy", "UpdatedOn",
+        };
+
+        var props = typeof(T)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.GetCustomAttribute<DbIgnoreAttribute>() == null)
+            .Where(p => p.GetCustomAttribute<TrackHistoryIgnoreAttribute>() == null)
+            .Where(p => !excludeFields.Contains(p.Name));
+
+        var fields = new List<FieldChangeDto>();
+        foreach (var prop in props)
+        {
+            var val = prop.GetValue(entity);
+            if (val is not null && !string.IsNullOrEmpty(Convert.ToString(val)))
+            {
+                fields.Add(new FieldChangeDto
+                {
+                    Field = prop.Name,
+                    OldValue = null,
+                    NewValue = Convert.ToString(val)
+                });
+            }
+        }
+        return fields;
     }
 
     #endregion
@@ -386,6 +470,91 @@ public abstract class BaseRepository
     {
         entity.UpdatedBy = actorId;
         entity.UpdatedOn = utcNow;
+    }
+
+    #endregion
+
+    #region Audit log writer
+
+    private static async Task WriteAuditLogInternalAsync(
+        IDbConnection connection,
+        string schema,
+        string tableName,
+        Guid entityId,
+        string action,
+        Guid changedBy,
+        DateTime changedOn,
+        IReadOnlyList<FieldChangeDto> changes,
+        IDbTransaction? transaction = null)
+    {
+        try
+        {
+            if (transaction != null)
+            {
+                await connection.ExecuteAsync("SAVEPOINT audit_savepoint;", null, transaction).ConfigureAwait(false);
+            }
+
+            var auditTable = DatabaseConfig.TableEntityAuditLogs;
+            var changesJson = JsonSerializer.Serialize(changes);
+            var sql = $"""
+                INSERT INTO {schema}.{auditTable}
+                    (id, entityname, entityid, action, changedby, changedon, changes)
+                VALUES
+                    (gen_random_uuid(), @EntityName, @EntityId, @Action, @ChangedBy, @ChangedOn, @Changes::jsonb);
+                """;
+            await connection.ExecuteAsync(sql, new
+            {
+                EntityName = tableName,
+                EntityId = entityId,
+                Action = action,
+                ChangedBy = changedBy,
+                ChangedOn = changedOn,
+                Changes = changesJson
+            }, transaction).ConfigureAwait(false);
+
+            if (transaction != null)
+            {
+                await connection.ExecuteAsync("RELEASE SAVEPOINT audit_savepoint;", null, transaction).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (transaction != null)
+            {
+                try
+                {
+                    await connection.ExecuteAsync("ROLLBACK TO SAVEPOINT audit_savepoint;", null, transaction).ConfigureAwait(false);
+                }
+                catch { }
+            }
+            // Audit failures must not break the main operation
+        }
+    }
+
+    private static Guid GetEntityId<T>(T entity, Guid fallback) where T : AuditableEntity
+    {
+        var idProp = typeof(T).GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
+        if (idProp?.GetValue(entity) is Guid g && g != Guid.Empty)
+        {
+            return g;
+        }
+        return fallback;
+    }
+
+    private static Guid GetEntityPrimaryId<T>(T entity, string[] keyColumns) where T : AuditableEntity
+    {
+        var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        foreach (var key in keyColumns)
+        {
+            var prop = props.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (prop?.GetValue(entity) is Guid g) return g;
+        }
+        return Guid.Empty;
+    }
+
+    private static Guid GetAuditActor<T>(T entity) where T : AuditableEntity
+    {
+        return entity.CreatedBy != Guid.Empty ? entity.CreatedBy : Guid.Parse(DatabaseConfig.SystemUserId);
     }
 
     #endregion

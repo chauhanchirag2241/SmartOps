@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Class;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Class.Entities;
@@ -13,7 +15,9 @@ namespace SmartOps.Api.Modules.Class.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class ClassesController(IClassRepository classRepository) : ControllerBase
+public sealed class ClassesController(
+    IClassRepository classRepository,
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = MenuPolicies.Classes.Add)]
@@ -94,5 +98,22 @@ public sealed class ClassesController(IClassRepository classRepository) : Contro
     {
         await classRepository.DeleteClassAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableClasses, id, page, pageSize, cancellationToken);
+
+        return Ok(result);
     }
 }

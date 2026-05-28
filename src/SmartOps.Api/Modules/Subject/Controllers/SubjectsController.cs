@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Subject;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Subject.Entities;
 using SmartOps.Domain.Modules.Subject;
@@ -12,7 +14,9 @@ namespace SmartOps.Api.Modules.Subject.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class SubjectsController(ISubjectRepository subjectRepository) : ControllerBase
+public sealed class SubjectsController(
+    ISubjectRepository subjectRepository,
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = MenuPolicies.Subjects.Add)]
@@ -78,5 +82,22 @@ public sealed class SubjectsController(ISubjectRepository subjectRepository) : C
     {
         await subjectRepository.DeleteSubjectAsync(id, ct).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = MenuPolicies.Subjects.View)]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableSubjects, id, page, pageSize, ct);
+
+        return Ok(result);
     }
 }

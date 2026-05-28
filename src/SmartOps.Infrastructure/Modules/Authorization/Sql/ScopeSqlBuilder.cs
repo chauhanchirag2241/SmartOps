@@ -30,22 +30,40 @@ public static class ScopeSqlBuilder
 
     public static Guid? ResolveClassIdFilter(IUserScopeContext scope, Guid? requestedClassId)
     {
-        if (!scope.ScopesEnabled || scope.IsGlobalScope)
-        {
-            return requestedClassId;
-        }
-
-        if (scope.ScopeType is DataScopeType.ModuleOnly or DataScopeType.None or DataScopeType.Self)
-        {
-            return null;
-        }
-
         if (!requestedClassId.HasValue)
         {
             return null;
         }
 
-        return scope.HasClassAccess(requestedClassId.Value) ? requestedClassId : Guid.Empty;
+        var resolved = ResolveClassIdsFilter(scope, [requestedClassId.Value]);
+        if (resolved == null)
+        {
+            return null;
+        }
+
+        return resolved.Count > 0 ? resolved[0] : Guid.Empty;
+    }
+
+    public static IReadOnlyList<Guid>? ResolveClassIdsFilter(
+        IUserScopeContext scope,
+        IReadOnlyList<Guid>? requestedClassIds)
+    {
+        if (requestedClassIds == null || requestedClassIds.Count == 0)
+        {
+            return null;
+        }
+
+        if (!scope.ScopesEnabled || scope.IsGlobalScope)
+        {
+            return requestedClassIds;
+        }
+
+        if (scope.ScopeType is DataScopeType.ModuleOnly or DataScopeType.None or DataScopeType.Self)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        return requestedClassIds.Where(scope.HasClassAccess).ToList();
     }
 
     private static string AppendDenyAll(string whereClause) => $"{whereClause} AND 1 = 0";

@@ -135,6 +135,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     WHEN c.streamgroup = 3 THEN 'Commerce'
                     WHEN c.streamgroup = 4 THEN 'Arts'
                     WHEN c.streamgroup = 5 THEN 'Regional'
+                    WHEN c.streamgroup = 6 THEN 'Primary'
                     ELSE NULL
                 END AS StreamGroup,
                 ay.title AS AcademicYear,

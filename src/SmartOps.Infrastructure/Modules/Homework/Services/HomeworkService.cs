@@ -192,7 +192,7 @@ public sealed class HomeworkService : IHomeworkService
         if (roster.Count == 0)
         {
             var paged = await _studentRepo.GetAllStudentsAsync(
-                1, 500, null, null, null, StudentFilter.Active, homework.ClassId, ct).ConfigureAwait(false);
+                1, 500, null, null, null, StudentFilter.Active, homework.ClassId, null, ct).ConfigureAwait(false);
             roster = paged.Items
                 .Select((s, idx) => new HomeworkStudentRow
                 {
@@ -307,7 +307,7 @@ public sealed class HomeworkService : IHomeworkService
         if (roster.Count == 0)
         {
             var paged = await _studentRepo.GetAllStudentsAsync(
-                1, 500, null, null, null, StudentFilter.Active, homework.ClassId, ct).ConfigureAwait(false);
+                1, 500, null, null, null, StudentFilter.Active, homework.ClassId, null, ct).ConfigureAwait(false);
             roster = paged.Items
                 .Select((s, idx) => new HomeworkStudentRow
                 {

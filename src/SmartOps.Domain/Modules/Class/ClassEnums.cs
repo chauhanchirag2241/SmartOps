@@ -12,7 +12,7 @@ public enum Section
 }
 
 /// <summary>
-/// Stream / Group: None (primary) = 1, Science = 2, Commerce = 3, Arts = 4, Regional = 5
+/// Stream / Group: None (legacy unset) = 1, Science = 2, Commerce = 3, Arts = 4, Regional = 5, Primary = 6
 /// </summary>
 public enum StreamGroup
 {
@@ -20,7 +20,8 @@ public enum StreamGroup
     Science = 2,
     Commerce = 3,
     Arts = 4,
-    Regional = 5
+    Regional = 5,
+    Primary = 6
 }
 
 /// <summary>

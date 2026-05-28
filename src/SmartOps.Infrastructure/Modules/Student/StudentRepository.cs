@@ -118,6 +118,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         string? sortDirection = null,
         StudentFilter filter = StudentFilter.Active,
         Guid? classId = null,
+        IReadOnlyList<Guid>? classIds = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -126,8 +127,14 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            Guid? effectiveClassId = ScopeSqlBuilder.ResolveClassIdFilter(_scope, classId);
-            if (effectiveClassId == Guid.Empty)
+            IReadOnlyList<Guid>? requestedClassIds = classIds;
+            if ((requestedClassIds == null || requestedClassIds.Count == 0) && classId.HasValue)
+            {
+                requestedClassIds = [classId.Value];
+            }
+
+            var effectiveClassIds = ScopeSqlBuilder.ResolveClassIdsFilter(_scope, requestedClassIds);
+            if (effectiveClassIds != null && effectiveClassIds.Count == 0)
             {
                 return new PagedResult<StudentListModel>
                 {
@@ -138,7 +145,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 };
             }
 
-            var whereClause = BuildListWhereClause(filter, effectiveClassId, ref searchTerm);
+            var whereClause = BuildListWhereClause(filter, effectiveClassIds, ref searchTerm);
             whereClause = ScopeSqlBuilder.AppendStudentScopeFilter(
                 _scope, "s", Context.OperationalSchema, ref whereClause);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
@@ -225,7 +232,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                     new
                     {
                         SearchTerm = searchTerm,
-                        ClassId = effectiveClassId,
+                        ClassIds = effectiveClassIds?.ToArray(),
                         ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
                         ScopeClassIds = _scope.AllowedClassIds.ToArray(),
                         ScopeAcademicYearId = _scope.ActiveAcademicYearId
@@ -300,7 +307,7 @@ WHERE id = @StudentId AND isactive = true
 
     #region List query helpers
 
-    private string BuildListWhereClause(StudentFilter filter, Guid? classId, ref string? searchTerm)
+    private string BuildListWhereClause(StudentFilter filter, IReadOnlyList<Guid>? classIds, ref string? searchTerm)
     {
         var where = "WHERE 1 = 1";
 
@@ -347,14 +354,14 @@ WHERE id = @StudentId AND isactive = true
             searchTerm = $"%{searchTerm}%";
         }
 
-        if (classId.HasValue)
+        if (classIds != null && classIds.Count > 0)
         {
             where += $@"
                 AND EXISTS (
                     SELECT 1
                     FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa
                     WHERE sa.studentid = s.id
-                      AND sa.classid = @ClassId
+                      AND sa.classid = ANY(@ClassIds)
                       AND sa.isactive = true
                 )";
         }
@@ -383,7 +390,7 @@ WHERE id = @StudentId AND isactive = true
 
         if (IsSortKey(sortColumn, "class"))
         {
-            return $"a.class {direction}, a.section {direction}, s.id ASC";
+            return $"c.classname {direction}, c.section {direction}, s.id ASC";
         }
 
         return "s.createdon DESC, s.id ASC";

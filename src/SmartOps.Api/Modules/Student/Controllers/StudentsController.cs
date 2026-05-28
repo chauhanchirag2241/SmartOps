@@ -158,10 +158,11 @@ public sealed class StudentsController(
         [FromQuery] string? sortDirection = null,
         [FromQuery] StudentFilter filter = StudentFilter.Active,
         [FromQuery] Guid? classId = null,
+        [FromQuery] Guid[]? classIds = null,
         CancellationToken cancellationToken = default)
     {
         var result = await studentRepository
-            .GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, classId, cancellationToken)
+            .GetAllStudentsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, classId, classIds, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(result);

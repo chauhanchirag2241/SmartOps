@@ -22,6 +22,7 @@ public interface IStudentRepository
         string? sortDirection = null,
         StudentFilter filter = StudentFilter.Active,
         Guid? classId = null,
+        IReadOnlyList<Guid>? classIds = null,
         CancellationToken cancellationToken = default);
 
     Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default);

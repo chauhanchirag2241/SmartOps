@@ -40,10 +40,6 @@ public sealed class DashboardResponseDto
 
     public SalaryDashboardDto? Salary { get; init; }
 
-    public decimal? SchoolFeesCollectedTotal { get; init; }
-
-    public decimal? SchoolFeesDueTotal { get; init; }
-
     public IReadOnlyList<RecentStudentDto>? RecentStudents { get; init; }
 
     public IReadOnlyList<DashboardTeacherDto>? Teachers { get; init; }

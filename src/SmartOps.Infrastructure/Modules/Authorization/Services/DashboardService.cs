@@ -142,16 +142,10 @@ public sealed class DashboardService : IDashboardService
         }
 
         IReadOnlyList<ClassOverviewDto>? classesOverview = null;
-        decimal? schoolFeesCollectedTotal = null;
-        decimal? schoolFeesDueTotal = null;
         if (visible.Contains(DashboardWidgetCodes.ClassesOverview))
         {
             classesOverview = await LoadClassesOverviewAsync(connection, schema, schoolToday, cancellationToken)
                 .ConfigureAwait(false);
-            (schoolFeesCollectedTotal, schoolFeesDueTotal) = await LoadSchoolFeeTotalsAsync(
-                connection,
-                schema,
-                cancellationToken).ConfigureAwait(false);
         }
 
         int totalSubjects = 0;
@@ -177,8 +171,6 @@ public sealed class DashboardService : IDashboardService
             Summary = summary,
             AttendanceToday = attendanceToday,
             Salary = salary,
-            SchoolFeesCollectedTotal = schoolFeesCollectedTotal,
-            SchoolFeesDueTotal = schoolFeesDueTotal,
             RecentStudents = recentStudents,
             Teachers = teachers,
             HomeworkDue = homework,
@@ -305,61 +297,6 @@ WHERE a.attendancedate >= @AttendanceFromDate
         from == to
             ? from.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)
             : $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
-
-    private async Task<(decimal Collected, decimal Due)> LoadSchoolFeeTotalsAsync(
-        IDbConnection connection,
-        string schema,
-        CancellationToken cancellationToken)
-    {
-        bool schoolWide = UseSchoolWideFinance();
-        string studentScope = schoolWide ? string.Empty : BuildStudentExistsFilter(schema, "s");
-        string classScope = schoolWide ? string.Empty : BuildClassFilter(schema, "c");
-
-        string collectedSql = $"""
-SELECT COALESCE(SUM(fp.amount), 0)
-FROM {schema}.{DatabaseConfig.TableFeePayments} fp
-INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = fp.studentid AND s.isactive = true
-WHERE fp.isactive = true
-  {studentScope}
-""";
-
-        decimal collected = await connection.ExecuteScalarAsync<decimal>(
-            new CommandDefinition(collectedSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        decimal due;
-        if (!schoolWide)
-        {
-            string dueSql = $"""
-SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
-    SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
-    INNER JOIN {schema}.{DatabaseConfig.TableStudents} s2 ON s2.id = fp.studentid AND s2.isactive = true
-    WHERE fp.isactive = true {studentScope.Replace("s.", "s2.", StringComparison.Ordinal)}
-), 0))
-FROM {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = cfa.classid AND c.isactive = true
-INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = cfa.classid AND sa.isactive = true
-INNER JOIN {schema}.{DatabaseConfig.TableStudents} s ON s.id = sa.studentid AND s.isactive = true
-WHERE cfa.isactive = true {classScope} {studentScope}
-""";
-            due = await connection.ExecuteScalarAsync<decimal>(
-                new CommandDefinition(dueSql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-        else
-        {
-            string dueSql = $"""
-SELECT GREATEST(0, COALESCE(SUM(cfa.amount), 0) - COALESCE((
-    SELECT SUM(fp.amount) FROM {schema}.{DatabaseConfig.TableFeePayments} fp
-    WHERE fp.isactive = true
-), 0))
-FROM {schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-WHERE cfa.isactive = true
-""";
-            due = await connection.ExecuteScalarAsync<decimal>(
-                new CommandDefinition(dueSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        return (collected, Math.Max(0, due));
-    }
 
     private async Task<SalaryDashboardDto?> LoadSalaryAsync(
         IDbConnection connection,

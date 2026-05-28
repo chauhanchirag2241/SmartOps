@@ -15,12 +15,9 @@ public sealed class G022_SeedDashboardWidgetsAndRolePermissions : Migration
         (Guid.Parse("30000000-0000-0000-0000-000000000002"), DashboardWidgetCodes.TeachersStat, "Total teachers", "Academics", MenuCodes.Teachers, 2, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000003"), DashboardWidgetCodes.ClassesStat, "Classes / sections", "Academics", MenuCodes.Classes, 3, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000004"), DashboardWidgetCodes.SubjectsStat, "Subjects offered", "Academics", MenuCodes.Subjects, 4, "stat"),
-        (Guid.Parse("30000000-0000-0000-0000-000000000005"), DashboardWidgetCodes.FeesCollected, "Fees collected", "Finance", MenuCodes.FeesCollection, 5, "stat"),
-        (Guid.Parse("30000000-0000-0000-0000-000000000006"), DashboardWidgetCodes.FeesPending, "Fees pending", "Finance", MenuCodes.FeesCollection, 6, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000007"), DashboardWidgetCodes.SalaryDisbursed, "Salary disbursed", "Finance", MenuCodes.SalaryPayroll, 7, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000008"), DashboardWidgetCodes.AttendanceRate, "Today's attendance", "Academics", MenuCodes.Attendance, 8, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000009"), DashboardWidgetCodes.AttendanceDetail, "Attendance today", "Academics", MenuCodes.Attendance, 9, "chart"),
-        (Guid.Parse("30000000-0000-0000-0000-000000000010"), DashboardWidgetCodes.FeesByClass, "Fees by class", "Finance", MenuCodes.FeesCollection, 10, "chart"),
         (Guid.Parse("30000000-0000-0000-0000-000000000011"), DashboardWidgetCodes.SalaryStatus, "Salary status", "Finance", MenuCodes.SalaryPayroll, 11, "chart"),
         (Guid.Parse("30000000-0000-0000-0000-000000000012"), DashboardWidgetCodes.RecentStudents, "Recent students", "Academics", MenuCodes.Students, 12, "list"),
         (Guid.Parse("30000000-0000-0000-0000-000000000013"), DashboardWidgetCodes.TeachersList, "Teachers", "Academics", MenuCodes.Teachers, 13, "list"),
@@ -74,10 +71,7 @@ WHERE NOT EXISTS (
 
         SeedRoleWidgets(RoleCodes.Accountant,
         [
-            DashboardWidgetCodes.FeesCollected,
-            DashboardWidgetCodes.FeesPending,
             DashboardWidgetCodes.SalaryDisbursed,
-            DashboardWidgetCodes.FeesByClass,
             DashboardWidgetCodes.SalaryStatus,
             DashboardWidgetCodes.AlertsActions
         ]);

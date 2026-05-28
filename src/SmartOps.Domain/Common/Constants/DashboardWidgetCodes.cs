@@ -9,12 +9,9 @@ public static class DashboardWidgetCodes
     public const string TeachersStat = "TEACHERS_STAT";
     public const string ClassesStat = "CLASSES_STAT";
     public const string SubjectsStat = "SUBJECTS_STAT";
-    public const string FeesCollected = "FEES_COLLECTED";
-    public const string FeesPending = "FEES_PENDING";
     public const string SalaryDisbursed = "SALARY_DISBURSED";
     public const string AttendanceRate = "ATTENDANCE_RATE";
     public const string AttendanceDetail = "ATTENDANCE_DETAIL";
-    public const string FeesByClass = "FEES_BY_CLASS";
     public const string SalaryStatus = "SALARY_STATUS";
     public const string RecentStudents = "RECENT_STUDENTS";
     public const string TeachersList = "TEACHERS_LIST";
@@ -28,12 +25,9 @@ public static class DashboardWidgetCodes
         TeachersStat,
         ClassesStat,
         SubjectsStat,
-        FeesCollected,
-        FeesPending,
         SalaryDisbursed,
         AttendanceRate,
         AttendanceDetail,
-        FeesByClass,
         SalaryStatus,
         RecentStudents,
         TeachersList,

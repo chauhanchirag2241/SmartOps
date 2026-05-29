@@ -19,13 +19,6 @@ public sealed class S106_CreateSettingsTable : Migration
                 .WithColumn("value").AsString(500).NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithAuditColumns();
-
-            Insert.IntoTable(DatabaseConfig.TableSettings).InSchema(S).Row(new
-            {
-                key = "Student_AdmissionNo_Sequence",
-                value = "1",
-                description = "Next sequence number for student admission"
-            });
         }
     }
 

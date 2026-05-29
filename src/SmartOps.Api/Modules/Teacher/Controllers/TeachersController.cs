@@ -95,7 +95,7 @@ public sealed class TeachersController(
             return NotFound();
         }
 
-        var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var teacher = await teacherRepository.GetTeacherByIdAsync(id, cancellationToken, includeInactive: true).ConfigureAwait(false);
         return teacher is null ? NotFound() : Ok(teacher);
     }
 

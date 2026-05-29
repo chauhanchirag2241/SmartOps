@@ -42,10 +42,11 @@ public sealed class TeacherRepository : BaseRepository, ITeacherRepository
         }).ConfigureAwait(false);
     }
 
-    public async Task<TeacherEntity?> GetTeacherByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<TeacherEntity?> GetTeacherByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var sql = $"SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} WHERE id = @Id AND isactive = true";
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
+        var sql = $"SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableTeachers} WHERE id = @Id{activeFilter}";
         return await connection.QuerySingleOrDefaultAsync<TeacherEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }
 

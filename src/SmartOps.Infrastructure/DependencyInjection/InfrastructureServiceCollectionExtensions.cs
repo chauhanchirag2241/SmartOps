@@ -41,8 +41,6 @@ using SmartOps.Infrastructure.Modules.School;
 using SmartOps.Infrastructure.Modules.Student;
 using SmartOps.Infrastructure.Modules.Subject;
 using SmartOps.Infrastructure.Modules.Teacher;
-using SmartOps.Domain.Modules.Setting;
-using SmartOps.Infrastructure.Modules.Setting;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Infrastructure.Modules.Teacher.Services;
 using SmartOps.Application.Modules.Audit.Interfaces;
@@ -94,7 +92,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISalaryStructureService, SalaryStructureService>();
         services.AddScoped<IEmployeeSalaryService, EmployeeSalaryService>();
         services.AddScoped<IPayrollService, PayrollService>();
-        services.AddScoped<ISettingRepository, SettingRepository>();
         services.AddScoped<ISchoolRepository, SchoolRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IClassSubjectTeacherMappingRepository, ClassSubjectTeacherMappingRepository>();

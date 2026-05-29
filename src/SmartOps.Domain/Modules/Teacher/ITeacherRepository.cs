@@ -8,7 +8,7 @@ namespace SmartOps.Domain.Modules.Teacher;
 public interface ITeacherRepository
 {
     Task<Guid> CreateTeacherAsync(TeacherEntity teacher, CancellationToken cancellationToken = default);
-    Task<TeacherEntity?> GetTeacherByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<TeacherEntity?> GetTeacherByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false);
     Task<PagedResult<TeacherListModel>> GetAllTeachersAsync(
         int pageIndex,
         int pageSize,

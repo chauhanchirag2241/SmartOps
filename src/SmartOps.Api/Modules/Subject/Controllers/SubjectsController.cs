@@ -61,7 +61,7 @@ public sealed class SubjectsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SubjectEntity>> GetSubjectById(Guid id, CancellationToken ct)
     {
-        var subject = await subjectRepository.GetSubjectByIdAsync(id, ct).ConfigureAwait(false);
+        var subject = await subjectRepository.GetSubjectByIdAsync(id, ct, includeInactive: true).ConfigureAwait(false);
         return subject is null ? NotFound() : Ok(subject);
     }
 

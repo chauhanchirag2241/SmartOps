@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
@@ -11,8 +12,6 @@ using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student;
-using SmartOps.Domain.Modules.Setting;
-using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
@@ -26,8 +25,6 @@ namespace SmartOps.Api.Modules.Student.Controllers;
 [Authorize]
 public sealed class StudentsController(
     IStudentRepository studentRepository,
-    ISettingRepository settingRepository,
-    IAcademicYearRepository academicYearRepository,
     IFeeStructureRepository feeStructureRepository,
     IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
@@ -35,28 +32,7 @@ public sealed class StudentsController(
     ITenantProvider tenantProvider,
     IAuditLogRepository auditLogRepository) : ControllerBase
 {
-    /// <summary>Generates the next admission number based on settings and year.</summary>
-    [HttpGet("next-admission-no")]
-    [Authorize(Policy = MenuPolicies.Students.Add)]
-    public async Task<ActionResult<object>> GetNextAdmissionNo(
-        [FromQuery] Guid? academicYearId,
-        CancellationToken cancellationToken)
-    {
-        int sequence = await settingRepository.GetNextSequenceAsync("Student_AdmissionNo_Sequence", cancellationToken);
-        
-        int year = DateTime.Now.Year;
-        if (academicYearId.HasValue)
-        {
-            var academicYear = await academicYearRepository.GetAcademicYearByIdAsync(academicYearId.Value, cancellationToken);
-            if (academicYear != null)
-            {
-                year = academicYear.StartDate.Year;
-            }
-        }
-
-        string admissionNo = $"STU-{year}-{sequence:D4}";
-        return Ok(new { AdmissionNo = admissionNo });
-    }
+    private static readonly Regex AdmissionNoPattern = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
 
     /// <summary>Generates the next roll number class-wise for a given academic year.</summary>
     [HttpGet("next-roll-number")]
@@ -85,6 +61,17 @@ public sealed class StudentsController(
             return BadRequest("Student data is required.");
         }
 
+        ActionResult? admissionNoValidation = await ValidateAdmissionNoAsync(
+                request.AdmissionNo,
+                excludingStudentId: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (admissionNoValidation is not null)
+        {
+            return admissionNoValidation;
+        }
+
+        request.AdmissionNo = request.AdmissionNo!.Trim();
         var entity = request.ToEntity();
 
         foreach (var academic in entity.Academics)
@@ -99,8 +86,24 @@ public sealed class StudentsController(
                 .ConfigureAwait(false);
             if (admissionFeeStructure is null)
             {
-                return BadRequest(
-                    "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first.");
+                return BadRequest(new
+                {
+                    message = "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first."
+                });
+            }
+
+            if (academic.ClassId != Guid.Empty)
+            {
+                bool classHasConfiguredAmounts = await classFeeAmountRepository
+                    .ClassHasConfiguredAmountsAsync(academic.ClassId, admissionFeeStructure.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!classHasConfiguredAmounts)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Set class-wise fee amounts for this class before admitting students."
+                    });
+                }
             }
         }
 
@@ -183,7 +186,7 @@ public sealed class StudentsController(
             return NotFound();
         }
 
-        var student = await studentRepository.GetStudentByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var student = await studentRepository.GetStudentByIdAsync(id, cancellationToken, includeInactive: true).ConfigureAwait(false);
         return student is null ? NotFound() : Ok(student);
     }
 
@@ -198,6 +201,18 @@ public sealed class StudentsController(
         {
             return BadRequest("Route id and payload id must match.");
         }
+
+        ActionResult? admissionNoValidation = await ValidateAdmissionNoAsync(
+                student.AdmissionNo,
+                excludingStudentId: id,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (admissionNoValidation is not null)
+        {
+            return admissionNoValidation;
+        }
+
+        student.AdmissionNo = student.AdmissionNo!.Trim();
 
         if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
         {
@@ -228,6 +243,28 @@ public sealed class StudentsController(
         schoolId = Guid.Empty;
         string? raw = tenantProvider.GetCurrentSchoolId();
         return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
+    }
+
+    private async Task<ActionResult?> ValidateAdmissionNoAsync(
+        string? admissionNo,
+        Guid? excludingStudentId,
+        CancellationToken cancellationToken)
+    {
+        string normalized = (admissionNo ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return BadRequest(new { message = "Admission number is required." });
+        }
+
+        if (!AdmissionNoPattern.IsMatch(normalized))
+        {
+            return BadRequest(new { message = "Admission number can contain only letters, numbers, hyphen (-), and underscore (_)." });
+        }
+
+        bool duplicate = await studentRepository
+            .AdmissionNoExistsAsync(normalized, excludingStudentId, cancellationToken)
+            .ConfigureAwait(false);
+        return duplicate ? Conflict(new { message = "Admission number already exists." }) : null;
     }
 
     /// <summary>

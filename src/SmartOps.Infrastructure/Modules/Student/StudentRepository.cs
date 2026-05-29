@@ -86,11 +86,11 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     }
 
     /// <inheritdoc />
-    public async Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var sql = BuildStudentDetailSql();
+        var sql = BuildStudentDetailSql(includeInactive);
 
         using var multi = await connection.QueryMultipleAsync(sql, new { Id = id }).ConfigureAwait(false);
         var student = await multi.ReadSingleOrDefaultAsync<StudentEntity>().ConfigureAwait(false);
@@ -270,6 +270,28 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         }).ConfigureAwait(false);
     }
 
+    public async Task<bool> AdmissionNoExistsAsync(
+        string admissionNo,
+        Guid? excludingStudentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+SELECT EXISTS (
+    SELECT 1
+    FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
+    WHERE lower(admissionno) = lower(@AdmissionNo)
+      AND isactive = true
+      AND (@ExcludingStudentId IS NULL OR id <> @ExcludingStudentId)
+);
+""";
+
+        return await connection.QuerySingleAsync<bool>(
+                sql,
+                new { AdmissionNo = admissionNo.Trim(), ExcludingStudentId = excludingStudentId })
+            .ConfigureAwait(false);
+    }
+
     /// <inheritdoc />
     public async Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default)
     {
@@ -423,11 +445,12 @@ WHERE id = @StudentId AND isactive = true
 
     #region Detail SQL
 
-    private string BuildStudentDetailSql()
+    private string BuildStudentDetailSql(bool includeInactive)
     {
         var g = Context.OperationalSchema;
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
         return $@"
-            SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id AND isactive = true;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id{activeFilter};
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;

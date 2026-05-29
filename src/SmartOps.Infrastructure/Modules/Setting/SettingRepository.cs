@@ -35,18 +35,4 @@ WHERE key = @Key
         await connection.ExecuteAsync(sql, new { Key = key, Value = value }).ConfigureAwait(false);
     }
 
-    public async Task<int> GetNextSequenceAsync(string key, CancellationToken cancellationToken = default)
-    {
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var sql = $"""
-UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableSettings}
-SET value = (CAST(value AS INTEGER) + 1)::text,
-    updatedon = NOW()
-WHERE key = @Key
-RETURNING CAST(value AS INTEGER)
-""";
-
-        return await connection.ExecuteScalarAsync<int>(sql, new { Key = key }).ConfigureAwait(false);
-    }
 }

@@ -46,6 +46,14 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict,
                 new { error = concurrencyException.Message }).ConfigureAwait(false);
         }
+        catch (Exception exception) when (IsUniqueViolation(exception, out string message))
+        {
+            _logger.LogWarning(exception, "Unique constraint violation.");
+            await WriteJsonAsync(
+                context,
+                StatusCodes.Status409Conflict,
+                new { error = message, message }).ConfigureAwait(false);
+        }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Unhandled exception.");
@@ -66,5 +74,31 @@ public sealed class ExceptionHandlingMiddleware
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json; charset=utf-8";
         await context.Response.WriteAsync(JsonSerializer.Serialize(payload, JsonOptions)).ConfigureAwait(false);
+    }
+
+    private static bool IsUniqueViolation(Exception exception, out string message)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current.GetType().FullName != "Npgsql.PostgresException")
+            {
+                continue;
+            }
+
+            string? sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            if (sqlState != "23505")
+            {
+                continue;
+            }
+
+            string? constraint = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            message = constraint?.Contains("admission", StringComparison.OrdinalIgnoreCase) == true
+                ? "Admission number already exists."
+                : "Duplicate value is not allowed.";
+            return true;
+        }
+
+        message = string.Empty;
+        return false;
     }
 }

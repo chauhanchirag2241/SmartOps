@@ -68,13 +68,14 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     }
 
     /// <inheritdoc />
-    public async Task<ClassEntity?> GetClassByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ClassEntity?> GetClassByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
 
         var sql = $@"
             SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            WHERE id = @Id AND isactive = true;";
+            WHERE id = @Id{activeFilter};";
 
         return await connection.QuerySingleOrDefaultAsync<ClassEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }

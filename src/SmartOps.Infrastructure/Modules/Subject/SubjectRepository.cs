@@ -108,7 +108,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
                 connection,
                 querySql,
                 countSql,
-                new { SearchTerm = searchTerm, ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() },
+                new { SearchTerm = searchTerm, Filter = filter, ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);
@@ -148,13 +148,14 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         return items.ToList();
     }
 
-    public async Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
 
         var sql = $@"
             SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableSubjects}
-            WHERE id = @Id AND isactive = true;";
+            WHERE id = @Id{activeFilter};";
 
         return await connection.QuerySingleOrDefaultAsync<SubjectEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }

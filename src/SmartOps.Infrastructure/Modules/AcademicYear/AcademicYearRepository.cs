@@ -37,13 +37,14 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         }).ConfigureAwait(false);
     }
 
-    public async Task<AcademicYearEntity?> GetAcademicYearByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<AcademicYearEntity?> GetAcademicYearByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
 
         var sql = $@"
             SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
-            WHERE id = @Id AND isactive = true;";
+            WHERE id = @Id{activeFilter};";
 
         return await connection.QuerySingleOrDefaultAsync<AcademicYearEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }

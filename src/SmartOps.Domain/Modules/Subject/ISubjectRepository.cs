@@ -16,7 +16,7 @@ public interface ISubjectRepository
         string? filter, 
         CancellationToken cancellationToken);
     Task<IReadOnlyList<DropdownDto>> GetSubjectDropdownAsync(CancellationToken cancellationToken);
-    Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken, bool includeInactive = false);
     Task UpdateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken);
     Task DeleteSubjectAsync(Guid id, CancellationToken cancellationToken);
 }

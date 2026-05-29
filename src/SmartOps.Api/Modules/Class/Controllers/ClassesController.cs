@@ -72,7 +72,7 @@ public sealed class ClassesController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClassEntity>> GetClassById(Guid id, CancellationToken cancellationToken)
     {
-        var classEntity = await classRepository.GetClassByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var classEntity = await classRepository.GetClassByIdAsync(id, cancellationToken, includeInactive: true).ConfigureAwait(false);
         return classEntity is null ? NotFound() : Ok(classEntity);
     }
 

@@ -6,5 +6,4 @@ public interface ISettingRepository
 {
     Task<string?> GetValueAsync(string key, CancellationToken cancellationToken = default);
     Task UpdateValueAsync(string key, string value, CancellationToken cancellationToken = default);
-    Task<int> GetNextSequenceAsync(string key, CancellationToken cancellationToken = default);
 }

@@ -68,7 +68,7 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AcademicYearEntity>> GetAcademicYearById(Guid id, CancellationToken cancellationToken)
     {
-        var entity = await academicYearRepository.GetAcademicYearByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var entity = await academicYearRepository.GetAcademicYearByIdAsync(id, cancellationToken, includeInactive: true).ConfigureAwait(false);
         return entity is null ? NotFound() : Ok(entity);
     }
 

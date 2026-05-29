@@ -12,7 +12,7 @@ public interface IStudentRepository
 {
     Task<Guid> CreateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default);
 
-    Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false);
 
     Task<PagedResult<StudentListModel>> GetAllStudentsAsync(
         int pageIndex,
@@ -26,6 +26,8 @@ public interface IStudentRepository
         CancellationToken cancellationToken = default);
 
     Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default);
+
+    Task<bool> AdmissionNoExistsAsync(string admissionNo, Guid? excludingStudentId = null, CancellationToken cancellationToken = default);
 
     Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default);
 

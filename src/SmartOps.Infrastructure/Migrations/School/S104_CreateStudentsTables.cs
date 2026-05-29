@@ -15,7 +15,7 @@ public sealed class S104_CreateStudentsTables : Migration
         {
             Create.Table(DatabaseConfig.TableStudents).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("admissionno").AsString(50).Nullable().Unique()
+                .WithColumn("admissionno").AsString(50).Nullable()
                 .WithColumn("firstname").AsString(50).NotNullable()
                 .WithColumn("middlename").AsString(50).Nullable()
                 .WithColumn("lastname").AsString(50).NotNullable()
@@ -38,6 +38,10 @@ public sealed class S104_CreateStudentsTables : Migration
 ALTER TABLE {S}.{DatabaseConfig.TableStudents}
     ADD CONSTRAINT fk_students_user FOREIGN KEY (userid)
     REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_students_admissionno_active_ci
+    ON {S}.{DatabaseConfig.TableStudents} (lower(admissionno))
+    WHERE isactive = true AND admissionno IS NOT NULL AND btrim(admissionno) <> '';
 """);
         }
 
@@ -112,7 +116,10 @@ ALTER TABLE {S}.{DatabaseConfig.TableStudents}
         Delete.Table(DatabaseConfig.TableStudentPreviousSchools).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentAcademics).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentParents).InSchema(S);
-        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableStudents} DROP CONSTRAINT IF EXISTS fk_students_user;");
+        Execute.Sql($"""
+            DROP INDEX IF EXISTS {S}.ux_students_admissionno_active_ci;
+            ALTER TABLE {S}.{DatabaseConfig.TableStudents} DROP CONSTRAINT IF EXISTS fk_students_user;
+            """);
         Delete.Table(DatabaseConfig.TableStudents).InSchema(S);
     }
 }

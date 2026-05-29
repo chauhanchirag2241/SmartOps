@@ -229,6 +229,15 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 "Published fee structure has no fee heads configured for this class.");
         }
 
+        bool classHasConfiguredAmounts = await _repo
+            .ClassHasConfiguredAmountsAsync(classId, admissionVersion.Id, ct)
+            .ConfigureAwait(false);
+        if (!classHasConfiguredAmounts)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure(
+                "Set class-wise fee amounts for this class before admitting students.");
+        }
+
         return result;
     }
 

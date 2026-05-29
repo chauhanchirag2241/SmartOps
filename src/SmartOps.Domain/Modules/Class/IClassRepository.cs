@@ -12,7 +12,7 @@ public interface IClassRepository
 {
     Task<Guid> CreateClassAsync(ClassEntity classEntity, CancellationToken cancellationToken = default);
 
-    Task<ClassEntity?> GetClassByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<ClassEntity?> GetClassByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false);
 
     Task<PagedResult<ClassListModel>> GetAllClassesAsync(
         int pageIndex,

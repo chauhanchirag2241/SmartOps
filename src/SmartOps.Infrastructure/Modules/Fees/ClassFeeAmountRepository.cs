@@ -207,8 +207,7 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                       AND cfa.feestructureversionid = @FeeStructureVersionId
                       AND cfa.isactive = true
                       AND (
-                          ft.category = 4
-                          OR cfa.amount > 0
+                          cfa.amount > 0
                           OR cfa.semester1amount > 0
                           OR cfa.semester2amount > 0
                       )

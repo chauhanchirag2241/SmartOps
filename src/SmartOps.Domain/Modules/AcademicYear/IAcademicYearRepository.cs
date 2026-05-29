@@ -8,7 +8,7 @@ namespace SmartOps.Domain.Modules.AcademicYear;
 public interface IAcademicYearRepository
 {
     Task<Guid> CreateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default);
-    Task<AcademicYearEntity?> GetAcademicYearByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<AcademicYearEntity?> GetAcademicYearByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false);
     Task<PagedResult<AcademicYearListModel>> GetAllAcademicYearsAsync(
         int pageIndex,
         int pageSize,

@@ -68,10 +68,36 @@ public sealed class SubjectsController(
     [HttpPut("{id:guid}")]
     [Authorize(Policy = MenuPolicies.Subjects.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> UpdateSubject(Guid id, [FromBody] SubjectEntity subject, CancellationToken ct)
+    public async Task<IActionResult> UpdateSubject(Guid id, [FromBody] CreateSubjectDto request, CancellationToken ct)
     {
-        if (id != subject.Id) return BadRequest("ID mismatch");
-        await subjectRepository.UpdateSubjectAsync(subject, ct).ConfigureAwait(false);
+        if (request is null)
+        {
+            return BadRequest("Subject data is required.");
+        }
+
+        var existing = await subjectRepository.GetSubjectByIdAsync(id, ct).ConfigureAwait(false);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        var entity = request.ToEntity();
+        entity.Id = id;
+        entity.VersionNo = existing.VersionNo;
+        entity.CreatedBy = existing.CreatedBy;
+        entity.CreatedOn = existing.CreatedOn;
+
+        if (request.AssignedClasses is null or { Length: 0 })
+        {
+            entity.AssignedClasses = existing.AssignedClasses;
+        }
+
+        if (request.TeachingDays is null or { Length: 0 })
+        {
+            entity.TeachingDays = existing.TeachingDays;
+        }
+
+        await subjectRepository.UpdateSubjectAsync(entity, ct).ConfigureAwait(false);
         return NoContent();
     }
 

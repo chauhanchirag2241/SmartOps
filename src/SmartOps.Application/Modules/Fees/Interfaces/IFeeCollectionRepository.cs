@@ -40,6 +40,19 @@ public interface IFeeCollectionRepository
 
     /// <summary>Resolves version from fee assignments/installments when student_academics has none.</summary>
     Task<Guid?> GetStudentFeeStructureVersionHintAsync(Guid studentId, CancellationToken ct = default);
+
+    /// <summary>Most recent enrollment in an academic year before the target year (includes inactive).</summary>
+    Task<PriorYearEnrollmentRow?> GetLatestPriorYearEnrollmentAsync(
+        Guid studentId,
+        Guid targetAcademicYearId,
+        CancellationToken ct = default);
+}
+
+public sealed class PriorYearEnrollmentRow
+{
+    public Guid AcademicYearId { get; init; }
+    public Guid ClassId { get; init; }
+    public Guid FeeStructureVersionId { get; init; }
 }
 
 public sealed class FeeCollectionStudentRow

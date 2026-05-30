@@ -66,9 +66,14 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
     [HttpGet("/api/academic-year/dropdown")]
     [Authorize]
     [ProducesResponseType(typeof(IReadOnlyList<AcademicYearDropdownDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAcademicYearDropdown(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAcademicYearDropdown(
+        [FromQuery] string? scope,
+        CancellationToken cancellationToken)
     {
-        var result = await academicYearRepository.GetAcademicYearDropdownAsync(cancellationToken).ConfigureAwait(false);
+        bool currentAndFutureOnly = string.Equals(scope, "switcher", StringComparison.OrdinalIgnoreCase);
+        var result = await academicYearRepository
+            .GetAcademicYearDropdownAsync(currentAndFutureOnly, cancellationToken)
+            .ConfigureAwait(false);
         return Ok(result.Select(i => i.ToDropdownDto()).ToList());
     }
 

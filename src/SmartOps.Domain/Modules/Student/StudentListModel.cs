@@ -15,4 +15,6 @@ public class StudentListModel
     public string Fees { get; set; } = null!;
     public string Status { get; set; } = null!;
     public bool IsActive { get; set; }
+    /// <summary>True when the student has an active class enrollment in the scoped academic year.</summary>
+    public bool EnrollmentIsActive { get; set; }
 }

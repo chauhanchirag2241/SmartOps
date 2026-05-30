@@ -17,11 +17,22 @@ public interface IAcademicYearRepository
         string? sortDirection = null,
         AcademicYearFilter filter = AcademicYearFilter.Active,
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default);
+    /// <param name="currentAndFutureOnly">When true, excludes archived (past) years; keeps current and future years.</param>
+    Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(
+        bool currentAndFutureOnly = false,
+        CancellationToken cancellationToken = default);
     Task<AcademicYearEntity?> GetCurrentAcademicYearAsync(CancellationToken cancellationToken = default);
     Task<Guid?> GetCurrentAcademicYearIdAsync(CancellationToken cancellationToken = default);
     Task SetCurrentAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> AcademicYearExistsAsync(Guid id, bool requireNotDeleted = true, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when <paramref name="academicYearId"/> starts before <paramref name="referenceAcademicYearId"/> (a past year).
+    /// </summary>
+    Task<bool> IsAcademicYearBeforeAsync(
+        Guid academicYearId,
+        Guid referenceAcademicYearId,
+        CancellationToken cancellationToken = default);
     Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default);
     Task DeleteAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
 

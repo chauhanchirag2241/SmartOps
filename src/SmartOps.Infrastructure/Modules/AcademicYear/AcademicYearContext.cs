@@ -76,9 +76,16 @@ public sealed class AcademicYearContext : IAcademicYearContext
         }
 
         Guid? effective = EffectiveAcademicYearId;
-        IsReadOnlyAcademicYear = !CurrentAcademicYearId.HasValue
-            || !effective.HasValue
-            || effective.Value != CurrentAcademicYearId.Value;
+        if (!CurrentAcademicYearId.HasValue || !effective.HasValue || effective.Value == CurrentAcademicYearId.Value)
+        {
+            IsReadOnlyAcademicYear = false;
+        }
+        else
+        {
+            IsReadOnlyAcademicYear = await _academicYearRepository
+                .IsAcademicYearBeforeAsync(effective.Value, CurrentAcademicYearId.Value, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         _resolved = true;
     }

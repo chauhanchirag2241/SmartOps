@@ -47,5 +47,10 @@ public interface IStudentRepository
         Guid targetAcademicYearId,
         Guid targetClassId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PromotePendingFeeRow>> GetPromotePendingFeesAsync(
+        Guid sourceAcademicYearId,
+        IReadOnlyList<Guid> studentIds,
+        CancellationToken cancellationToken = default);
 }
 

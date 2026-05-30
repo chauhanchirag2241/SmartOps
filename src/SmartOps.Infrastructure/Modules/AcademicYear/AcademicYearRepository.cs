@@ -103,17 +103,37 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         return result;
     }
 
-    public async Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(
+        bool currentAndFutureOnly = false,
+        CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+        var table = DatabaseConfig.TableAcademicYears;
+
+        string scopeFilter = currentAndFutureOnly
+            ? $"""
+              AND (
+                  ay.iscurrent = true
+                  OR ay.startdate >= (
+                      SELECT cur.startdate
+                      FROM {schema}.{table} cur
+                      WHERE cur.iscurrent = true AND cur.isactive = true
+                      LIMIT 1
+                  )
+              )
+              """
+            : string.Empty;
 
         var sql = $@"
             SELECT
                 ay.id AS Id,
                 ay.title AS Name,
-                ay.iscurrent AS IsCurrent
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears} ay
+                ay.iscurrent AS IsCurrent,
+                ay.startdate AS StartDate
+            FROM {schema}.{table} ay
             WHERE ay.isactive = true
+            {scopeFilter}
             ORDER BY ay.iscurrent DESC, ay.startdate DESC, ay.title ASC;";
 
         var items = await connection.QueryAsync<AcademicYearDropdownItem>(sql).ConfigureAwait(false);
@@ -197,6 +217,32 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 WHERE id = @Id{deletedFilter});";
 
         return await connection.QuerySingleAsync<bool>(sql, new { Id = id }).ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsAcademicYearBeforeAsync(
+        Guid academicYearId,
+        Guid referenceAcademicYearId,
+        CancellationToken cancellationToken = default)
+    {
+        if (academicYearId == referenceAcademicYearId)
+        {
+            return false;
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $@"
+            SELECT
+                (SELECT startdate FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+                 WHERE id = @AcademicYearId AND isactive = true)
+                <
+                (SELECT startdate FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+                 WHERE id = @ReferenceAcademicYearId AND isactive = true);";
+
+        return await connection.QuerySingleOrDefaultAsync<bool?>(sql, new
+        {
+            AcademicYearId = academicYearId,
+            ReferenceAcademicYearId = referenceAcademicYearId,
+        }).ConfigureAwait(false) ?? false;
     }
 
     public async Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)

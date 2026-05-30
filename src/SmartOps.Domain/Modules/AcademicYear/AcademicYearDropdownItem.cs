@@ -5,4 +5,5 @@ public sealed class AcademicYearDropdownItem
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsCurrent { get; set; }
+    public DateOnly StartDate { get; set; }
 }

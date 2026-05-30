@@ -30,6 +30,27 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             ? _tenantSchema.GetOperationalSchema()
             : DatabaseConfig.Schema_School;
 
+    /// <summary>
+    /// One enrollment per student for the requested year (active first; inactive for promoted/historical view).
+    /// </summary>
+    private static string StudentEnrollmentForYearJoin(string schema) => $"""
+        INNER JOIN (
+            SELECT sa.studentid,
+                   sa.classid,
+                   sa.rollnumber,
+                   sa.feestructureversionid,
+                   sa.academicyearid,
+                   sa.isactive,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY sa.studentid
+                       ORDER BY sa.isactive DESC, sa.createdon DESC) AS rn
+            FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
+            WHERE sa.academicyearid = @AcademicYearId
+        ) sa ON sa.studentid = s.id AND sa.rn = 1
+        INNER JOIN {schema}.{DatabaseConfig.TableClasses} c
+            ON c.id = sa.classid AND c.academicyearid = @AcademicYearId AND c.isactive = true
+        """;
+
     public async Task<IList<FeeCollectionStudentRow>> GetStudentsAsync(
         Guid? classId,
         Guid academicYearId,
@@ -51,8 +72,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                    COALESCE(fee_totals.total_fees, 0) AS TotalFees,
                    COALESCE(paid_totals.paid, 0) AS PaidAmount
             FROM {Schema}.{DatabaseConfig.TableStudents} s
-            INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
+            {StudentEnrollmentForYearJoin(Schema)}
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
                 SELECT COALESCE(
@@ -85,7 +105,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                   AND fp.feestructureversionid = sa.feestructureversionid
                   AND fp.isactive = true
             ) paid_totals ON true
-            WHERE s.isactive = true AND sa.academicyearid = @AcademicYearId
+            WHERE s.isactive = true
             {(classId.HasValue ? "AND sa.classid = @ClassId" : string.Empty)}
             {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (LOWER(s.firstname || ' ' || s.lastname) LIKE @Search OR LOWER(sa.rollnumber) LIKE @Search)")}
             ORDER BY sa.rollnumber, s.firstname;
@@ -122,10 +142,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                    COALESCE(fee_totals.total_fees, 0) AS TotalFees,
                    COALESCE(paid_totals.paid, 0) AS PaidAmount
             FROM {Schema}.{DatabaseConfig.TableStudents} s
-            INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
-                ON sa.studentid = s.id AND sa.isactive = true AND sa.academicyearid = @AcademicYearId
-            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
-                ON c.id = sa.classid AND c.isactive = true
+            {StudentEnrollmentForYearJoin(Schema)}
             LEFT JOIN {Schema}.{DatabaseConfig.TableFeeStructureVersions} fsv ON fsv.id = sa.feestructureversionid
             LEFT JOIN LATERAL (
                 SELECT COALESCE(
@@ -299,6 +316,35 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
             sql,
             new { StudentId = studentId, AcademicYearId = academicYearId, FeeStructureVersionId = feeStructureVersionId, UpdatedBy = actorId, UpdatedOn = utcNow },
             cancellationToken: ct)).ConfigureAwait(false);
+    }
+
+    public async Task<PriorYearEnrollmentRow?> GetLatestPriorYearEnrollmentAsync(
+        Guid studentId,
+        Guid targetAcademicYearId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT sa.academicyearid AS AcademicYearId,
+                   sa.classid AS ClassId,
+                   COALESCE(sa.feestructureversionid, '00000000-0000-0000-0000-000000000000'::uuid) AS FeeStructureVersionId
+            FROM {Schema}.{DatabaseConfig.TableStudentAcademics} sa
+            INNER JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay
+                ON ay.id = sa.academicyearid AND ay.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableAcademicYears} target_ay
+                ON target_ay.id = @TargetAcademicYearId AND target_ay.isactive = true
+            WHERE sa.studentid = @StudentId
+              AND ay.startdate < target_ay.startdate
+            ORDER BY ay.startdate DESC, sa.isactive DESC, sa.createdon DESC
+            LIMIT 1;
+            """;
+        return await connection
+            .QueryFirstOrDefaultAsync<PriorYearEnrollmentRow>(
+                new CommandDefinition(
+                    sql,
+                    new { StudentId = studentId, TargetAcademicYearId = targetAcademicYearId },
+                    cancellationToken: ct))
+            .ConfigureAwait(false);
     }
 
     public async Task<IList<StudentFeeHeadPaidRow>> GetPaidByFeeTypeAsync(Guid studentId, CancellationToken ct = default)

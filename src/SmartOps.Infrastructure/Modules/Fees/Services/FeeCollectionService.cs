@@ -4,6 +4,7 @@ using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.Fees;
+using SmartOps.Infrastructure.Modules.Student;
 
 namespace SmartOps.Infrastructure.Modules.Fees.Services;
 
@@ -328,22 +329,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
         Guid academicYearId,
         CancellationToken ct)
     {
-        await _installmentRepo
-            .EnsureMissingInstallmentsForClassVersionAsync(
-                row.ClassId,
-                row.FeeStructureVersionId,
-                academicYearId,
-                ct)
-            .ConfigureAwait(false);
-
-        await _studentInstallmentRepo
-            .EnsureForStudentAsync(
-                row.StudentId,
-                row.ClassId,
-                row.FeeStructureVersionId,
-                academicYearId,
-                ct)
-            .ConfigureAwait(false);
+        await RepairStudentFeesIfNeededAsync(row, academicYearId, ct).ConfigureAwait(false);
 
         IList<ClassFeeInstallmentRow> installmentRows;
         if (await _studentInstallmentRepo
@@ -594,6 +580,114 @@ public sealed class FeeCollectionService : IFeeCollectionService
                     ct)
                 .ConfigureAwait(false);
         }
+
+        foreach (FeeCollectionStudentRow row in rows.Where(r => r.FeeStructureVersionId != Guid.Empty))
+        {
+            await RepairStudentFeesIfNeededAsync(row, academicYearId, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RepairStudentFeesIfNeededAsync(
+        FeeCollectionStudentRow row,
+        Guid academicYearId,
+        CancellationToken ct)
+    {
+        if (row.FeeStructureVersionId == Guid.Empty)
+        {
+            return;
+        }
+
+        await _installmentRepo
+            .EnsureMissingInstallmentsForClassVersionAsync(
+                row.ClassId,
+                row.FeeStructureVersionId,
+                academicYearId,
+                ct)
+            .ConfigureAwait(false);
+
+        await _studentInstallmentRepo
+            .EnsureCurrentYearInstallmentsAsync(
+                row.StudentId,
+                row.ClassId,
+                row.FeeStructureVersionId,
+                academicYearId,
+                ct)
+            .ConfigureAwait(false);
+
+        await TryCarryForwardPriorYearPendingAsync(row, academicYearId, ct).ConfigureAwait(false);
+    }
+
+    private async Task TryCarryForwardPriorYearPendingAsync(
+        FeeCollectionStudentRow row,
+        Guid targetAcademicYearId,
+        CancellationToken ct)
+    {
+        PriorYearEnrollmentRow? prior = await _collectionRepo
+            .GetLatestPriorYearEnrollmentAsync(row.StudentId, targetAcademicYearId, ct)
+            .ConfigureAwait(false);
+        if (prior is null || prior.FeeStructureVersionId == Guid.Empty)
+        {
+            return;
+        }
+
+        await _studentInstallmentRepo
+            .EnsureCurrentYearInstallmentsAsync(
+                row.StudentId,
+                row.ClassId,
+                row.FeeStructureVersionId,
+                targetAcademicYearId,
+                ct)
+            .ConfigureAwait(false);
+
+        IList<ClassFeeInstallmentRow> currentInstallments = await _studentInstallmentRepo
+            .GetByStudentVersionAsync(row.StudentId, row.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        if (currentInstallments.Any(i => StudentFeeInstallmentRepository.IsCarriedForwardPeriodLabel(i.PeriodLabel)))
+        {
+            return;
+        }
+
+        FeeCollectionStudentRow? priorRow = await _collectionRepo
+            .GetStudentRowAsync(row.StudentId, prior.AcademicYearId, ct)
+            .ConfigureAwait(false);
+        decimal total = priorRow?.TotalFees ?? 0m;
+        decimal paid = priorRow?.PaidAmount ?? 0m;
+        if (total <= 0 && prior.ClassId != Guid.Empty)
+        {
+            total = await _collectionRepo
+                .GetStudentTotalFeesAsync(prior.ClassId, prior.FeeStructureVersionId, ct)
+                .ConfigureAwait(false);
+            if (paid == 0)
+            {
+                paid = await _collectionRepo
+                    .GetStudentPaidTotalAsync(row.StudentId, prior.FeeStructureVersionId, ct)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        decimal pending = Math.Max(0, total - paid);
+        if (pending <= 0)
+        {
+            return;
+        }
+
+        await _studentInstallmentRepo
+            .CopyFeeHeadAssignmentsFromVersionAsync(
+                row.StudentId,
+                prior.FeeStructureVersionId,
+                row.FeeStructureVersionId,
+                ct)
+            .ConfigureAwait(false);
+
+        await _studentInstallmentRepo
+            .AddCarriedForwardBalanceAsync(
+                row.StudentId,
+                row.ClassId,
+                row.FeeStructureVersionId,
+                targetAcademicYearId,
+                pending,
+                ct)
+            .ConfigureAwait(false);
     }
 
     private async Task<IList<ClassFeeInstallmentRow>> FilterInstallmentsByStudentSelectionAsync(

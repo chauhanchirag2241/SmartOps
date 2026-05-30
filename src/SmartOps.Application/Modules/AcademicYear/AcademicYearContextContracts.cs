@@ -13,7 +13,8 @@ public interface IAcademicYearContext
     bool CanSwitchAcademicYear { get; }
 
     /// <summary>
-    /// True when the effective year is not the school's current year — data changes are blocked.
+    /// True when the effective year is a past academic year (before the school's current year).
+    /// Current and future years allow add/edit for setup and operations.
     /// </summary>
     bool IsReadOnlyAcademicYear { get; }
 

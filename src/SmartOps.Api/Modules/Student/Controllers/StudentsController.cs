@@ -306,6 +306,36 @@ public sealed class StudentsController(
         });
     }
 
+    /// <summary>Lists students selected for promotion who still have pending fees in the source academic year.</summary>
+    [HttpGet("promote-pending-fees")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [ProducesResponseType(typeof(IReadOnlyList<PromotePendingFeeDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PromotePendingFeeDto>>> GetPromotePendingFees(
+        [FromQuery] Guid sourceAcademicYearId,
+        [FromQuery] Guid[] studentIds,
+        CancellationToken cancellationToken)
+    {
+        if (sourceAcademicYearId == Guid.Empty || studentIds is null || studentIds.Length == 0)
+        {
+            return Ok(Array.Empty<PromotePendingFeeDto>());
+        }
+
+        IReadOnlyList<PromotePendingFeeRow> rows = await studentRepository
+            .GetPromotePendingFeesAsync(sourceAcademicYearId, studentIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<PromotePendingFeeDto> dtos = rows
+            .Select(r => new PromotePendingFeeDto(
+                r.StudentId,
+                r.StudentName,
+                r.TotalFees,
+                r.PaidAmount,
+                r.PendingAmount))
+            .ToList();
+
+        return Ok(dtos);
+    }
+
     /// <summary>Promote students from one academic year enrollment to the next.</summary>
     [HttpPost("promote")]
     [Authorize(Policy = MenuPolicies.Students.Edit)]
@@ -334,6 +364,10 @@ public sealed class StudentsController(
             entries,
             cancellationToken).ConfigureAwait(false);
 
-        return Ok(new PromoteStudentsResponse(result.PromotedCount, result.Errors));
+        return Ok(new PromoteStudentsResponse(
+            result.PromotedCount,
+            result.Errors,
+            result.StudentsWithFeesTransferred,
+            result.TotalPendingTransferred));
     }
 }

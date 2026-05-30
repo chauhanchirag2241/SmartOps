@@ -6,4 +6,8 @@ public sealed record PromoteStudentEntry(
     string? RollNumber,
     DateOnly? AdmissionDate);
 
-public sealed record PromoteStudentsResult(int PromotedCount, IReadOnlyList<string> Errors);
+public sealed record PromoteStudentsResult(
+    int PromotedCount,
+    IReadOnlyList<string> Errors,
+    int StudentsWithFeesTransferred = 0,
+    decimal TotalPendingTransferred = 0);

@@ -87,7 +87,18 @@ public sealed class PromoteStudentItemDto
     public DateOnly? AdmissionDate { get; set; }
 }
 
-public sealed record PromoteStudentsResponse(int PromotedCount, IReadOnlyList<string> Errors);
+public sealed record PromoteStudentsResponse(
+    int PromotedCount,
+    IReadOnlyList<string> Errors,
+    int StudentsWithFeesTransferred = 0,
+    decimal TotalPendingTransferred = 0);
+
+public sealed record PromotePendingFeeDto(
+    Guid StudentId,
+    string StudentName,
+    decimal TotalFees,
+    decimal PaidAmount,
+    decimal PendingAmount);
 
 public sealed class PromoteReadinessResponse
 {

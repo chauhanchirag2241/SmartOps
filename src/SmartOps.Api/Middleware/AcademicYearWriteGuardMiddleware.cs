@@ -3,7 +3,7 @@ using SmartOps.Application.Modules.AcademicYear;
 namespace SmartOps.Api.Middleware;
 
 /// <summary>
-/// Blocks create/update/delete when viewing a non-current academic year in the header.
+/// Blocks create/update/delete when viewing a past academic year in the header.
 /// </summary>
 public sealed class AcademicYearWriteGuardMiddleware
 {
@@ -34,7 +34,7 @@ public sealed class AcademicYearWriteGuardMiddleware
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsJsonAsync(new
             {
-                message = "Changes are only allowed for the current academic year. Select the current year in the header to add, edit, or delete.",
+                message = "Changes are not allowed for past academic years. Select the current or an upcoming year in the header to add, edit, or delete.",
                 code = "ACADEMIC_YEAR_READ_ONLY",
             }).ConfigureAwait(false);
             return;

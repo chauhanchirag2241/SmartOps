@@ -34,7 +34,7 @@ public sealed record CurrentAcademicYearDto(
     DateOnly EndDate,
     bool IsCurrent);
 
-public sealed record AcademicYearDropdownDto(Guid Id, string Name, bool IsCurrent);
+public sealed record AcademicYearDropdownDto(Guid Id, string Name, bool IsCurrent, DateOnly StartDate);
 
 public static class AcademicYearDtoMapping
 {
@@ -42,7 +42,7 @@ public static class AcademicYearDtoMapping
         new(entity.Id, entity.Title, entity.StartDate, entity.EndDate, entity.IsCurrent);
 
     public static AcademicYearDropdownDto ToDropdownDto(this AcademicYearDropdownItem item) =>
-        new(item.Id, item.Name, item.IsCurrent);
+        new(item.Id, item.Name, item.IsCurrent, item.StartDate);
 }
 
 public sealed record AcademicYearSemesterDto(

@@ -26,6 +26,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     private readonly IFeeStructureRepository _feeStructureRepo;
     private readonly IClassFeeAmountRepository _classFeeAmountRepo;
     private readonly IStudentFeeInstallmentRepository _studentFeeInstallmentRepo;
+    private readonly IFeeCollectionRepository _feeCollectionRepo;
 
     private static readonly string[] RelatedTablesForSoftDelete =
     {
@@ -42,12 +43,14 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         IUserScopeContext scope,
         IFeeStructureRepository feeStructureRepo,
         IClassFeeAmountRepository classFeeAmountRepo,
-        IStudentFeeInstallmentRepository studentFeeInstallmentRepo)
+        IStudentFeeInstallmentRepository studentFeeInstallmentRepo,
+        IFeeCollectionRepository feeCollectionRepo)
         : base(context, currentUser)
     {
         _feeStructureRepo = feeStructureRepo;
         _classFeeAmountRepo = classFeeAmountRepo;
         _studentFeeInstallmentRepo = studentFeeInstallmentRepo;
+        _feeCollectionRepo = feeCollectionRepo;
         _scope = scope;
     }
 
@@ -149,9 +152,12 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             }
 
             var whereClause = BuildListWhereClause(filter, effectiveClassIds, ref searchTerm);
+            whereClause = AcademicYearScopeSql.AppendStudentHasEnrollmentInScopeYear(
+                _scope, "s", Context.OperationalSchema, ref whereClause);
             whereClause = ScopeSqlBuilder.AppendStudentScopeFilter(
                 _scope, "s", Context.OperationalSchema, ref whereClause);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
+            string enrollmentJoin = _scope.ActiveAcademicYearId.HasValue ? "INNER JOIN" : "LEFT JOIN";
 
             var schema = Context.OperationalSchema;
             var students = DatabaseConfig.TableStudents;
@@ -189,10 +195,16 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                     WHEN COALESCE(paid_totals.paid, 0) > 0 THEN 'Partial'
                     ELSE 'Overdue'
                 END AS Fees,
-                s.isactive AS IsActive
+                s.isactive AS IsActive,
+                COALESCE(a.isactive, false) AS EnrollmentIsActive
             FROM {schema}.{students} s
-            LEFT JOIN (
-                SELECT sa.studentid, sa.classid, sa.rollnumber, sa.feestructureversionid, sa.academicyearid,
+            {enrollmentJoin} (
+                SELECT sa.studentid,
+                       sa.classid,
+                       sa.rollnumber,
+                       sa.feestructureversionid,
+                       sa.academicyearid,
+                       sa.isactive,
                        ROW_NUMBER() OVER(
                            PARTITION BY sa.studentid
                            ORDER BY sa.isactive DESC, sa.createdon DESC) AS rn
@@ -858,6 +870,44 @@ WHERE id = @StudentId AND isactive = true
         return null;
     }
 
+    public async Task<IReadOnlyList<PromotePendingFeeRow>> GetPromotePendingFeesAsync(
+        Guid sourceAcademicYearId,
+        IReadOnlyList<Guid> studentIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (sourceAcademicYearId == Guid.Empty || studentIds.Count == 0)
+        {
+            return Array.Empty<PromotePendingFeeRow>();
+        }
+
+        var rows = new List<PromotePendingFeeRow>();
+        foreach (Guid studentId in studentIds.Distinct())
+        {
+            FeeCollectionStudentRow? row = await _feeCollectionRepo
+                .GetStudentRowAsync(studentId, sourceAcademicYearId, cancellationToken)
+                .ConfigureAwait(false);
+            if (row is null)
+            {
+                continue;
+            }
+
+            decimal pending = Math.Max(0, row.TotalFees - row.PaidAmount);
+            if (pending <= 0)
+            {
+                continue;
+            }
+
+            rows.Add(new PromotePendingFeeRow(
+                studentId,
+                row.StudentName,
+                row.TotalFees,
+                row.PaidAmount,
+                pending));
+        }
+
+        return rows;
+    }
+
     public async Task<PromoteStudentsResult> PromoteStudentsAsync(
         Guid sourceAcademicYearId,
         Guid targetAcademicYearId,
@@ -905,6 +955,13 @@ WHERE id = @StudentId AND isactive = true
         var utcNow = DateTime.UtcNow;
         var actorId = ResolveInsertActor();
         int promoted = 0;
+        int feesTransferred = 0;
+        decimal totalPendingTransferred = 0m;
+        var pendingFeeTransfers = new List<(
+            Guid StudentId,
+            Guid SourceClassId,
+            Guid SourceFeeStructureVersionId,
+            Guid TargetClassId)>();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -930,7 +987,23 @@ WHERE id = @StudentId AND isactive = true
 
                 if (sourceRecord is null)
                 {
-                    errors.Add($"Student {entry.StudentId}: no active enrollment in source academic year.");
+                    StudentAcademicEntity? inactiveSource = await GetAcademicRecordAsync(
+                        conn, schema, entry.StudentId, sourceAcademicYearId, tx, activeOnly: false)
+                        .ConfigureAwait(false);
+                    if (inactiveSource is not null)
+                    {
+                        StudentAcademicEntity? activeTarget = await GetAcademicRecordAsync(
+                            conn, schema, entry.StudentId, targetAcademicYearId, tx, activeOnly: true)
+                            .ConfigureAwait(false);
+                        errors.Add(activeTarget is not null
+                            ? $"Student {entry.StudentId}: already promoted to the target academic year."
+                            : $"Student {entry.StudentId}: enrollment in the source year is closed (already promoted or inactive).");
+                    }
+                    else
+                    {
+                        errors.Add($"Student {entry.StudentId}: no enrollment found in the source academic year.");
+                    }
+
                     continue;
                 }
 
@@ -1015,10 +1088,107 @@ WHERE id = @StudentId AND isactive = true
                 }
 
                 promoted++;
+                pendingFeeTransfers.Add((
+                    entry.StudentId,
+                    sourceRecord.ClassId,
+                    sourceRecord.FeeStructureVersionId ?? Guid.Empty,
+                    entry.TargetClassId));
             }
         }).ConfigureAwait(false);
 
-        return new PromoteStudentsResult(promoted, errors);
+        foreach ((Guid studentId, Guid sourceClassId, Guid sourceFeeVersionId, Guid targetClassId) in pendingFeeTransfers)
+        {
+            try
+            {
+                decimal transferred = await TransferPendingFeesToTargetYearAsync(
+                    studentId,
+                    sourceAcademicYearId,
+                    sourceClassId,
+                    sourceFeeVersionId,
+                    targetClassId,
+                    targetFeeVersion.Id,
+                    targetAcademicYearId,
+                    cancellationToken).ConfigureAwait(false);
+                if (transferred > 0)
+                {
+                    feesTransferred++;
+                    totalPendingTransferred += transferred;
+                }
+            }
+            catch (Exception)
+            {
+                errors.Add(
+                    $"Student {studentId}: promoted successfully, but pending fees could not be transferred to the target year.");
+            }
+        }
+
+        return new PromoteStudentsResult(promoted, errors, feesTransferred, totalPendingTransferred);
+    }
+
+    private async Task<decimal> TransferPendingFeesToTargetYearAsync(
+        Guid studentId,
+        Guid sourceAcademicYearId,
+        Guid sourceClassId,
+        Guid sourceFeeStructureVersionId,
+        Guid targetClassId,
+        Guid targetFeeStructureVersionId,
+        Guid targetAcademicYearId,
+        CancellationToken cancellationToken)
+    {
+        if (sourceFeeStructureVersionId == Guid.Empty || targetFeeStructureVersionId == Guid.Empty)
+        {
+            return 0m;
+        }
+
+        decimal paid = await _feeCollectionRepo
+            .GetStudentPaidTotalAsync(studentId, sourceFeeStructureVersionId, cancellationToken)
+            .ConfigureAwait(false);
+        FeeCollectionStudentRow? sourceRow = await _feeCollectionRepo
+            .GetStudentRowAsync(studentId, sourceAcademicYearId, cancellationToken)
+            .ConfigureAwait(false);
+
+        decimal total = sourceRow?.TotalFees ?? 0m;
+        if (total <= 0 && sourceClassId != Guid.Empty)
+        {
+            total = await _feeCollectionRepo
+                .GetStudentTotalFeesAsync(sourceClassId, sourceFeeStructureVersionId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        decimal pending = Math.Max(0, total - paid);
+        if (pending <= 0)
+        {
+            return 0m;
+        }
+
+        await _studentFeeInstallmentRepo
+            .CopyFeeHeadAssignmentsFromVersionAsync(
+                studentId,
+                sourceFeeStructureVersionId,
+                targetFeeStructureVersionId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await _studentFeeInstallmentRepo
+            .EnsureCurrentYearInstallmentsAsync(
+                studentId,
+                targetClassId,
+                targetFeeStructureVersionId,
+                targetAcademicYearId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await _studentFeeInstallmentRepo
+            .AddCarriedForwardBalanceAsync(
+                studentId,
+                targetClassId,
+                targetFeeStructureVersionId,
+                targetAcademicYearId,
+                pending,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return pending;
     }
 
     #endregion

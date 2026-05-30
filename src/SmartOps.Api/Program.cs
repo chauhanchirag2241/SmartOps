@@ -45,6 +45,8 @@ app.UseTenantResolver();
 
 app.UseAuthentication();
 
+app.UseMiddleware<SmartOps.Api.Middleware.AcademicYearMiddleware>();
+app.UseMiddleware<SmartOps.Api.Middleware.AcademicYearWriteGuardMiddleware>();
 app.UseMiddleware<SmartOps.Api.Middleware.UserScopeMiddleware>();
 
 app.UseAuthorization();

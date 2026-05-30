@@ -1,3 +1,4 @@
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Fees;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Application.Modules.Student.Interfaces;
@@ -13,19 +14,22 @@ public sealed class FeeCollectionService : IFeeCollectionService
     private readonly IClassFeeInstallmentRepository _installmentRepo;
     private readonly IStudentFeeHeadAssignmentRepository _feeHeadAssignmentRepo;
     private readonly IStudentFeeInstallmentRepository _studentInstallmentRepo;
+    private readonly IUserScopeContext _scope;
 
     public FeeCollectionService(
         IFeeCollectionRepository collectionRepo,
         IFeeStructureRepository structureRepo,
         IClassFeeInstallmentRepository installmentRepo,
         IStudentFeeHeadAssignmentRepository feeHeadAssignmentRepo,
-        IStudentFeeInstallmentRepository studentInstallmentRepo)
+        IStudentFeeInstallmentRepository studentInstallmentRepo,
+        IUserScopeContext scope)
     {
         _collectionRepo = collectionRepo;
         _structureRepo = structureRepo;
         _installmentRepo = installmentRepo;
         _feeHeadAssignmentRepo = feeHeadAssignmentRepo;
         _studentInstallmentRepo = studentInstallmentRepo;
+        _scope = scope;
     }
 
     public async Task<Result<IList<FeeCollectionStudentListItemDto>>> GetStudentsAsync(
@@ -307,6 +311,12 @@ public sealed class FeeCollectionService : IFeeCollectionService
         if (academicYearId.HasValue && academicYearId.Value != Guid.Empty)
         {
             return academicYearId.Value;
+        }
+
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        if (_scope.ActiveAcademicYearId.HasValue)
+        {
+            return _scope.ActiveAcademicYearId.Value;
         }
 
         FeeSettingsEntity? settings = await _structureRepo.GetSettingsAsync(ct).ConfigureAwait(false);

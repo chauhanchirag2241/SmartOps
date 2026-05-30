@@ -19,12 +19,31 @@ public static class AcademicYearMappingExtensions
             Title = dto.Title,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
-            IsActive = true
+            IsActive = true,
+            IsCurrent = false
         };
     }
 }
 
 public sealed record CreateAcademicYearResponse(string Message, Guid AcademicYearId);
+
+public sealed record CurrentAcademicYearDto(
+    Guid Id,
+    string Title,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    bool IsCurrent);
+
+public sealed record AcademicYearDropdownDto(Guid Id, string Name, bool IsCurrent);
+
+public static class AcademicYearDtoMapping
+{
+    public static CurrentAcademicYearDto ToCurrentDto(this AcademicYearEntity entity) =>
+        new(entity.Id, entity.Title, entity.StartDate, entity.EndDate, entity.IsCurrent);
+
+    public static AcademicYearDropdownDto ToDropdownDto(this AcademicYearDropdownItem item) =>
+        new(item.Id, item.Name, item.IsCurrent);
+}
 
 public sealed record AcademicYearSemesterDto(
     Guid Id,

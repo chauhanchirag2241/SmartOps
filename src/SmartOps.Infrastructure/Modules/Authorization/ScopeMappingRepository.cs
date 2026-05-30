@@ -19,8 +19,7 @@ public sealed class ScopeMappingRepository : IScopeMappingRepository
     {
         string sql = $"""
 SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
-WHERE isactive = true
-ORDER BY startdate DESC NULLS LAST, createdon DESC
+WHERE iscurrent = true AND isactive = true
 LIMIT 1
 """;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);

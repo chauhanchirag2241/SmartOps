@@ -6,6 +6,7 @@ using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Enums;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using System.Data;
 using System.Globalization;
@@ -371,8 +372,8 @@ SELECT
     c.section AS Section,
     s.createdon AS CreatedOn
 FROM {schema}.{DatabaseConfig.TableStudents} s
-LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-    AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id
+    AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
 WHERE s.isactive = true {filter}
 ORDER BY s.createdon DESC
@@ -442,6 +443,7 @@ INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.is
 WHERE h.isactive = true
   AND h.duedate >= CURRENT_DATE
   AND h.duedate <= CURRENT_DATE + 3
+  AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
   {classFilter}
 ORDER BY h.duedate ASC
 LIMIT 5
@@ -487,13 +489,13 @@ SELECT
         SELECT SUM(fp.amount)
         FROM {schema}.{DatabaseConfig.TableFeePayments} fp
         INNER JOIN {schema}.{DatabaseConfig.TableStudents} st2 ON st2.id = fp.studentid AND st2.isactive = true
-        INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st2.id AND sa2.classid = c.id AND sa2.isactive = true
-            AND (@ScopeAcademicYearId IS NULL OR sa2.academicyearid = @ScopeAcademicYearId)
+        INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st2.id AND sa2.classid = c.id
+            AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause("sa2")}
         WHERE fp.isactive = true AND fp.paymentdate = @SchoolToday {feeStudentScope}
     ), 0) AS FeeCollectedToday
 FROM {schema}.{DatabaseConfig.TableClasses} c
-LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id AND sa.isactive = true
-    AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id
+    AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 LEFT JOIN {schema}.{DatabaseConfig.TableStudents} st ON st.id = sa.studentid AND st.isactive = true {studentScope}
 LEFT JOIN {schema}.{DatabaseConfig.TableAttendance} a ON a.classid = c.id AND a.studentid = sa.studentid
     AND a.attendancedate = @SchoolToday AND a.isactive = true
@@ -667,18 +669,20 @@ WHERE id = @Id AND isactive = true LIMIT 1
         return $"""
  AND EXISTS (
     SELECT 1 FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
-    WHERE sa.studentid = {alias}.id AND sa.isactive = true
+    WHERE sa.studentid = {alias}.id
       AND sa.classid = ANY(@ScopeClassIds)
-      AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+      AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 )
 """;
     }
 
     private string BuildClassFilter(string schema, string alias)
     {
+        string yearFilter = AcademicYearClassFilter(alias);
+
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
         {
-            return string.Empty;
+            return yearFilter;
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -686,8 +690,11 @@ WHERE id = @Id AND isactive = true LIMIT 1
             return " AND 1 = 0";
         }
 
-        return $" AND {alias}.id = ANY(@ScopeClassIds)";
+        return $" AND {alias}.id = ANY(@ScopeClassIds){yearFilter}";
     }
+
+    private static string AcademicYearClassFilter(string classTableAlias) =>
+        $" AND (@ScopeAcademicYearId IS NULL OR {classTableAlias}.academicyearid = @ScopeAcademicYearId)";
 
     private string BuildTeacherFilter(string schema, string alias)
     {
@@ -716,16 +723,24 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
     private string BuildAttendanceFilter(string schema, string alias)
     {
+        string yearFilter = $"""
+ AND EXISTS (
+    SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+    WHERE c.id = {alias}.classid AND c.isactive = true
+      AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
+)
+""";
+
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
         {
-            return string.Empty;
+            return yearFilter;
         }
 
         if (_scope.ScopeType is DataScopeType.Self or DataScopeType.LinkedStudents)
         {
-            return _scope.AllowedStudentIds.Count > 0
+            return (_scope.AllowedStudentIds.Count > 0
                 ? $" AND {alias}.studentid = ANY(@ScopeStudentIds)"
-                : " AND 1 = 0";
+                : " AND 1 = 0") + yearFilter;
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -733,7 +748,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
             return " AND 1 = 0";
         }
 
-        return $" AND {alias}.classid = ANY(@ScopeClassIds)";
+        return $" AND {alias}.classid = ANY(@ScopeClassIds){yearFilter}";
     }
 
     private object BuildParameters(

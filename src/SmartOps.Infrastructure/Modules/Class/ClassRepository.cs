@@ -8,6 +8,7 @@ using SmartOps.Domain.Modules.Class;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using System.Data;
 
 namespace SmartOps.Infrastructure.Modules.Class;
@@ -95,6 +96,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
 
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        whereClause = AcademicYearScopeSql.AppendAcademicYearFilter(_scope, "c.academicyearid", ref whereClause);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedClassIds.Count > 0)
@@ -153,7 +155,12 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 connection,
                 querySql,
                 countSql,
-                new { SearchTerm = searchTerm, ScopeClassIds = _scope.AllowedClassIds.ToArray() },
+                new
+                {
+                    SearchTerm = searchTerm,
+                    ScopeClassIds = _scope.AllowedClassIds.ToArray(),
+                    ScopeAcademicYearId = _scope.ActiveAcademicYearId
+                },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);
@@ -163,21 +170,33 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(
+        Guid? academicYearId = null,
         CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
 
+        Guid? yearFilter = academicYearId ?? _scope.ActiveAcademicYearId;
+
         string whereClause = "WHERE c.isactive = true";
-        object parameters = new { };
+        if (yearFilter.HasValue)
+        {
+            whereClause += " AND c.academicyearid = @ScopeAcademicYearId";
+        }
+
+        object parameters = new { ScopeAcademicYearId = yearFilter };
 
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedClassIds.Count > 0)
             {
                 whereClause += " AND c.id = ANY(@ScopeClassIds)";
-                parameters = new { ScopeClassIds = _scope.AllowedClassIds.ToArray() };
+                parameters = new
+                {
+                    ScopeClassIds = _scope.AllowedClassIds.ToArray(),
+                    ScopeAcademicYearId = yearFilter
+                };
             }
             else
             {

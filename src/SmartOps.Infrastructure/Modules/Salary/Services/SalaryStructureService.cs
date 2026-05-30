@@ -1,3 +1,4 @@
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Salary;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common;
@@ -8,16 +9,24 @@ namespace SmartOps.Infrastructure.Modules.Salary.Services;
 public sealed class SalaryStructureService : ISalaryStructureService
 {
     private readonly ISalaryStructureRepository _repo;
+    private readonly IUserScopeContext _scope;
 
-    public SalaryStructureService(ISalaryStructureRepository repo) => _repo = repo;
+    public SalaryStructureService(ISalaryStructureRepository repo, IUserScopeContext scope)
+    {
+        _repo = repo;
+        _scope = scope;
+    }
 
     public async Task<Result<IList<SalaryStructureVersionListItemDto>>> GetVersionsAsync(
         Guid? academicYearId,
         string? statusFilter,
         CancellationToken ct = default)
     {
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        Guid? effectiveYearId = academicYearId ?? _scope.ActiveAcademicYearId;
+
         SalaryStructureVersionStatus? status = ParseStatusFilter(statusFilter);
-        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(academicYearId, status, ct).ConfigureAwait(false);
+        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(effectiveYearId, status, ct).ConfigureAwait(false);
         IList<SalaryStructureVersionListItemDto> dtos = rows.Select(MapVersionListItem).ToList();
         return Result<IList<SalaryStructureVersionListItemDto>>.Success(dtos);
     }

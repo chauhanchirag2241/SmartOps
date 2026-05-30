@@ -285,4 +285,55 @@ public sealed class StudentsController(
 
         return Ok(result);
     }
+
+    /// <summary>Checks whether target year/class has published fee structure and class-wise amounts configured.</summary>
+    [HttpGet("promote-readiness")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [ProducesResponseType(typeof(PromoteReadinessResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PromoteReadinessResponse>> GetPromoteReadiness(
+        [FromQuery] Guid targetAcademicYearId,
+        [FromQuery] Guid targetClassId,
+        CancellationToken cancellationToken)
+    {
+        string? error = await studentRepository
+            .GetPromoteTargetValidationErrorAsync(targetAcademicYearId, targetClassId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(new PromoteReadinessResponse
+        {
+            Ready = error is null,
+            Message = error
+        });
+    }
+
+    /// <summary>Promote students from one academic year enrollment to the next.</summary>
+    [HttpPost("promote")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [ProducesResponseType(typeof(PromoteStudentsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PromoteStudentsResponse>> PromoteStudents(
+        [FromBody] PromoteStudentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Students is null || request.Students.Count == 0)
+        {
+            return BadRequest("At least one student is required.");
+        }
+
+        var entries = request.Students
+            .Select(s => new PromoteStudentEntry(
+                s.StudentId,
+                s.TargetClassId,
+                s.RollNumber,
+                s.AdmissionDate))
+            .ToList();
+
+        PromoteStudentsResult result = await studentRepository.PromoteStudentsAsync(
+            request.SourceAcademicYearId,
+            request.TargetAcademicYearId,
+            entries,
+            cancellationToken).ConfigureAwait(false);
+
+        return Ok(new PromoteStudentsResponse(result.PromotedCount, result.Errors));
+    }
 }

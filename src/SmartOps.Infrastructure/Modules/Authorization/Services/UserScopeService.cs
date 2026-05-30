@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
+using SmartOps.Application.Modules.AcademicYear;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
@@ -18,6 +19,7 @@ public sealed class UserScopeService : IUserScopeService
 {
     private readonly IUserRepository _userRepository;
     private readonly IScopeMappingRepository _scopeMapping;
+    private readonly IAcademicYearContext _academicYearContext;
     private readonly DapperContext _context;
     private readonly TenantContext _tenantContext;
     private readonly IMemoryCache _cache;
@@ -26,6 +28,7 @@ public sealed class UserScopeService : IUserScopeService
     public UserScopeService(
         IUserRepository userRepository,
         IScopeMappingRepository scopeMapping,
+        IAcademicYearContext academicYearContext,
         DapperContext context,
         TenantContext tenantContext,
         IMemoryCache cache,
@@ -33,6 +36,7 @@ public sealed class UserScopeService : IUserScopeService
     {
         _userRepository = userRepository;
         _scopeMapping = scopeMapping;
+        _academicYearContext = academicYearContext;
         _context = context;
         _tenantContext = tenantContext;
         _cache = cache;
@@ -44,13 +48,18 @@ public sealed class UserScopeService : IUserScopeService
         Guid? schoolId,
         CancellationToken cancellationToken = default)
     {
+        string schema = _context.OperationalSchema;
+        await _academicYearContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+
+        Guid? academicYearId = _academicYearContext.EffectiveAcademicYearId
+            ?? await _scopeMapping.GetActiveAcademicYearIdAsync(schema, cancellationToken).ConfigureAwait(false);
+
         if (!_options.EnableDataScopes)
         {
-            return GlobalScope(1);
+            return GlobalScope(1, academicYearId);
         }
 
-        string schema = _context.OperationalSchema;
-        string cacheKey = $"scope:{userId}:{schoolId}:{schema}";
+        string cacheKey = $"scope:{userId}:{schoolId}:{schema}:{academicYearId}";
 
         if (_cache.TryGetValue(cacheKey, out UserScopeDto? cached) && cached is not null)
         {
@@ -64,14 +73,10 @@ public sealed class UserScopeService : IUserScopeService
             int version = schoolId.HasValue
                 ? await GetScopeVersionAsync(userId, schoolId.Value, cancellationToken).ConfigureAwait(false)
                 : 1;
-            UserScopeDto global = GlobalScope(version);
+            UserScopeDto global = GlobalScope(version, academicYearId);
             _cache.Set(cacheKey, global, TimeSpan.FromMinutes(_options.ScopeCacheMinutes));
             return global;
         }
-
-        Guid? academicYearId = await _scopeMapping
-            .GetActiveAcademicYearIdAsync(schema, cancellationToken)
-            .ConfigureAwait(false);
 
         int scopeVersion = schoolId.HasValue
             ? await GetScopeVersionAsync(userId, schoolId.Value, cancellationToken).ConfigureAwait(false)
@@ -373,11 +378,12 @@ WHERE studentid = ANY(@StudentIds) AND isactive = true
         };
     }
 
-    private static UserScopeDto GlobalScope(int version) => new()
+    private static UserScopeDto GlobalScope(int version, Guid? academicYearId) => new()
     {
         ScopeType = DataScopeType.Global,
         ScopeVersion = version,
-        IsGlobalScope = true
+        IsGlobalScope = true,
+        ActiveAcademicYearId = academicYearId
     };
 
     private static UserScopeDto ModuleOnlyScope(int version, Guid? academicYearId) => new()

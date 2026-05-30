@@ -23,7 +23,9 @@ public interface IClassRepository
         ClassFilter filter = ClassFilter.Active,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(
+        Guid? academicYearId = null,
+        CancellationToken cancellationToken = default);
 
     Task UpdateClassAsync(ClassEntity classEntity, CancellationToken cancellationToken = default);
 

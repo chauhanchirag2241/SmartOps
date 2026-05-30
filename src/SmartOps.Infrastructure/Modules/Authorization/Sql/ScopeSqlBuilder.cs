@@ -94,9 +94,8 @@ public static class ScopeSqlBuilder
 {whereClause} AND EXISTS (
     SELECT 1 FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
     WHERE sa.studentid = {alias}.id
-      AND sa.isactive = true
       AND sa.classid = ANY(@ScopeClassIds)
-      AND (@ScopeAcademicYearId IS NULL OR sa.academicyearid = @ScopeAcademicYearId)
+      AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 )
 """;
     }

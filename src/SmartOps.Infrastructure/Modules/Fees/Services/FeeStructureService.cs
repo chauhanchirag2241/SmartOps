@@ -1,3 +1,4 @@
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Fees;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common;
@@ -9,11 +10,16 @@ public sealed class FeeStructureService : IFeeStructureService
 {
     private readonly IFeeStructureRepository _repo;
     private readonly IClassFeeInstallmentService _installmentService;
+    private readonly IUserScopeContext _scope;
 
-    public FeeStructureService(IFeeStructureRepository repo, IClassFeeInstallmentService installmentService)
+    public FeeStructureService(
+        IFeeStructureRepository repo,
+        IClassFeeInstallmentService installmentService,
+        IUserScopeContext scope)
     {
         _repo = repo;
         _installmentService = installmentService;
+        _scope = scope;
     }
 
     public async Task<Result<IList<FeeStructureVersionListItemDto>>> GetVersionsAsync(
@@ -21,8 +27,11 @@ public sealed class FeeStructureService : IFeeStructureService
         string? statusFilter,
         CancellationToken ct = default)
     {
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        Guid? effectiveYearId = academicYearId ?? _scope.ActiveAcademicYearId;
+
         FeeStructureVersionStatus? status = ParseStatusFilter(statusFilter);
-        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(academicYearId, status, ct).ConfigureAwait(false);
+        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(effectiveYearId, status, ct).ConfigureAwait(false);
         IList<FeeStructureVersionListItemDto> dtos = rows.Select(MapVersionListItem).ToList();
         return Result<IList<FeeStructureVersionListItemDto>>.Success(dtos);
     }

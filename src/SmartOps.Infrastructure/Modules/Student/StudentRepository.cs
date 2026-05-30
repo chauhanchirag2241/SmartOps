@@ -24,6 +24,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
     private readonly IUserScopeContext _scope;
     private readonly IFeeStructureRepository _feeStructureRepo;
+    private readonly IClassFeeAmountRepository _classFeeAmountRepo;
     private readonly IStudentFeeInstallmentRepository _studentFeeInstallmentRepo;
 
     private static readonly string[] RelatedTablesForSoftDelete =
@@ -40,10 +41,12 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         ICurrentUserService currentUser,
         IUserScopeContext scope,
         IFeeStructureRepository feeStructureRepo,
+        IClassFeeAmountRepository classFeeAmountRepo,
         IStudentFeeInstallmentRepository studentFeeInstallmentRepo)
         : base(context, currentUser)
     {
         _feeStructureRepo = feeStructureRepo;
+        _classFeeAmountRepo = classFeeAmountRepo;
         _studentFeeInstallmentRepo = studentFeeInstallmentRepo;
         _scope = scope;
     }
@@ -189,13 +192,15 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 s.isactive AS IsActive
             FROM {schema}.{students} s
             LEFT JOIN (
-                SELECT studentid, classid, rollnumber, feestructureversionid, academicyearid,
-                       ROW_NUMBER() OVER(PARTITION BY studentid ORDER BY createdon DESC) AS rn
-                FROM {schema}.{academics}
-                WHERE isactive = true
-                  AND (@ScopeAcademicYearId IS NULL OR academicyearid = @ScopeAcademicYearId)
+                SELECT sa.studentid, sa.classid, sa.rollnumber, sa.feestructureversionid, sa.academicyearid,
+                       ROW_NUMBER() OVER(
+                           PARTITION BY sa.studentid
+                           ORDER BY sa.isactive DESC, sa.createdon DESC) AS rn
+                FROM {schema}.{academics} sa
+                WHERE {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
             ) a ON s.id = a.studentid AND a.rn = 1
-            LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON a.classid = c.id
+            LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c
+                ON c.id = a.classid AND c.academicyearid = a.academicyearid AND c.isactive = true
             LEFT JOIN LATERAL (
                 SELECT CAST(ROUND(
                     100.0 * COUNT(*) FILTER (WHERE att.status IN (1, 4))
@@ -384,7 +389,7 @@ WHERE id = @StudentId AND isactive = true
                     FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa
                     WHERE sa.studentid = s.id
                       AND sa.classid = ANY(@ClassIds)
-                      AND sa.isactive = true
+                      AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
                 )";
         }
 
@@ -452,7 +457,9 @@ WHERE id = @StudentId AND isactive = true
         return $@"
             SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id{activeFilter};
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
-            SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics} WHERE studentid = @Id;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics}
+            WHERE studentid = @Id
+            ORDER BY isactive DESC, createdon DESC;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
@@ -651,6 +658,23 @@ WHERE id = @StudentId AND isactive = true
                     }
                 }
 
+                if (academic.ClassId != Guid.Empty && academic.AcademicYearId != Guid.Empty)
+                {
+                    bool classValid = await connection.QuerySingleAsync<bool>(
+                        $"""
+                        SELECT EXISTS(
+                            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
+                            WHERE id = @ClassId AND academicyearid = @AcademicYearId AND isactive = true);
+                        """,
+                        new { academic.ClassId, academic.AcademicYearId },
+                        transaction).ConfigureAwait(false);
+                    if (!classValid)
+                    {
+                        throw new InvalidOperationException(
+                            "Selected class does not belong to the chosen academic year.");
+                    }
+                }
+
                 ApplyUpdateAudit(academic, actorId, utcNow);
                 await UpdateAsync(
                         connection,
@@ -746,8 +770,10 @@ WHERE id = @StudentId AND isactive = true
         string schema,
         Guid studentId,
         Guid academicYearId,
-        IDbTransaction? transaction)
+        IDbTransaction? transaction,
+        bool activeOnly = true)
     {
+        string activeFilter = activeOnly ? " AND isactive = true" : string.Empty;
         string sql = $"""
             SELECT id AS Id, studentid AS StudentId, admissiondate AS AdmissionDate,
                    academicyearid AS AcademicYearId, classid AS ClassId,
@@ -757,8 +783,8 @@ WHERE id = @StudentId AND isactive = true
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
             FROM {schema}.{DatabaseConfig.TableStudentAcademics}
             WHERE studentid = @StudentId
-              AND academicyearid = @AcademicYearId
-              AND isactive = true
+              AND academicyearid = @AcademicYearId{activeFilter}
+            ORDER BY isactive DESC, createdon DESC
             LIMIT 1;
             """;
 
@@ -785,6 +811,214 @@ WHERE id = @StudentId AND isactive = true
 
         return await connection.QuerySingleAsync<int>(sql, new { AcademicYearId = academicYearId, ClassId = classId })
             .ConfigureAwait(false);
+    }
+
+    public async Task<string?> GetPromoteTargetValidationErrorAsync(
+        Guid targetAcademicYearId,
+        Guid targetClassId,
+        CancellationToken cancellationToken = default)
+    {
+        if (targetAcademicYearId == Guid.Empty || targetClassId == Guid.Empty)
+        {
+            return "Select target academic year and class.";
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+
+        bool classValid = await connection.QuerySingleAsync<bool>(
+            $"""
+            SELECT EXISTS(
+                SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
+                WHERE id = @ClassId AND academicyearid = @TargetYearId AND isactive = true);
+            """,
+            new { ClassId = targetClassId, TargetYearId = targetAcademicYearId }).ConfigureAwait(false);
+
+        if (!classValid)
+        {
+            return "No classes in target year. Create classes first.";
+        }
+
+        var admissionFeeStructure = await _feeStructureRepo
+            .GetAdmissionVersionForYearAsync(targetAcademicYearId, cancellationToken)
+            .ConfigureAwait(false);
+        if (admissionFeeStructure is null)
+        {
+            return "No published fee structure for the target academic year. Publish the fee structure first.";
+        }
+
+        bool classHasConfiguredAmounts = await _classFeeAmountRepo
+            .ClassHasConfiguredAmountsAsync(targetClassId, admissionFeeStructure.Id, cancellationToken)
+            .ConfigureAwait(false);
+        if (!classHasConfiguredAmounts)
+        {
+            return "Set class-wise fee amounts for the selected class in the target academic year before promoting students.";
+        }
+
+        return null;
+    }
+
+    public async Task<PromoteStudentsResult> PromoteStudentsAsync(
+        Guid sourceAcademicYearId,
+        Guid targetAcademicYearId,
+        IReadOnlyList<PromoteStudentEntry> students,
+        CancellationToken cancellationToken = default)
+    {
+        if (sourceAcademicYearId == targetAcademicYearId)
+        {
+            return new PromoteStudentsResult(0, ["Source and target academic year must be different."]);
+        }
+
+        if (students.Count == 0)
+        {
+            return new PromoteStudentsResult(0, ["At least one student is required."]);
+        }
+
+        var errors = new List<string>();
+        foreach (Guid targetClassId in students.Select(s => s.TargetClassId).Distinct())
+        {
+            string? feeError = await GetPromoteTargetValidationErrorAsync(
+                targetAcademicYearId, targetClassId, cancellationToken).ConfigureAwait(false);
+            if (feeError is not null)
+            {
+                errors.Add(feeError);
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return new PromoteStudentsResult(0, errors);
+        }
+
+        var targetFeeVersion = await _feeStructureRepo
+            .GetAdmissionVersionForYearAsync(targetAcademicYearId, cancellationToken)
+            .ConfigureAwait(false);
+        if (targetFeeVersion is null)
+        {
+            return new PromoteStudentsResult(0, [
+                "No published fee structure for the target academic year. Publish the fee structure first."
+            ]);
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+        var utcNow = DateTime.UtcNow;
+        var actorId = ResolveInsertActor();
+        int promoted = 0;
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            foreach (var entry in students)
+            {
+                bool classValid = await conn.QuerySingleAsync<bool>(
+                    $"""
+                    SELECT EXISTS(
+                        SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
+                        WHERE id = @ClassId AND academicyearid = @TargetYearId AND isactive = true);
+                    """,
+                    new { ClassId = entry.TargetClassId, TargetYearId = targetAcademicYearId },
+                    tx).ConfigureAwait(false);
+
+                if (!classValid)
+                {
+                    errors.Add($"Student {entry.StudentId}: target class is invalid for the target academic year.");
+                    continue;
+                }
+
+                StudentAcademicEntity? sourceRecord = await GetAcademicRecordAsync(
+                    conn, schema, entry.StudentId, sourceAcademicYearId, tx).ConfigureAwait(false);
+
+                if (sourceRecord is null)
+                {
+                    errors.Add($"Student {entry.StudentId}: no active enrollment in source academic year.");
+                    continue;
+                }
+
+                StudentAcademicEntity? existingTarget = await GetAcademicRecordAsync(
+                    conn, schema, entry.StudentId, targetAcademicYearId, tx, activeOnly: false)
+                    .ConfigureAwait(false);
+
+                if (existingTarget is { IsActive: true })
+                {
+                    errors.Add($"Student {entry.StudentId}: already enrolled in target academic year.");
+                    continue;
+                }
+
+                await conn.ExecuteAsync(
+                    $"""
+                    UPDATE {schema}.{DatabaseConfig.TableStudentAcademics}
+                    SET isactive = false,
+                        updatedby = @UpdatedBy,
+                        updatedon = @UpdatedOn,
+                        versionno = versionno + 1
+                    WHERE id = @Id;
+                    """,
+                    new { sourceRecord.Id, UpdatedBy = actorId, UpdatedOn = utcNow },
+                    tx).ConfigureAwait(false);
+
+                string rollNumber = entry.RollNumber?.Trim() ?? sourceRecord.RollNumber ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(rollNumber))
+                {
+                    int nextRoll = await conn.QuerySingleAsync<int>(
+                        $"""
+                        SELECT COALESCE(MAX(CAST(NULLIF(rollnumber, '') AS INTEGER)), 0) + 1
+                        FROM {schema}.{DatabaseConfig.TableStudentAcademics}
+                        WHERE academicyearid = @TargetYearId AND classid = @ClassId AND isactive = true;
+                        """,
+                        new { TargetYearId = targetAcademicYearId, ClassId = entry.TargetClassId },
+                        tx).ConfigureAwait(false);
+                    rollNumber = nextRoll.ToString();
+                }
+
+                if (existingTarget is not null)
+                {
+                    await conn.ExecuteAsync(
+                        $"""
+                        UPDATE {schema}.{DatabaseConfig.TableStudentAcademics}
+                        SET classid = @ClassId,
+                            rollnumber = @RollNumber,
+                            admissiondate = @AdmissionDate,
+                            feestructureversionid = @FeeStructureVersionId,
+                            isactive = true,
+                            updatedby = @UpdatedBy,
+                            updatedon = @UpdatedOn,
+                            versionno = versionno + 1
+                        WHERE id = @Id;
+                        """,
+                        new
+                        {
+                            existingTarget.Id,
+                            ClassId = entry.TargetClassId,
+                            RollNumber = rollNumber,
+                            AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
+                            FeeStructureVersionId = targetFeeVersion.Id,
+                            UpdatedBy = actorId,
+                            UpdatedOn = utcNow
+                        },
+                        tx).ConfigureAwait(false);
+                }
+                else
+                {
+                    var newRecord = new StudentAcademicEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        StudentId = entry.StudentId,
+                        AcademicYearId = targetAcademicYearId,
+                        ClassId = entry.TargetClassId,
+                        AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
+                        RollNumber = rollNumber,
+                        FeeStructureVersionId = targetFeeVersion.Id
+                    };
+                    EnsureInsertAudit(newRecord, utcNow, actorId);
+                    await InsertAsync(conn, schema, DatabaseConfig.TableStudentAcademics, newRecord, tx)
+                        .ConfigureAwait(false);
+                }
+
+                promoted++;
+            }
+        }).ConfigureAwait(false);
+
+        return new PromoteStudentsResult(promoted, errors);
     }
 
     #endregion

@@ -53,13 +53,40 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
         return Ok(result);
     }
 
+    [HttpGet("/api/academic-year/current")]
+    [Authorize]
+    [ProducesResponseType(typeof(CurrentAcademicYearDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CurrentAcademicYearDto>> GetCurrentAcademicYear(CancellationToken cancellationToken)
+    {
+        var entity = await academicYearRepository.GetCurrentAcademicYearAsync(cancellationToken).ConfigureAwait(false);
+        return entity is null ? NotFound() : Ok(entity.ToCurrentDto());
+    }
+
     [HttpGet("/api/academic-year/dropdown")]
-    [Authorize(Policy = MenuPolicies.AcademicYears.View)]
-    [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
+    [Authorize]
+    [ProducesResponseType(typeof(IReadOnlyList<AcademicYearDropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAcademicYearDropdown(CancellationToken cancellationToken)
     {
         var result = await academicYearRepository.GetAcademicYearDropdownAsync(cancellationToken).ConfigureAwait(false);
-        return Ok(result);
+        return Ok(result.Select(i => i.ToDropdownDto()).ToList());
+    }
+
+    [HttpPut("{id:guid}/set-current")]
+    [Authorize(Policy = MenuPolicies.AcademicYears.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetCurrentAcademicYear(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await academicYearRepository.SetCurrentAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet("{id:guid}")]

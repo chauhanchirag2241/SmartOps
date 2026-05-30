@@ -72,6 +72,29 @@ public class CreateStudentFeeHeadSelectionDto
     public decimal? CustomAnnualAmount { get; set; }
 }
 
+public sealed class PromoteStudentsRequest
+{
+    public Guid SourceAcademicYearId { get; set; }
+    public Guid TargetAcademicYearId { get; set; }
+    public List<PromoteStudentItemDto> Students { get; set; } = new();
+}
+
+public sealed class PromoteStudentItemDto
+{
+    public Guid StudentId { get; set; }
+    public Guid TargetClassId { get; set; }
+    public string? RollNumber { get; set; }
+    public DateOnly? AdmissionDate { get; set; }
+}
+
+public sealed record PromoteStudentsResponse(int PromotedCount, IReadOnlyList<string> Errors);
+
+public sealed class PromoteReadinessResponse
+{
+    public bool Ready { get; set; }
+    public string? Message { get; set; }
+}
+
 public static class StudentMappingExtensions
 {
     public static StudentEntity ToEntity(this CreateStudentDto dto)

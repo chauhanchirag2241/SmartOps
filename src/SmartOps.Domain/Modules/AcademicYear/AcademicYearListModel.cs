@@ -8,4 +8,5 @@ public class AcademicYearListModel
     public DateOnly EndDate { get; set; }
     public string Status { get; set; } = null!;
     public bool IsActive { get; set; }
+    public bool IsCurrent { get; set; }
 }

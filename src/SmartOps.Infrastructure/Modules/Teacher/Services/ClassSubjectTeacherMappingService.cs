@@ -131,9 +131,14 @@ ORDER BY firstname, lastname
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        Guid? yearId = academicYearId
-            ?? await _scopeMapping.GetActiveAcademicYearIdAsync(_context.OperationalSchema, cancellationToken)
-                .ConfigureAwait(false);
+        Guid? yearId = academicYearId;
+        if (!yearId.HasValue)
+        {
+            await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            yearId = _scope.ActiveAcademicYearId
+                ?? await _scopeMapping.GetActiveAcademicYearIdAsync(_context.OperationalSchema, cancellationToken)
+                    .ConfigureAwait(false);
+        }
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope && !_scope.HasClassAccess(classId))
@@ -451,6 +456,12 @@ ORDER BY firstname, lastname
         if (academicYearId.HasValue)
         {
             return academicYearId.Value;
+        }
+
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        if (_scope.ActiveAcademicYearId.HasValue)
+        {
+            return _scope.ActiveAcademicYearId.Value;
         }
 
         Guid? active = await _scopeMapping

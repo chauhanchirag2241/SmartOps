@@ -33,5 +33,19 @@ public interface IStudentRepository
 
     Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default);
     Task<int> GetMaxRollNumberAsync(Guid academicYearId, Guid classId, CancellationToken cancellationToken = default);
+
+    Task<PromoteStudentsResult> PromoteStudentsAsync(
+        Guid sourceAcademicYearId,
+        Guid targetAcademicYearId,
+        IReadOnlyList<PromoteStudentEntry> students,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns null when target year/class is ready for promotion; otherwise a user-facing message.
+    /// </summary>
+    Task<string?> GetPromoteTargetValidationErrorAsync(
+        Guid targetAcademicYearId,
+        Guid targetClassId,
+        CancellationToken cancellationToken = default);
 }
 

@@ -25,9 +25,12 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             academicYear.Id = Guid.NewGuid();
         }
 
+        academicYear.IsActive = true;
         EnsureInsertAudit(academicYear, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        academicYear.IsCurrent = false;
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -77,8 +80,13 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 ay.title AS Title,
                 ay.startdate AS StartDate,
                 ay.enddate AS EndDate,
-                CASE WHEN ay.isactive THEN 'Active' ELSE 'Inactive' END AS Status,
-                ay.isactive AS IsActive
+                CASE
+                    WHEN NOT ay.isactive THEN 'Deleted'
+                    WHEN ay.iscurrent THEN 'Current'
+                    ELSE 'Archived'
+                END AS Status,
+                ay.isactive AS IsActive,
+                ay.iscurrent AS IsCurrent
             FROM {schema}.{table} ay
             {whereClause}
             ORDER BY {orderBy}";
@@ -95,20 +103,100 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         return result;
     }
 
-    public async Task<IReadOnlyList<DropdownDto>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var sql = $@"
             SELECT
                 ay.id AS Id,
-                ay.title AS Name
+                ay.title AS Name,
+                ay.iscurrent AS IsCurrent
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears} ay
             WHERE ay.isactive = true
-            ORDER BY ay.title ASC;";
+            ORDER BY ay.iscurrent DESC, ay.startdate DESC, ay.title ASC;";
 
-        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        var items = await connection.QueryAsync<AcademicYearDropdownItem>(sql).ConfigureAwait(false);
         return items.ToList();
+    }
+
+    public async Task<AcademicYearEntity?> GetCurrentAcademicYearAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $@"
+            SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+            WHERE iscurrent = true AND isactive = true
+            LIMIT 1;";
+
+        return await connection.QuerySingleOrDefaultAsync<AcademicYearEntity>(sql).ConfigureAwait(false);
+    }
+
+    public async Task<Guid?> GetCurrentAcademicYearIdAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await GetCurrentAcademicYearIdInternalAsync(connection, Context.OperationalSchema, null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetCurrentAcademicYearAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+        var utcNow = DateTime.UtcNow;
+        var actorId = ResolveUpdateActor();
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            var exists = await conn.QuerySingleOrDefaultAsync<bool>(
+                $"""
+                SELECT EXISTS(
+                    SELECT 1 FROM {schema}.{DatabaseConfig.TableAcademicYears}
+                    WHERE id = @Id AND isactive = true);
+                """,
+                new { Id = id },
+                tx).ConfigureAwait(false);
+
+            if (!exists)
+            {
+                throw new InvalidOperationException("Academic year not found or has been deleted.");
+            }
+
+            await conn.ExecuteAsync(
+                $"""
+                UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
+                SET iscurrent = false,
+                    updatedby = @UpdatedBy,
+                    updatedon = @UpdatedOn,
+                    versionno = versionno + 1
+                WHERE isactive = true AND iscurrent = true;
+                """,
+                new { UpdatedBy = actorId, UpdatedOn = utcNow },
+                tx).ConfigureAwait(false);
+
+            await conn.ExecuteAsync(
+                $"""
+                UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
+                SET iscurrent = true,
+                    updatedby = @UpdatedBy,
+                    updatedon = @UpdatedOn,
+                    versionno = versionno + 1
+                WHERE id = @Id AND isactive = true;
+                """,
+                new { Id = id, UpdatedBy = actorId, UpdatedOn = utcNow },
+                tx).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    public async Task<bool> AcademicYearExistsAsync(Guid id, bool requireNotDeleted = true, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var deletedFilter = requireNotDeleted ? " AND isactive = true" : string.Empty;
+        var sql = $@"
+            SELECT EXISTS(
+                SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+                WHERE id = @Id{deletedFilter});";
+
+        return await connection.QuerySingleAsync<bool>(sql, new { Id = id }).ConfigureAwait(false);
     }
 
     public async Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
@@ -130,66 +218,23 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        var isCurrent = await connection.QuerySingleOrDefaultAsync<bool>(
+            $"""
+            SELECT iscurrent FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+            WHERE id = @Id AND isactive = true;
+            """,
+            new { Id = id }).ConfigureAwait(false);
+
+        if (isCurrent)
+        {
+            throw new InvalidOperationException("Cannot delete the current academic year. Set another year as current first.");
+        }
+
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
-    }
-
-    private static string BuildListWhereClause(AcademicYearFilter filter, ref string? searchTerm)
-    {
-        var where = "WHERE 1 = 1";
-
-        switch (filter)
-        {
-            case AcademicYearFilter.Active:
-                where += " AND ay.isactive = true";
-                break;
-            case AcademicYearFilter.Inactive:
-                where += " AND ay.isactive = false";
-                break;
-        }
-
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            where += " AND (ay.title ILIKE @SearchTerm)";
-            searchTerm = $"%{searchTerm}%";
-        }
-
-        return where;
-    }
-
-    private static string ResolveListOrderBy(string? sortColumn, string? sortDirection)
-    {
-        var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
-
-        if (string.IsNullOrWhiteSpace(sortColumn))
-        {
-            return "ay.createdon DESC, ay.id ASC";
-        }
-
-        if (IsSortKey(sortColumn, "title"))
-        {
-            return $"ay.title {direction}, ay.id ASC";
-        }
-
-        if (IsSortKey(sortColumn, "startDate"))
-        {
-            return $"ay.startdate {direction}, ay.id ASC";
-        }
-
-        if (IsSortKey(sortColumn, "endDate"))
-        {
-            return $"ay.enddate {direction}, ay.id ASC";
-        }
-
-        return "ay.createdon DESC, ay.id ASC";
-    }
-
-    private static bool IsSortKey(string sortColumn, params string[] keys)
-    {
-        return keys.Any(k => string.Equals(sortColumn, k, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<IList<AcademicYearSemesterEntity>> GetSemestersAsync(
@@ -251,5 +296,78 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 await InsertAsync(conn, schema, table, entity, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
+    }
+
+    private static async Task<Guid?> GetCurrentAcademicYearIdInternalAsync(
+        System.Data.IDbConnection connection,
+        string schema,
+        System.Data.IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var sql = $@"
+            SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
+            WHERE iscurrent = true AND isactive = true
+            LIMIT 1;";
+
+        return await connection.QuerySingleOrDefaultAsync<Guid?>(
+            new CommandDefinition(sql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static string BuildListWhereClause(AcademicYearFilter filter, ref string? searchTerm)
+    {
+        var where = "WHERE 1 = 1";
+
+        switch (filter)
+        {
+            case AcademicYearFilter.Active:
+                where += " AND ay.isactive = true";
+                break;
+            case AcademicYearFilter.Inactive:
+                where += " AND ay.isactive = false";
+                break;
+            case AcademicYearFilter.Current:
+                where += " AND ay.isactive = true AND ay.iscurrent = true";
+                break;
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            where += " AND (ay.title ILIKE @SearchTerm)";
+            searchTerm = $"%{searchTerm}%";
+        }
+
+        return where;
+    }
+
+    private static string ResolveListOrderBy(string? sortColumn, string? sortDirection)
+    {
+        var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+
+        if (string.IsNullOrWhiteSpace(sortColumn))
+        {
+            return "ay.iscurrent DESC, ay.startdate DESC, ay.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "title"))
+        {
+            return $"ay.title {direction}, ay.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "startDate"))
+        {
+            return $"ay.startdate {direction}, ay.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "endDate"))
+        {
+            return $"ay.enddate {direction}, ay.id ASC";
+        }
+
+        return "ay.iscurrent DESC, ay.startdate DESC, ay.id ASC";
+    }
+
+    private static bool IsSortKey(string sortColumn, params string[] keys)
+    {
+        return keys.Any(k => string.Equals(sortColumn, k, StringComparison.OrdinalIgnoreCase));
     }
 }

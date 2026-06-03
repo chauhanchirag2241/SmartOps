@@ -10,6 +10,9 @@ public interface IUserRepository
 
     Task<ApplicationUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
 
+    /// <summary>Resolves user by email, username, or school mobile (when tenant is set).</summary>
+    Task<ApplicationUser?> GetByLoginIdentifierAsync(string login, CancellationToken cancellationToken = default);
+
     Task CreateAsync(ApplicationUser user, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(ApplicationUser user, CancellationToken cancellationToken = default);

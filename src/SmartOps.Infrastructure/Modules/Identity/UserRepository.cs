@@ -101,6 +101,106 @@ LIMIT 1
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 
+    public async Task<ApplicationUser?> GetByLoginIdentifierAsync(
+        string login,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            return null;
+        }
+
+        string trimmed = login.Trim();
+
+        if (trimmed.Contains('@', StringComparison.Ordinal))
+        {
+            return await GetByEmailAsync(trimmed.ToLowerInvariant(), cancellationToken).ConfigureAwait(false);
+        }
+
+        string digits = NormalizeMobileDigits(trimmed);
+        if (digits.Length >= 10)
+        {
+            ApplicationUser? byMobile = await GetByMobileAsync(digits, cancellationToken).ConfigureAwait(false);
+            if (byMobile is not null)
+            {
+                return byMobile;
+            }
+        }
+
+        ApplicationUser? byUsername = await GetByUsernameAsync(trimmed, cancellationToken).ConfigureAwait(false);
+        if (byUsername is not null)
+        {
+            return byUsername;
+        }
+
+        if (digits.Length >= 3)
+        {
+            return await GetByUsernameAsync(digits, cancellationToken).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private async Task<ApplicationUser?> GetByMobileAsync(
+        string tenDigitMobile,
+        CancellationToken cancellationToken)
+    {
+        string schema = Context.OperationalSchema;
+        if (string.IsNullOrWhiteSpace(schema) || schema == DatabaseConfig.Schema_Global)
+        {
+            return null;
+        }
+
+        string sql = $"""
+SELECT userid AS UserId, email AS Email
+FROM {schema}.teachers
+WHERE isactive = true
+  AND right(regexp_replace(mobile, '\D', '', 'g'), 10) = @Mobile
+UNION ALL
+SELECT userid AS UserId, email AS Email
+FROM {schema}.students
+WHERE isactive = true
+  AND mobile IS NOT NULL
+  AND right(regexp_replace(mobile, '\D', '', 'g'), 10) = @Mobile
+LIMIT 1
+""";
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        MobileLoginRow? row = await connection
+            .QuerySingleOrDefaultAsync<MobileLoginRow>(
+                new CommandDefinition(sql, new { Mobile = tenDigitMobile }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        if (row?.UserId is Guid userId && userId != Guid.Empty)
+        {
+            return await GetByIdAsync(userId, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!string.IsNullOrWhiteSpace(row?.Email))
+        {
+            return await GetByEmailAsync(row.Email.Trim().ToLowerInvariant(), cancellationToken).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private sealed class MobileLoginRow
+    {
+        public Guid? UserId { get; init; }
+        public string? Email { get; init; }
+    }
+
+    private static string NormalizeMobileDigits(string value)
+    {
+        string digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length > 10)
+        {
+            return digits[^10..];
+        }
+
+        return digits;
+    }
+
     public async Task CreateAsync(ApplicationUser user, CancellationToken cancellationToken = default)
     {
         if (user.Id == Guid.Empty)

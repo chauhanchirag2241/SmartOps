@@ -47,15 +47,13 @@ public sealed class IdentityService : IIdentityService
 
     public async Task<Result<LoginResponseDto>> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
     {
-        string normalizedEmail = request.Email.Trim().ToLowerInvariant();
-
         ApplicationUser? user = await _userRepository
-            .GetByEmailAsync(normalizedEmail, cancellationToken)
+            .GetByLoginIdentifierAsync(request.Email.Trim(), cancellationToken)
             .ConfigureAwait(false);
 
         if (user is null)
         {
-            return Result<LoginResponseDto>.Failure("Invalid email or password.");
+            return Result<LoginResponseDto>.Failure("Invalid login or password.");
         }
 
         bool passwordValid = await _credentialValidator
@@ -64,7 +62,7 @@ public sealed class IdentityService : IIdentityService
 
         if (!passwordValid)
         {
-            return Result<LoginResponseDto>.Failure("Invalid email or password.");
+            return Result<LoginResponseDto>.Failure("Invalid login or password.");
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);

@@ -72,4 +72,11 @@ public static class DatabaseConfig
     public const string TablePayrollRuns = "payrollruns";
     public const string TablePayrollEntries = "payrollentries";
     public const string TablePayrollEntryLines = "payrollentrylines";
+
+    // Leave & Workflow Module
+    public const string TableLeaveRequests = "leaverequests";
+    public const string TableWorkflowItems = "workflowitems";
+    public const string TableWorkflowItemActions = "workflowitemactions";
+    public const string TableNotices = "notices";
+    public const string TableNoticeResponses = "noticeresponses";
 }

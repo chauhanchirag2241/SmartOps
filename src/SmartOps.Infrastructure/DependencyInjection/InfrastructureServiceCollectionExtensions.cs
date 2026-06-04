@@ -24,6 +24,9 @@ using SmartOps.Domain.Modules.Teacher;
 using SmartOps.Domain.Modules.School;
 using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Application.Modules.Homework.Interfaces;
+using SmartOps.Application.Modules.Leave.Interfaces;
+using SmartOps.Application.Modules.Workflow.Interfaces;
+using SmartOps.Application.Modules.Notice.Interfaces;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Application.Modules.Salary.Interfaces;
@@ -32,6 +35,12 @@ using SmartOps.Infrastructure.Modules.Attendance;
 using SmartOps.Infrastructure.Modules.Attendance.Services;
 using SmartOps.Infrastructure.Modules.Homework;
 using SmartOps.Infrastructure.Modules.Homework.Services;
+using SmartOps.Infrastructure.Modules.Leave;
+using SmartOps.Infrastructure.Modules.Leave.Services;
+using SmartOps.Infrastructure.Modules.Workflow;
+using SmartOps.Infrastructure.Modules.Workflow.Services;
+using SmartOps.Infrastructure.Modules.Notice;
+using SmartOps.Infrastructure.Modules.Notice.Services;
 using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Infrastructure.Modules.Fees.Services;
 using SmartOps.Infrastructure.Modules.Salary;
@@ -96,6 +105,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IClassSubjectTeacherMappingRepository, ClassSubjectTeacherMappingRepository>();
         services.AddScoped<IClassSubjectTeacherMappingService, ClassSubjectTeacherMappingService>();
+        services.AddScoped<ILeaveRepository, LeaveRepository>();
+        services.AddScoped<IWorkflowRepository, WorkflowRepository>();
+        services.AddScoped<INoticeRepository, NoticeRepository>();
+        services.AddScoped<IWorkflowService, WorkflowService>();
+        services.AddScoped<ILeaveService, LeaveService>();
+        services.AddScoped<INoticeService, NoticeService>();
 
         string? connectionString = configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(connectionString))

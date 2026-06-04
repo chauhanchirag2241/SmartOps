@@ -46,6 +46,11 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableParentStudentMappings,
         DatabaseConfig.TableStaffScopeAssignments,
         DatabaseConfig.TableEntityAuditLogs,
+        DatabaseConfig.TableLeaveRequests,
+        DatabaseConfig.TableWorkflowItems,
+        DatabaseConfig.TableWorkflowItemActions,
+        DatabaseConfig.TableNotices,
+        DatabaseConfig.TableNoticeResponses,
     ];
 
     /// <summary>
@@ -122,6 +127,11 @@ internal static class SchoolSchemaCatalog
             DatabaseConfig.TableEmployeeSalaryComponents,
             "employeesalaryid",
             "salaryversioncomponentid"),
+        new(
+            "uq_noticeresponses_notice_user",
+            DatabaseConfig.TableNoticeResponses,
+            "noticeid",
+            "respondentuserid"),
     ];
 }
 

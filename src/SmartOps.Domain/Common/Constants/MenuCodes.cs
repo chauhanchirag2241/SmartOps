@@ -48,6 +48,14 @@ public static class MenuCodes
 
     public const string SalaryPayroll = "SALARY_PAYROLL";
 
+    public const string LeaveStaff = "LEAVE_STAFF";
+
+    public const string LeaveStudent = "LEAVE_STUDENT";
+
+    public const string MyActions = "MY_ACTIONS";
+
+    public const string Notices = "NOTICES";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -69,6 +77,10 @@ public static class MenuCodes
         FeesCollection,
         SalaryStructure,
         SalaryEmployees,
-        SalaryPayroll
+        SalaryPayroll,
+        LeaveStaff,
+        LeaveStudent,
+        MyActions,
+        Notices
     ];
 }

@@ -190,4 +190,40 @@ public static class MenuPolicies
         public const string Delete = "Menu:SALARY_PAYROLL:Delete";
         public const string Export = "Menu:SALARY_PAYROLL:Export";
     }
+
+    public static class LeaveStaff
+    {
+        public const string View = "Menu:LEAVE_STAFF:View";
+        public const string Add = "Menu:LEAVE_STAFF:Add";
+        public const string Edit = "Menu:LEAVE_STAFF:Edit";
+        public const string Delete = "Menu:LEAVE_STAFF:Delete";
+        public const string Export = "Menu:LEAVE_STAFF:Export";
+    }
+
+    public static class LeaveStudent
+    {
+        public const string View = "Menu:LEAVE_STUDENT:View";
+        public const string Add = "Menu:LEAVE_STUDENT:Add";
+        public const string Edit = "Menu:LEAVE_STUDENT:Edit";
+        public const string Delete = "Menu:LEAVE_STUDENT:Delete";
+        public const string Export = "Menu:LEAVE_STUDENT:Export";
+    }
+
+    public static class MyActions
+    {
+        public const string View = "Menu:MY_ACTIONS:View";
+        public const string Add = "Menu:MY_ACTIONS:Add";
+        public const string Edit = "Menu:MY_ACTIONS:Edit";
+        public const string Delete = "Menu:MY_ACTIONS:Delete";
+        public const string Export = "Menu:MY_ACTIONS:Export";
+    }
+
+    public static class Notices
+    {
+        public const string View = "Menu:NOTICES:View";
+        public const string Add = "Menu:NOTICES:Add";
+        public const string Edit = "Menu:NOTICES:Edit";
+        public const string Delete = "Menu:NOTICES:Delete";
+        public const string Export = "Menu:NOTICES:Export";
+    }
 }

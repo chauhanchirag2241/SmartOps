@@ -133,6 +133,10 @@ public sealed class SchoolEntity : AuditableEntity
 
     public string? SchemaName { get; set; }
 
+    public string? DatabaseName { get; set; }
+
+    public string? ConnectionString { get; set; }
+
     public string? StoragePlan { get; set; }
 
     public string? DataRegion { get; set; }

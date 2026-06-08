@@ -9,5 +9,7 @@ public class StudentParentEntity : AuditableEntity
     public string RelationType { get; set; } = null!;
     public string Name { get; set; } = null!;
     public string? Mobile { get; set; }
+    public string? Email { get; set; }
+    public Guid? UserId { get; set; }
     public string? Occupation { get; set; }
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Text.RegularExpressions;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Student;
@@ -28,8 +29,11 @@ public sealed class StudentsController(
     IFeeStructureRepository feeStructureRepository,
     IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
+    IScopeMappingRepository scopeMapping,
+    IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider,
+    SmartOps.Infrastructure.Persistence.Context.DapperContext dapperContext,
     IAuditLogRepository auditLogRepository) : ControllerBase
 {
     private static readonly Regex AdmissionNoPattern = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
@@ -135,18 +139,23 @@ public sealed class StudentsController(
 
         var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
-        if (entity.PortalAccess && TryGetSchoolId(out Guid schoolId))
+        if (TryGetSchoolId(out Guid schoolId))
         {
-            Guid? userId = await userProvisioning
-                .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (userId.HasValue)
+            if (entity.PortalAccess)
             {
-                await studentRepository
-                    .SetStudentUserIdAsync(studentId, userId.Value, cancellationToken)
+                Guid? userId = await userProvisioning
+                    .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
                     .ConfigureAwait(false);
+
+                if (userId.HasValue)
+                {
+                    await studentRepository
+                        .SetStudentUserIdAsync(studentId, userId.Value, cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }
+
+            await ProvisionParentUsersAsync(entity, studentId, schoolId, cancellationToken).ConfigureAwait(false);
         }
 
         return Ok(new CreateStudentResponse("Student created successfully", studentId));
@@ -243,6 +252,79 @@ public sealed class StudentsController(
         schoolId = Guid.Empty;
         string? raw = tenantProvider.GetCurrentSchoolId();
         return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
+    }
+
+    private async Task ProvisionParentUsersAsync(
+        StudentEntity entity,
+        Guid studentId,
+        Guid schoolId,
+        CancellationToken cancellationToken)
+    {
+        if (entity.Parents is not { Count: > 0 })
+        {
+            return;
+        }
+
+        string schema = dapperContext.OperationalSchema;
+        string admissionNo = entity.AdmissionNo?.Trim() ?? studentId.ToString("N")[..8];
+
+        foreach (StudentParentEntity parent in entity.Parents)
+        {
+            string? email = ResolveParentProvisionEmail(parent, admissionNo, schoolId);
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                continue;
+            }
+
+            Guid? parentUserId = await userProvisioning
+                .ProvisionParentUserAsync(email, null, schoolId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!parentUserId.HasValue || parent.Id == Guid.Empty)
+            {
+                continue;
+            }
+
+            await scopeMapping.UpsertParentStudentMappingAsync(
+                schema,
+                parentUserId.Value,
+                studentId,
+                parent.RelationType,
+                cancellationToken).ConfigureAwait(false);
+
+            await studentRepository
+                .SetStudentParentUserIdAsync(parent.Id, parentUserId.Value, cancellationToken)
+                .ConfigureAwait(false);
+
+            await userScopeService
+                .BumpScopeVersionAsync(parentUserId.Value, schoolId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static string? ResolveParentProvisionEmail(StudentParentEntity parent, string admissionNo, Guid schoolId)
+    {
+        if (!string.IsNullOrWhiteSpace(parent.Email))
+        {
+            return parent.Email.Trim().ToLowerInvariant();
+        }
+
+        if (string.IsNullOrWhiteSpace(parent.Name))
+        {
+            return null;
+        }
+
+        string slug = new string(parent.Name.Trim().ToLowerInvariant()
+            .Where(c => char.IsLetterOrDigit(c))
+            .ToArray());
+
+        if (slug.Length == 0)
+        {
+            slug = parent.RelationType.Trim().ToLowerInvariant();
+        }
+
+        string schoolSuffix = schoolId.ToString("N")[..8];
+        return $"{slug}.{admissionNo}.{schoolSuffix}@portal.smartops.internal";
     }
 
     private async Task<ActionResult?> ValidateAdmissionNoAsync(

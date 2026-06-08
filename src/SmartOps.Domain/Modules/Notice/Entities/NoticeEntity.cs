@@ -14,5 +14,7 @@ public sealed class NoticeEntity : AuditableEntity
     public DateOnly? ResponseDeadline { get; set; }
     public NoticeTargetType TargetType { get; set; }
     public Guid? TargetRefId { get; set; }
+    public NoticeContentType ContentType { get; set; } = NoticeContentType.Announcement;
+    public string? ContentJson { get; set; }
     public NoticeStatus Status { get; set; }
 }

@@ -81,7 +81,7 @@ public sealed class DashboardService : IDashboardService
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         bool hasAttendanceWidgets = HasAny(visible, DashboardWidgetCodes.AttendanceDetail, DashboardWidgetCodes.AttendanceRate);
-        DateOnly schoolToday = await ResolveSchoolTodayAsync(connection, cancellationToken).ConfigureAwait(false);
+        DateOnly schoolToday = await ResolveSchoolTodayAsync(cancellationToken).ConfigureAwait(false);
         DashboardAttendanceDateRange attendanceRange = BuildTodayRange(schoolToday);
 
         DashboardSummaryDto? summary = null;
@@ -181,25 +181,29 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    private async Task<DateOnly> ResolveSchoolTodayAsync(
-        IDbConnection connection,
-        CancellationToken cancellationToken)
+    private async Task<DateOnly> ResolveSchoolTodayAsync(CancellationToken cancellationToken)
     {
-        string? timeZoneId = null;
+        string? timeZoneId = await LoadSchoolTimeZoneAsync(cancellationToken).ConfigureAwait(false);
+        return SchoolLocalTime.Today(timeZoneId);
+    }
+
+    private async Task<string?> LoadSchoolTimeZoneAsync(CancellationToken cancellationToken)
+    {
         string? schoolId = _tenantProvider.GetCurrentSchoolId();
-        if (!string.IsNullOrWhiteSpace(schoolId) && Guid.TryParse(schoolId, out Guid sid))
+        if (string.IsNullOrWhiteSpace(schoolId) || !Guid.TryParse(schoolId, out Guid sid))
         {
-            timeZoneId = await connection.QuerySingleOrDefaultAsync<string>(
-                new CommandDefinition(
-                    $"""
+            return null;
+        }
+
+        IDbConnection platform = await _context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await platform.QuerySingleOrDefaultAsync<string>(
+            new CommandDefinition(
+                $"""
 SELECT timezone FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
 WHERE id = @Id AND isactive = true LIMIT 1
 """,
-                    new { Id = sid },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        return SchoolLocalTime.Today(timeZoneId);
+                new { Id = sid },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private static DashboardAttendanceDateRange BuildTodayRange(DateOnly schoolToday) =>
@@ -551,21 +555,28 @@ WHERE id = @Id AND isactive = true LIMIT 1
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
 
-        string? schoolName = null;
+        string? schoolName = await LoadSchoolNameAsync(cancellationToken).ConfigureAwait(false);
+
+        return (yearLabel, schoolName);
+    }
+
+    private async Task<string?> LoadSchoolNameAsync(CancellationToken cancellationToken)
+    {
         string? schoolId = _tenantProvider.GetCurrentSchoolId();
-        if (!string.IsNullOrWhiteSpace(schoolId) && Guid.TryParse(schoolId, out Guid sid))
+        if (string.IsNullOrWhiteSpace(schoolId) || !Guid.TryParse(schoolId, out Guid sid))
         {
-            schoolName = await connection.QuerySingleOrDefaultAsync<string>(
-                new CommandDefinition(
-                    $"""
+            return null;
+        }
+
+        IDbConnection platform = await _context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await platform.QuerySingleOrDefaultAsync<string>(
+            new CommandDefinition(
+                $"""
 SELECT name FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
 WHERE id = @Id AND isactive = true LIMIT 1
 """,
-                    new { Id = sid },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        return (yearLabel, schoolName);
+                new { Id = sid },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private static DashboardAlertsDto BuildAlerts(

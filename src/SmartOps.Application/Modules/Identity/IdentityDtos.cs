@@ -192,6 +192,12 @@ public sealed class SchoolUserDto
 
     public bool LockoutEnabled { get; set; } = true;
 
+    public Guid? UserTypeId { get; set; }
+
+    public string? UserTypeCode { get; set; }
+
+    public string? UserTypeName { get; set; }
+
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
 }
 
@@ -207,6 +213,8 @@ public sealed class CreateUserDto
 
     public bool LockoutEnabled { get; set; } = true;
 
+    public Guid? UserTypeId { get; set; }
+
     public IReadOnlyList<string> RoleNames { get; set; } = Array.Empty<string>();
 }
 
@@ -219,6 +227,8 @@ public sealed class UpdateUserDto
     public bool IsActive { get; set; } = true;
 
     public bool LockoutEnabled { get; set; } = true;
+
+    public Guid? UserTypeId { get; set; }
 }
 
 public sealed class UpdateUserRolesDto

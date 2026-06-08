@@ -212,6 +212,26 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
         return id;
     }
 
+    public async Task<int> CountPendingForReferenceAsync(
+        WorkflowReferenceType refType,
+        Guid refId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT COUNT(1)
+            FROM {Schema}.{DatabaseConfig.TableWorkflowItems}
+            WHERE isactive = true AND referencetype = @RefType AND referenceid = @RefId AND status = @Pending;
+            """;
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(sql, new
+        {
+            RefType = (short)refType,
+            RefId = refId,
+            Pending = (short)WorkflowItemStatus.Pending
+        }, cancellationToken: ct)).ConfigureAwait(false);
+    }
+
     public async Task<WorkflowItemEntity?> GetPendingByReferenceForUserAsync(
         WorkflowReferenceType refType,
         Guid refId,

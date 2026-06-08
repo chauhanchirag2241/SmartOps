@@ -22,6 +22,7 @@ using SmartOps.Domain.Modules.Subject;
 using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.Teacher;
 using SmartOps.Domain.Modules.School;
+using SmartOps.Application.Modules.School.Interfaces;
 using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Leave.Interfaces;
@@ -62,6 +63,7 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<PerSchoolDatabaseOptions>(configuration.GetSection(PerSchoolDatabaseOptions.SectionName));
         services.AddSmartOpsDatabaseInfrastructure(configuration);
         services.AddSmartOpsIdentityInfrastructure(configuration);
         services.AddSmartOpsAuthorizationInfrastructure(configuration);
@@ -108,6 +110,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ILeaveRepository, LeaveRepository>();
         services.AddScoped<IWorkflowRepository, WorkflowRepository>();
         services.AddScoped<INoticeRepository, NoticeRepository>();
+        services.AddScoped<IUserTypeRepository, UserTypeRepository>();
+        services.AddScoped<ISchoolSettingsRepository, SchoolSettingsRepository>();
+        services.AddScoped<ILeaveSettingsService, LeaveSettingsService>();
+        services.AddScoped<ILeaveApproverResolver, LeaveApproverResolver>();
         services.AddScoped<IWorkflowService, WorkflowService>();
         services.AddScoped<ILeaveService, LeaveService>();
         services.AddScoped<INoticeService, NoticeService>();
@@ -179,6 +185,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITenantSchoolResolver, TenantSchoolResolver>();
         services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
         services.AddScoped<ITenantSchemaSyncService, TenantSchemaSyncService>();
+        services.AddScoped<SchoolDatabaseSeedService>();
+        services.AddScoped<ISchoolDatabaseProvisioner, SchoolDatabaseProvisioner>();
+        services.AddScoped<ISchoolDataMigrationService, SchoolDataMigrationService>();
+        services.AddScoped<ISchoolDefaultAdminProvisioner, SchoolDefaultAdminProvisioner>();
         return services;
     }
 }

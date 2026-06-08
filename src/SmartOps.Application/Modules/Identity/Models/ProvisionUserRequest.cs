@@ -7,6 +7,9 @@ public sealed class ProvisionUserRequest
 
     public required string RoleName { get; init; }
 
+    /// <summary>When set, overrides automatic role-to-user-type mapping.</summary>
+    public string? UserTypeCode { get; init; }
+
     public bool PortalAccess { get; init; }
 
     public string? Email { get; init; }

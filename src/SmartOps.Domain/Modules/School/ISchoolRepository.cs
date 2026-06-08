@@ -24,5 +24,7 @@ public interface ISchoolRepository
 
     Task UpdateSchoolAsync(SchoolEntity school, CancellationToken cancellationToken = default);
 
+    Task UpdateSchoolConnectionAsync(SchoolEntity school, CancellationToken cancellationToken = default);
+
     Task DeleteSchoolAsync(Guid id, CancellationToken cancellationToken = default);
 }

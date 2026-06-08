@@ -15,18 +15,33 @@ public sealed class LeaveService : ILeaveService
     private readonly ILeaveRepository _leaveRepo;
     private readonly IWorkflowService _workflowService;
     private readonly ICurrentUserService _currentUser;
+    private readonly ITenantProvider _tenantProvider;
     private readonly ILogger<LeaveService> _logger;
 
     public LeaveService(
         ILeaveRepository leaveRepo,
         IWorkflowService workflowService,
         ICurrentUserService currentUser,
+        ITenantProvider tenantProvider,
         ILogger<LeaveService> logger)
     {
         _leaveRepo = leaveRepo;
         _workflowService = workflowService;
         _currentUser = currentUser;
+        _tenantProvider = tenantProvider;
         _logger = logger;
+    }
+
+    public async Task<Result<IList<LeaveApproverDto>>> GetStaffApproversAsync(CancellationToken ct = default)
+    {
+        if (!Guid.TryParse(_tenantProvider.GetCurrentSchoolId(), out Guid schoolId))
+        {
+            return Result<IList<LeaveApproverDto>>.Failure("School context is not available.");
+        }
+
+        IList<SchoolAdminUserRow> rows = await _leaveRepo.GetSchoolAdminUsersAsync(schoolId, ct).ConfigureAwait(false);
+        IList<LeaveApproverDto> list = rows.Select(r => new LeaveApproverDto(r.Id, r.Name)).ToList();
+        return Result<IList<LeaveApproverDto>>.Success(list);
     }
 
     public async Task<Result<IList<LeaveListItemDto>>> GetStaffListAsync(
@@ -88,14 +103,13 @@ public sealed class LeaveService : ILeaveService
             ToDate = request.ToDate,
             LeaveType = request.LeaveType,
             Reason = request.Reason,
-            Status = request.SubmitImmediately ? LeaveRequestStatus.Submitted : LeaveRequestStatus.Draft
+            Status = LeaveRequestStatus.Draft
         };
 
         Guid id = await _leaveRepo.CreateAsync(entity, ct).ConfigureAwait(false);
         if (request.SubmitImmediately)
         {
-            Result<LeaveDetailDto> submit = await SubmitInternalAsync(id, ct).ConfigureAwait(false);
-            return submit;
+            return await SubmitInternalAsync(id, ct).ConfigureAwait(false);
         }
 
         return await GetByIdAsync(id, ct).ConfigureAwait(false);

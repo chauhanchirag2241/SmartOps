@@ -26,7 +26,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .ReturnsAsync(
             [
                 DashboardWidgetCodes.StudentsStat,
-                DashboardWidgetCodes.FeesCollected,
+                DashboardWidgetCodes.SalaryDisbursed,
                 DashboardWidgetCodes.TeachersStat
             ]);
 
@@ -35,7 +35,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .ReturnsAsync(
             [
                 Template(DashboardWidgetCodes.StudentsStat, MenuCodes.Students, 1),
-                Template(DashboardWidgetCodes.FeesCollected, MenuCodes.FeesCollection, 5),
+                Template(DashboardWidgetCodes.SalaryDisbursed, MenuCodes.SalaryPayroll, 5),
                 Template(DashboardWidgetCodes.TeachersStat, MenuCodes.Teachers, 2),
             ]);
 
@@ -44,7 +44,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .Setup(p => p.EnsureLoadedAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.Students)).Returns(true);
-        permissionService.Setup(p => p.HasViewAccess(MenuCodes.FeesCollection)).Returns(false);
+        permissionService.Setup(p => p.HasViewAccess(MenuCodes.SalaryPayroll)).Returns(false);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.Teachers)).Returns(true);
 
         var sut = new DashboardWidgetPermissionService(
@@ -57,7 +57,7 @@ public sealed class DashboardWidgetPermissionServiceTests
         Assert.Equal(2, result.Count);
         Assert.Contains(result, w => w.Code == DashboardWidgetCodes.StudentsStat);
         Assert.Contains(result, w => w.Code == DashboardWidgetCodes.TeachersStat);
-        Assert.DoesNotContain(result, w => w.Code == DashboardWidgetCodes.FeesCollected);
+        Assert.DoesNotContain(result, w => w.Code == DashboardWidgetCodes.SalaryDisbursed);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .Setup(r => r.GetUserWidgetCodesAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
-                DashboardWidgetCodes.FeesCollected,
+                DashboardWidgetCodes.SalaryStatus,
                 DashboardWidgetCodes.SalaryDisbursed,
                 DashboardWidgetCodes.StudentsStat
             ]);
@@ -118,7 +118,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .ReturnsAsync(
             [
                 Template(DashboardWidgetCodes.StudentsStat, MenuCodes.Students, 1),
-                Template(DashboardWidgetCodes.FeesCollected, MenuCodes.FeesCollection, 5),
+                Template(DashboardWidgetCodes.SalaryStatus, MenuCodes.SalaryPayroll, 5),
                 Template(DashboardWidgetCodes.SalaryDisbursed, MenuCodes.SalaryPayroll, 7),
             ]);
 
@@ -127,7 +127,6 @@ public sealed class DashboardWidgetPermissionServiceTests
             .Setup(p => p.EnsureLoadedAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.Students)).Returns(false);
-        permissionService.Setup(p => p.HasViewAccess(MenuCodes.FeesCollection)).Returns(true);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.SalaryPayroll)).Returns(true);
 
         var sut = new DashboardWidgetPermissionService(
@@ -139,7 +138,7 @@ public sealed class DashboardWidgetPermissionServiceTests
 
         Assert.Equal(2, result.Count);
         Assert.True(result.All(w =>
-            w.Code == DashboardWidgetCodes.FeesCollected || w.Code == DashboardWidgetCodes.SalaryDisbursed));
+            w.Code == DashboardWidgetCodes.SalaryStatus || w.Code == DashboardWidgetCodes.SalaryDisbursed));
     }
 
     private static RoleDashboardWidgetPermissionDto Template(string code, string menu, int order) =>

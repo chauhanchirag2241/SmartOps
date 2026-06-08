@@ -64,8 +64,18 @@ public sealed class TenantResolverMiddleware
             if (school is not null)
             {
                 tenantContext.SchoolId = school.Id.ToString();
-                tenantContext.SchemaName = school.SchemaName
-                    ?? $"school_{school.Subdomain.Replace('-', '_')}";
+                tenantContext.DatabaseName = school.DatabaseName;
+                tenantContext.ConnectionString = school.ConnectionString;
+
+                if (!string.IsNullOrWhiteSpace(school.ConnectionString))
+                {
+                    tenantContext.SchemaName = SmartOps.Domain.Common.Configuration.DatabaseConfig.Schema_School;
+                }
+                else
+                {
+                    tenantContext.SchemaName = school.SchemaName
+                        ?? $"school_{school.Subdomain.Replace('-', '_')}";
+                }
             }
         }
 

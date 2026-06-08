@@ -54,8 +54,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_students_admissionno_active_ci
                 .WithColumn("relationtype").AsString(50).NotNullable()
                 .WithColumn("name").AsString(100).NotNullable()
                 .WithColumn("mobile").AsString(20).Nullable()
+                .WithColumn("email").AsString(256).Nullable()
                 .WithColumn("occupation").AsString(100).Nullable()
+                .WithColumn("userid").AsGuid().Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableStudentParents}
+    ADD CONSTRAINT fk_studentparents_userid FOREIGN KEY (userid)
+    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
+""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentAcademics).Exists())
@@ -115,6 +123,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_students_admissionno_active_ci
         Delete.Table(DatabaseConfig.TableStudentCustomFields).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentPreviousSchools).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentAcademics).InSchema(S);
+        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableStudentParents} DROP CONSTRAINT IF EXISTS fk_studentparents_userid;");
         Delete.Table(DatabaseConfig.TableStudentParents).InSchema(S);
         Execute.Sql($"""
             DROP INDEX IF EXISTS {S}.ux_students_admissionno_active_ci;

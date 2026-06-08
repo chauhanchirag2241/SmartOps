@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.Notice;
 using SmartOps.Application.Modules.Notice.Interfaces;
 using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Modules.Notice;
 
 namespace SmartOps.Api.Modules.Notice.Controllers;
 
@@ -76,5 +77,25 @@ public sealed class NoticesController : ControllerBase
     {
         var result = await _service.RespondAsync(id, request, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Notices.Edit)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var result = await _service.DeleteAsync(id, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok() : BadRequest(result.Error);
+    }
+
+    [HttpGet("audience-preview")]
+    [Authorize(Policy = MenuPolicies.Notices.View)]
+    public async Task<IActionResult> GetAudiencePreview(
+        [FromQuery] NoticeTargetType targetType,
+        [FromQuery] Guid? targetRefId,
+        [FromQuery] IList<Guid>? targetRefIds,
+        CancellationToken ct)
+    {
+        var result = await _service.GetAudiencePreviewAsync(targetType, targetRefId, targetRefIds, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 }

@@ -29,7 +29,18 @@ public interface IUserRepository
 
     Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
 
-    Task AddUserToSchoolAsync(Guid userId, Guid schoolId, string schoolRole, CancellationToken cancellationToken = default);
+    Task AddUserToSchoolAsync(
+        Guid userId,
+        Guid schoolId,
+        string schoolRole,
+        Guid? userTypeId = null,
+        CancellationToken cancellationToken = default);
+
+    Task SetUserTypeForSchoolAsync(
+        Guid userId,
+        Guid schoolId,
+        Guid? userTypeId,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ApplicationUser>> GetUsersBySchoolAsync(Guid schoolId, CancellationToken cancellationToken = default);
 }

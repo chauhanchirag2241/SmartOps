@@ -31,6 +31,8 @@ public interface IStudentRepository
 
     Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default);
 
+    Task SetStudentParentUserIdAsync(Guid parentId, Guid userId, CancellationToken cancellationToken = default);
+
     Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default);
     Task<int> GetMaxRollNumberAsync(Guid academicYearId, Guid classId, CancellationToken cancellationToken = default);
 

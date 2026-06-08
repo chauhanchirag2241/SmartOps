@@ -39,6 +39,8 @@ public record LeaveListItemDto(
 
 public record LinkedStudentDto(Guid Id, string Name, string? ClassName);
 
+public record LeaveApproverDto(Guid Id, string Name);
+
 public record LeaveDetailDto(
     Guid Id,
     LeaveRequestType RequestType,

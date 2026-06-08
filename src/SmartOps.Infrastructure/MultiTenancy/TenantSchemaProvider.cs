@@ -14,6 +14,11 @@ public sealed class TenantSchemaProvider : ITenantSchemaProvider
 
     public string GetOperationalSchema()
     {
+        if (_tenantContext.UsesDedicatedDatabase)
+        {
+            return DatabaseConfig.Schema_School;
+        }
+
         if (!string.IsNullOrWhiteSpace(_tenantContext.SchemaName))
         {
             return _tenantContext.SchemaName;
@@ -22,5 +27,6 @@ public sealed class TenantSchemaProvider : ITenantSchemaProvider
         return DatabaseConfig.Schema_Global;
     }
 
-    public bool IsTenantScoped => !string.IsNullOrWhiteSpace(_tenantContext.SchemaName);
+    public bool IsTenantScoped =>
+        _tenantContext.UsesDedicatedDatabase || !string.IsNullOrWhiteSpace(_tenantContext.SchemaName);
 }

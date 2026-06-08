@@ -179,6 +179,7 @@ SELECT DISTINCT LOWER(
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
 WHERE isactive = true
   AND TRIM(subdomain) <> ''
+  AND (connectionstring IS NULL OR TRIM(connectionstring) = '')
 """;
 
         IEnumerable<string> rows = await connection.QueryAsync<string>(

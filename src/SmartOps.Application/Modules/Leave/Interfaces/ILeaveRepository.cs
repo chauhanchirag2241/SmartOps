@@ -16,11 +16,18 @@ public interface ILeaveRepository
     Task<Guid?> GetClassIdForStudentAsync(Guid studentId, CancellationToken ct = default);
     Task<Guid?> GetClassTeacherUserIdAsync(Guid classId, CancellationToken ct = default);
     Task<IList<Guid>> GetSchoolAdminUserIdsAsync(Guid schoolId, CancellationToken ct = default);
+    Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default);
     Task<bool> IsParentLinkedToStudentAsync(Guid parentUserId, Guid studentId, CancellationToken ct = default);
     Task<IList<Guid>> GetActiveTeacherUserIdsAsync(CancellationToken ct = default);
     Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default);
     Task<LeaveDetailRow?> GetDetailRowAsync(Guid id, CancellationToken ct = default);
     Task<IList<LinkedStudentRow>> GetLinkedStudentsForParentAsync(Guid parentUserId, CancellationToken ct = default);
+}
+
+public sealed class SchoolAdminUserRow
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = null!;
 }
 
 public sealed class LinkedStudentRow

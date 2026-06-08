@@ -1,30 +1,63 @@
 using System.Data;
 using Npgsql;
 using SmartOps.Application.Abstractions;
+using SmartOps.Infrastructure.MultiTenancy;
 
 namespace SmartOps.Infrastructure.Persistence.Context;
 
-public sealed class DapperContext : IAsyncDisposable
+public sealed class DapperContext : IDisposable, IAsyncDisposable
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ITenantSchemaProvider _tenantSchemaProvider;
+    private readonly TenantContext _tenantContext;
     private NpgsqlConnection? _connection;
+    private NpgsqlConnection? _platformConnection;
 
-    public DapperContext(IDbConnectionFactory connectionFactory, ITenantSchemaProvider tenantSchemaProvider)
+    public DapperContext(
+        IDbConnectionFactory connectionFactory,
+        ITenantSchemaProvider tenantSchemaProvider,
+        TenantContext tenantContext)
     {
         _connectionFactory = connectionFactory;
         _tenantSchemaProvider = tenantSchemaProvider;
+        _tenantContext = tenantContext;
     }
 
     public string OperationalSchema => _tenantSchemaProvider.GetOperationalSchema();
+
+    public async Task<IDbConnection> GetPlatformConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_tenantContext.UsesDedicatedDatabase)
+        {
+            return await GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_platformConnection is null || IsConnectionDisposed(_platformConnection))
+        {
+            _platformConnection = (NpgsqlConnection)await _connectionFactory
+                .CreatePlatformConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return _platformConnection;
+    }
 
     public async Task<IDbConnection> GetGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
         if (_connection is null || IsConnectionDisposed(_connection))
         {
-            _connection = (NpgsqlConnection)await _connectionFactory
-                .CreateGlobalConnectionAsync(cancellationToken)
-                .ConfigureAwait(false);
+            if (_tenantContext.UsesDedicatedDatabase)
+            {
+                _connection = (NpgsqlConnection)await _connectionFactory
+                    .CreateConnectionAsync(_tenantContext.ConnectionString!, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                _connection = (NpgsqlConnection)await _connectionFactory
+                    .CreatePlatformConnectionAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         return _connection;
@@ -56,12 +89,33 @@ public sealed class DapperContext : IAsyncDisposable
         return GetGlobalConnectionAsync(cancellationToken);
     }
 
+    public void Dispose()
+    {
+        if (_connection is not null)
+        {
+            _connection.Dispose();
+            _connection = null;
+        }
+
+        if (_platformConnection is not null)
+        {
+            _platformConnection.Dispose();
+            _platformConnection = null;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_connection is not null)
         {
             await _connection.DisposeAsync().ConfigureAwait(false);
             _connection = null;
+        }
+
+        if (_platformConnection is not null)
+        {
+            await _platformConnection.DisposeAsync().ConfigureAwait(false);
+            _platformConnection = null;
         }
     }
 }

@@ -59,13 +59,6 @@ internal static class SchoolSchemaCatalog
     internal static readonly TenantUniqueConstraint[] RequiredUniqueConstraints =
     [
         new(
-            "uq_classsubjectteachermappings",
-            DatabaseConfig.TableClassSubjectTeacherMappings,
-            "classid",
-            "subjectid",
-            "teacherid",
-            "academicyearid"),
-        new(
             "uq_hoddepartmentassignments",
             DatabaseConfig.TableHodDepartmentAssignments,
             "userid",

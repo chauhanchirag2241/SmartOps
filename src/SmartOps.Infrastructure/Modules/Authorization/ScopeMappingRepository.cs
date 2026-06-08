@@ -17,6 +17,11 @@ public sealed class ScopeMappingRepository : IScopeMappingRepository
 
     public async Task<Guid?> GetActiveAcademicYearIdAsync(string schema, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(schema) || schema == DatabaseConfig.Schema_Global)
+        {
+            return null;
+        }
+
         string sql = $"""
 SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
 WHERE iscurrent = true AND isactive = true

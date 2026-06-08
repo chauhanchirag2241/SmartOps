@@ -107,6 +107,8 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
                 .WithColumn("targettype").AsInt16().NotNullable().WithDefaultValue(1)
                 .WithColumn("targetrefid").AsGuid().Nullable()
                 .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
+                .WithColumn("contenttype").AsInt16().NotNullable().WithDefaultValue(1)
+                .WithColumn("contentjson").AsString(int.MaxValue).Nullable()
                 .WithAuditColumns();
 
             Create.Index("ix_notices_status")

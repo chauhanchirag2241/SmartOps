@@ -14,6 +14,7 @@ namespace SmartOps.Api.Modules.Identity.Controllers;
 [Authorize]
 public sealed class UsersController(
     IUserRepository userRepository,
+    IUserTypeRepository userTypeRepository,
     IRoleRepository roleRepository,
     ITenantProvider tenantProvider,
     IPasswordHasher<ApplicationUser> passwordHasher) : ControllerBase
@@ -48,7 +49,11 @@ public sealed class UsersController(
         }
 
         IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        return Ok(ToDto(user, roles));
+        IReadOnlyDictionary<Guid, UserTypeSummary> types = await userTypeRepository
+            .GetUserTypesForSchoolUsersAsync(schoolId, cancellationToken)
+            .ConfigureAwait(false);
+        types.TryGetValue(user.Id, out UserTypeSummary? type);
+        return Ok(ToDto(user, roles, type));
     }
 
     [HttpPost]
@@ -88,7 +93,9 @@ public sealed class UsersController(
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await userRepository.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await userRepository.AddUserToSchoolAsync(user.Id, schoolId, "Member", cancellationToken).ConfigureAwait(false);
+        await userRepository
+            .AddUserToSchoolAsync(user.Id, schoolId, "Member", request.UserTypeId, cancellationToken)
+            .ConfigureAwait(false);
 
         try
         {
@@ -100,7 +107,16 @@ public sealed class UsersController(
         }
 
         IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        return CreatedAtAction(nameof(GetById), new { id = user.Id }, ToDto(user, roles));
+        UserTypeSummary? type = null;
+        if (request.UserTypeId.HasValue)
+        {
+            type = (await userTypeRepository.GetAllActiveAsync(cancellationToken).ConfigureAwait(false))
+                .Where(t => t.Id == request.UserTypeId.Value)
+                .Select(t => new UserTypeSummary { UserTypeId = t.Id, Code = t.Code, Name = t.Name })
+                .FirstOrDefault();
+        }
+
+        return CreatedAtAction(nameof(GetById), new { id = user.Id }, ToDto(user, roles, type));
     }
 
     [HttpPut("{id:guid}")]
@@ -127,6 +143,9 @@ public sealed class UsersController(
         user.LockoutEnabled = request.LockoutEnabled;
 
         await userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
+        await userRepository
+            .SetUserTypeForSchoolAsync(id, schoolId, request.UserTypeId, cancellationToken)
+            .ConfigureAwait(false);
         return NoContent();
     }
 
@@ -197,11 +216,16 @@ public sealed class UsersController(
             .GetUsersBySchoolAsync(schoolId, cancellationToken)
             .ConfigureAwait(false);
 
+        IReadOnlyDictionary<Guid, UserTypeSummary> types = await userTypeRepository
+            .GetUserTypesForSchoolUsersAsync(schoolId, cancellationToken)
+            .ConfigureAwait(false);
+
         List<SchoolUserDto> result = new();
         foreach (ApplicationUser user in users)
         {
             IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-            result.Add(ToDto(user, roles));
+            types.TryGetValue(user.Id, out UserTypeSummary? type);
+            result.Add(ToDto(user, roles, type));
         }
 
         return result;
@@ -245,7 +269,7 @@ public sealed class UsersController(
         }
     }
 
-    private static SchoolUserDto ToDto(ApplicationUser user, IList<string> roles) =>
+    private static SchoolUserDto ToDto(ApplicationUser user, IList<string> roles, UserTypeSummary? userType = null) =>
         new()
         {
             Id = user.Id,
@@ -253,6 +277,9 @@ public sealed class UsersController(
             Email = user.Email,
             IsActive = user.IsActive,
             LockoutEnabled = user.LockoutEnabled,
+            UserTypeId = userType?.UserTypeId,
+            UserTypeCode = userType?.Code,
+            UserTypeName = userType?.Name,
             Roles = roles.ToList(),
         };
 

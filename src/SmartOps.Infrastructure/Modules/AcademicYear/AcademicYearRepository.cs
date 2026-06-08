@@ -153,6 +153,11 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
     public async Task<Guid?> GetCurrentAcademicYearIdAsync(CancellationToken cancellationToken = default)
     {
+        if (Context.OperationalSchema == DatabaseConfig.Schema_Global)
+        {
+            return null;
+        }
+
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await GetCurrentAcademicYearIdInternalAsync(connection, Context.OperationalSchema, null, cancellationToken)
             .ConfigureAwait(false);

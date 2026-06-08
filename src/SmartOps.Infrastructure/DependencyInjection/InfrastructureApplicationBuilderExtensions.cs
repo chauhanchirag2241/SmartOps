@@ -11,7 +11,7 @@ public static class InfrastructureApplicationBuilderExtensions
 {
     public static async Task UseSmartOpsMigrationsAsync(this WebApplication app, CancellationToken cancellationToken = default)
     {
-        using IServiceScope scope = app.Services.CreateScope();
+        await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
         IServiceProvider services = scope.ServiceProvider;
         ILogger logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("SmartOps.Migrations");
 

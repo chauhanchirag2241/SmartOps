@@ -26,12 +26,20 @@ public sealed class S100_CreateSchoolTemplateSchema : Migration
                 .WithColumn("title").AsString(50).NotNullable()
                 .WithColumn("startdate").AsDate().NotNullable()
                 .WithColumn("enddate").AsDate().NotNullable()
+                .WithColumn("iscurrent").AsBoolean().NotNullable().WithDefaultValue(false)
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+CREATE UNIQUE INDEX IF NOT EXISTS uq_academicyears_single_current
+    ON {S}.{DatabaseConfig.TableAcademicYears} (iscurrent)
+    WHERE iscurrent = true AND isactive = true;
+""");
         }
     }
 
     public override void Down()
     {
+        Execute.Sql($"DROP INDEX IF EXISTS {S}.uq_academicyears_single_current;");
         Delete.Table(DatabaseConfig.TableAcademicYears).InSchema(S);
         Delete.Schema(S);
     }

@@ -40,7 +40,8 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT '{id}', '{name}', '{code}', {parentSql}, {routeSql}, {iconSql}, {order}, '{application}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{code}'
+    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
+    WHERE code = '{code}' AND application = '{application}'
 );
 """);
         }

@@ -13,6 +13,7 @@ public interface IWorkflowRepository
     Task CancelPendingForReferenceAsync(WorkflowReferenceType refType, Guid refId, CancellationToken ct = default);
     Task<Guid> InsertActionAsync(Guid workflowItemId, string actionCode, string? comment, Guid actorUserId, string? metadataJson, CancellationToken ct = default);
     Task<WorkflowItemEntity?> GetPendingByReferenceForUserAsync(WorkflowReferenceType refType, Guid refId, Guid userId, CancellationToken ct = default);
+    Task<int> CountPendingForReferenceAsync(WorkflowReferenceType refType, Guid refId, CancellationToken ct = default);
 }
 
 public sealed class MyActionStatsRow

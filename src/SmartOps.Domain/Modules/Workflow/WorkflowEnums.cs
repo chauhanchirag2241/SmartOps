@@ -27,5 +27,6 @@ public static class WorkflowActionCodes
     public const string Approve = "Approve";
     public const string Reject = "Reject";
     public const string Respond = "Respond";
+    public const string Acknowledge = "Acknowledge";
     public const string SubmitForm = "SubmitForm";
 }

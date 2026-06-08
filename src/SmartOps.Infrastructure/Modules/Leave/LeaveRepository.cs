@@ -328,19 +328,27 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
 
     public async Task<IList<Guid>> GetSchoolAdminUserIdsAsync(Guid schoolId, CancellationToken ct = default)
     {
+        IList<SchoolAdminUserRow> users = await GetSchoolAdminUsersAsync(schoolId, ct).ConfigureAwait(false);
+        return users.Select(u => u.Id).ToList();
+    }
+
+    public async Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default)
+    {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT u.id
+            SELECT DISTINCT u.id AS Id,
+                   COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name
             FROM {G}.{DatabaseConfig.TableUsers} u
             INNER JOIN {G}.{DatabaseConfig.TableUserRoles} ur ON ur.userid = u.id AND ur.isactive = true
             INNER JOIN {G}.{DatabaseConfig.TableRoles} r ON r.id = ur.roleid AND r.isactive = true
             INNER JOIN {G}.{DatabaseConfig.TableUserSchoolMappings} usm ON usm.userid = u.id AND usm.isactive = true
             WHERE u.isactive = true AND usm.schoolid = @SchoolId
-              AND (r.code = 'SCHOOL_ADMIN' OR r.code = 'ADMIN');
+              AND (r.code = 'SCHOOL_ADMIN' OR r.code = 'ADMIN')
+            ORDER BY Name;
             """;
-        var ids = await connection.QueryAsync<Guid>(new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: ct))
+        var rows = await connection.QueryAsync<SchoolAdminUserRow>(new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: ct))
             .ConfigureAwait(false);
-        return ids.ToList();
+        return rows.ToList();
     }
 
     public async Task<bool> IsParentLinkedToStudentAsync(Guid parentUserId, Guid studentId, CancellationToken ct = default)
@@ -370,11 +378,18 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT userid FROM {Schema}.{DatabaseConfig.TableTeachers}
-            WHERE isactive = true AND userid IS NOT NULL;
+            SELECT DISTINCT COALESCE(t.userid, u.id) AS UserId
+            FROM {Schema}.{DatabaseConfig.TableTeachers} t
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} u
+                ON u.isactive = true
+               AND t.userid IS NULL
+               AND t.email IS NOT NULL
+               AND lower(trim(u.email)) = lower(trim(t.email))
+            WHERE t.isactive = true
+              AND COALESCE(t.userid, u.id) IS NOT NULL;
             """;
         var ids = await connection.QueryAsync<Guid>(new CommandDefinition(sql, cancellationToken: ct)).ConfigureAwait(false);
-        return ids.ToList();
+        return ids.Distinct().ToList();
     }
 
     public async Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default)

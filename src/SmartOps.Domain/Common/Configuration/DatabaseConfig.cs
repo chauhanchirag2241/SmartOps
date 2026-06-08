@@ -16,6 +16,8 @@ public static class DatabaseConfig
     public const string TableSchools = "schools";
     public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserSchoolMappings = "userschoolmappings";
+    public const string TableUserTypes = "usertypes";
+    public const string TableSchoolSettings = "schoolsettings";
     public const string TableRefreshTokens = "refreshtokens";
     public const string TableUserScopeVersions = "userscopeversions";
     public const string TableAuthorizationAuditLog = "authorizationauditlog";

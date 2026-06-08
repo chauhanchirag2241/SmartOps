@@ -15,15 +15,18 @@ public sealed class UserProvisioningService : IUserProvisioningService
     private const string InternalEmailDomain = "portal.smartops.internal";
 
     private readonly IUserRepository _users;
+    private readonly IUserTypeRepository _userTypes;
     private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
     private readonly IPersonaRoleMapper _roleMapper;
 
     public UserProvisioningService(
         IUserRepository users,
+        IUserTypeRepository userTypes,
         IPasswordHasher<ApplicationUser> passwordHasher,
         IPersonaRoleMapper roleMapper)
     {
         _users = users;
+        _userTypes = userTypes;
         _passwordHasher = passwordHasher;
         _roleMapper = roleMapper;
     }
@@ -54,9 +57,10 @@ public sealed class UserProvisioningService : IUserProvisioningService
                 $"Date of birth is required to provision a {request.RoleName} portal account.");
         }
 
-        // Login uses email; default password must match the email local-part (e.g. vivek2@gmail.com → Vivek2@ddMMyyyy).
         string passwordSeed = ResolvePasswordSeed(request.Email, username);
         string password = DefaultPasswordGenerator.Generate(passwordSeed, request.DateOfBirth.Value);
+        string userTypeCode = request.UserTypeCode ?? ResolveUserTypeCodeForRole(request.RoleName);
+        Guid? userTypeId = await _userTypes.GetIdByCodeAsync(userTypeCode, cancellationToken).ConfigureAwait(false);
 
         ApplicationUser? existing = await _users
             .GetByEmailAsync(email, cancellationToken)
@@ -69,7 +73,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
             existing.SecurityStamp = Guid.NewGuid().ToString("N");
             await _users.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
 
-            await AssignRoleAndSchoolAsync(existing.Id, request.SchoolId, request.RoleName, cancellationToken)
+            await AssignRoleAndSchoolAsync(existing.Id, request.SchoolId, request.RoleName, userTypeId, cancellationToken)
                 .ConfigureAwait(false);
 
             return new ProvisionUserResult
@@ -91,7 +95,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await AssignRoleAndSchoolAsync(user.Id, request.SchoolId, request.RoleName, cancellationToken)
+        await AssignRoleAndSchoolAsync(user.Id, request.SchoolId, request.RoleName, userTypeId, cancellationToken)
             .ConfigureAwait(false);
 
         return new ProvisionUserResult
@@ -114,6 +118,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
             {
                 SchoolId = schoolId,
                 RoleName = roleName,
+                UserTypeCode = UserTypeCodes.Teacher,
                 PortalAccess = teacher.PortalAccess,
                 Email = teacher.Email,
                 Username = teacher.Username,
@@ -135,6 +140,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
             {
                 SchoolId = schoolId,
                 RoleName = RoleNames.Student,
+                UserTypeCode = UserTypeCodes.Student,
                 PortalAccess = student.PortalAccess,
                 Email = student.Email,
                 Username = null,
@@ -166,6 +172,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
                 {
                     SchoolId = schoolId,
                     RoleName = RoleNames.Parent,
+                    UserTypeCode = UserTypeCodes.Parent,
                     PortalAccess = true,
                     Email = normalizedEmail,
                     Username = loginName,
@@ -195,6 +202,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
             {
                 SchoolId = schoolId,
                 RoleName = roleName,
+                UserTypeCode = ResolveUserTypeCodeForRole(roleName),
                 PortalAccess = portalAccess,
                 Email = email,
                 Username = username,
@@ -216,6 +224,8 @@ public sealed class UserProvisioningService : IUserProvisioningService
             ? username.Trim()
             : normalizedEmail;
 
+        Guid? userTypeId = await _userTypes.GetIdByCodeAsync(UserTypeCodes.Parent, cancellationToken).ConfigureAwait(false);
+
         ApplicationUser? existing = await _users
             .GetByEmailAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false)
@@ -223,7 +233,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
 
         if (existing is not null)
         {
-            await AssignRoleAndSchoolAsync(existing.Id, schoolId, RoleNames.Parent, cancellationToken)
+            await AssignRoleAndSchoolAsync(existing.Id, schoolId, RoleNames.Parent, userTypeId, cancellationToken)
                 .ConfigureAwait(false);
             return existing.Id;
         }
@@ -239,7 +249,7 @@ public sealed class UserProvisioningService : IUserProvisioningService
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await AssignRoleAndSchoolAsync(user.Id, schoolId, RoleNames.Parent, cancellationToken).ConfigureAwait(false);
+        await AssignRoleAndSchoolAsync(user.Id, schoolId, RoleNames.Parent, userTypeId, cancellationToken).ConfigureAwait(false);
 
         return user.Id;
     }
@@ -248,11 +258,25 @@ public sealed class UserProvisioningService : IUserProvisioningService
         Guid userId,
         Guid schoolId,
         string roleName,
+        Guid? userTypeId,
         CancellationToken cancellationToken)
     {
         await _users.AddUserToRoleAsync(userId, roleName, cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToSchoolAsync(userId, schoolId, roleName, cancellationToken).ConfigureAwait(false);
+        await _users.AddUserToSchoolAsync(userId, schoolId, roleName, userTypeId, cancellationToken).ConfigureAwait(false);
     }
+
+    private static string ResolveUserTypeCodeForRole(string roleName) =>
+        roleName switch
+        {
+            RoleNames.Student => UserTypeCodes.Student,
+            RoleNames.Parent => UserTypeCodes.Parent,
+            RoleNames.Hod => UserTypeCodes.Hod,
+            RoleNames.Accountant => UserTypeCodes.Accountant,
+            RoleNames.Staff => UserTypeCodes.Staff,
+            RoleNames.SchoolAdmin or RoleNames.Admin => UserTypeCodes.SchoolAdmin,
+            RoleNames.Teacher => UserTypeCodes.Teacher,
+            _ => UserTypeCodes.Teacher
+        };
 
     private static string ResolvePasswordSeed(string? email, string loginUsername)
     {

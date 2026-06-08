@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Leave;
 using SmartOps.Application.Modules.Leave.Interfaces;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Application.Modules.Notice;
 using SmartOps.Application.Modules.Notice.Interfaces;
 using SmartOps.Application.Modules.Workflow;
@@ -21,6 +22,7 @@ public sealed class WorkflowService : IWorkflowService
 {
     private readonly IWorkflowRepository _workflowRepo;
     private readonly ILeaveRepository _leaveRepo;
+    private readonly ILeaveApproverResolver _leaveApproverResolver;
     private readonly INoticeRepository _noticeRepo;
     private readonly ICurrentUserService _currentUser;
     private readonly ITenantProvider _tenantProvider;
@@ -29,6 +31,7 @@ public sealed class WorkflowService : IWorkflowService
     public WorkflowService(
         IWorkflowRepository workflowRepo,
         ILeaveRepository leaveRepo,
+        ILeaveApproverResolver leaveApproverResolver,
         INoticeRepository noticeRepo,
         ICurrentUserService currentUser,
         ITenantProvider tenantProvider,
@@ -36,6 +39,7 @@ public sealed class WorkflowService : IWorkflowService
     {
         _workflowRepo = workflowRepo;
         _leaveRepo = leaveRepo;
+        _leaveApproverResolver = leaveApproverResolver;
         _noticeRepo = noticeRepo;
         _currentUser = currentUser;
         _tenantProvider = tenantProvider;
@@ -100,13 +104,7 @@ public sealed class WorkflowService : IWorkflowService
             NoticeEntity? n = await _noticeRepo.GetByIdAsync(item.ReferenceId, ct).ConfigureAwait(false);
             if (n is not null)
             {
-                notice = new NoticeDetailDto(
-                    n.Id,
-                    n.Title,
-                    n.Body,
-                    n.RequiresResponse,
-                    n.ResponseDeadline,
-                    n.Status.ToString());
+                notice = MapNoticeDetail(n);
             }
         }
 
@@ -147,16 +145,50 @@ public sealed class WorkflowService : IWorkflowService
 
         if (item.ItemType == WorkflowItemType.LeaveApproval)
         {
+            string approvalMode = ParseApprovalModeFromPayload(item.PayloadJson);
+
             if (code.Equals(WorkflowActionCodes.Approve, StringComparison.OrdinalIgnoreCase))
             {
-                Result<LeaveDetailDto> result = await ApproveLeaveFromWorkflowAsync(item.ReferenceId, request.Comment, ct)
-                    .ConfigureAwait(false);
-                if (!result.IsSuccess)
+                if (string.Equals(approvalMode, LeaveApprovalModes.AllMust, StringComparison.OrdinalIgnoreCase))
                 {
-                    return Result<MyActionDetailDto>.Failure(result.Error!);
-                }
+                    Result validation = await ValidateLeaveApprovalActionAsync(item.ReferenceId, userId, ct)
+                        .ConfigureAwait(false);
+                    if (!validation.IsSuccess)
+                    {
+                        return Result<MyActionDetailDto>.Failure(validation.Error!);
+                    }
 
-                await CompleteItemAsync(item, userId, WorkflowActionCodes.Approve, request.Comment, ct).ConfigureAwait(false);
+                    await CompleteItemAsync(item, userId, WorkflowActionCodes.Approve, request.Comment, ct)
+                        .ConfigureAwait(false);
+
+                    int pending = await _workflowRepo
+                        .CountPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, item.ReferenceId, ct)
+                        .ConfigureAwait(false);
+                    if (pending == 0)
+                    {
+                        Result<LeaveDetailDto> result = await FinalizeLeaveApprovalAsync(item.ReferenceId, userId, request.Comment, ct)
+                            .ConfigureAwait(false);
+                        if (!result.IsSuccess)
+                        {
+                            return Result<MyActionDetailDto>.Failure(result.Error!);
+                        }
+                    }
+                }
+                else
+                {
+                    Result<LeaveDetailDto> result = await FinalizeLeaveApprovalAsync(item.ReferenceId, userId, request.Comment, ct)
+                        .ConfigureAwait(false);
+                    if (!result.IsSuccess)
+                    {
+                        return Result<MyActionDetailDto>.Failure(result.Error!);
+                    }
+
+                    await CompleteItemAsync(item, userId, WorkflowActionCodes.Approve, request.Comment, ct)
+                        .ConfigureAwait(false);
+                    await _workflowRepo
+                        .CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, item.ReferenceId, ct)
+                        .ConfigureAwait(false);
+                }
             }
             else if (code.Equals(WorkflowActionCodes.Reject, StringComparison.OrdinalIgnoreCase))
             {
@@ -174,21 +206,14 @@ public sealed class WorkflowService : IWorkflowService
                 return Result<MyActionDetailDto>.Failure("Invalid action. Use Approve or Reject.");
             }
         }
-        else if (item.ItemType == WorkflowItemType.NoticeResponse)
+        else if (item.ItemType is WorkflowItemType.NoticeResponse or WorkflowItemType.FormFill)
         {
-            if (!code.Equals(WorkflowActionCodes.Respond, StringComparison.OrdinalIgnoreCase))
+            Result<MyActionDetailDto> noticeResult = await CompleteNoticeActionAsync(item, userId, code, request, ct)
+                .ConfigureAwait(false);
+            if (!noticeResult.IsSuccess)
             {
-                return Result<MyActionDetailDto>.Failure("Invalid action. Use Respond.");
+                return noticeResult;
             }
-
-            string body = request.Payload?.Trim() ?? request.Comment?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(body))
-            {
-                return Result<MyActionDetailDto>.Failure("Response is required.");
-            }
-
-            await _noticeRepo.UpsertResponseAsync(item.ReferenceId, userId, body, ct).ConfigureAwait(false);
-            await CompleteItemAsync(item, userId, WorkflowActionCodes.Respond, body, ct).ConfigureAwait(false);
         }
         else
         {
@@ -209,7 +234,15 @@ public sealed class WorkflowService : IWorkflowService
         await _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveRequestId, ct)
             .ConfigureAwait(false);
 
-        IList<Guid> assignees = await ResolveLeaveApproversAsync(leave, ct).ConfigureAwait(false);
+        if (!TryGetSchoolId(out Guid schoolId))
+        {
+            return Result.Failure("School context is required.");
+        }
+
+        LeaveApproverResolution resolution = await _leaveApproverResolver
+            .ResolveAsync(leave, schoolId, ct)
+            .ConfigureAwait(false);
+        IList<Guid> assignees = resolution.AssigneeUserIds.ToList();
         if (assignees.Count == 0)
         {
             return Result.Failure("No approver could be resolved for this leave request.");
@@ -228,7 +261,8 @@ public sealed class WorkflowService : IWorkflowService
             leaveRequestId,
             leave.RequestType,
             leave.FromDate,
-            leave.ToDate
+            leave.ToDate,
+            approvalMode = resolution.ApprovalMode
         });
 
         foreach (Guid assigneeId in assignees.Distinct())
@@ -261,57 +295,43 @@ public sealed class WorkflowService : IWorkflowService
     public Task CancelPendingForLeaveAsync(Guid leaveRequestId, CancellationToken ct = default) =>
         _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveRequestId, ct);
 
-    private async Task<IList<Guid>> ResolveLeaveApproversAsync(LeaveRequestEntity leave, CancellationToken ct)
-    {
-        if (leave.RequestType == LeaveRequestType.Student && leave.StudentId.HasValue)
-        {
-            Guid? classId = await _leaveRepo.GetClassIdForStudentAsync(leave.StudentId.Value, ct).ConfigureAwait(false);
-            if (classId.HasValue)
-            {
-                Guid? classTeacherUserId = await _leaveRepo.GetClassTeacherUserIdAsync(classId.Value, ct).ConfigureAwait(false);
-                if (classTeacherUserId.HasValue)
-                {
-                    return [classTeacherUserId.Value];
-                }
-            }
-        }
-
-        string? schoolIdStr = _tenantProvider.GetCurrentSchoolId();
-        if (Guid.TryParse(schoolIdStr, out Guid schoolId))
-        {
-            IList<Guid> admins = await _leaveRepo.GetSchoolAdminUserIdsAsync(schoolId, ct).ConfigureAwait(false);
-            if (admins.Count > 0)
-            {
-                return admins;
-            }
-        }
-
-        if (leave.RequestType == LeaveRequestType.Staff)
-        {
-            return await _leaveRepo.GetSchoolAdminUserIdsAsync(
-                Guid.TryParse(schoolIdStr, out Guid sid) ? sid : Guid.Empty, ct).ConfigureAwait(false);
-        }
-
-        return [];
-    }
-
-    private async Task<Result<LeaveDetailDto>> ApproveLeaveFromWorkflowAsync(Guid leaveId, string? remark, CancellationToken ct)
+    private async Task<Result> ValidateLeaveApprovalActionAsync(Guid leaveId, Guid userId, CancellationToken ct)
     {
         LeaveRequestEntity? entity = await _leaveRepo.GetByIdAsync(leaveId, ct).ConfigureAwait(false);
         if (entity is null)
         {
-            return Result<LeaveDetailDto>.Failure("Leave request not found.");
+            return Result.Failure("Leave request not found.");
         }
 
         if (entity.Status != LeaveRequestStatus.Submitted)
         {
-            return Result<LeaveDetailDto>.Failure("Only submitted requests can be approved.");
+            return Result.Failure("Only submitted requests can be approved.");
         }
 
-        Guid userId = RequireUserId();
         if (entity.RequestedByUserId == userId)
         {
-            return Result<LeaveDetailDto>.Failure("You cannot approve your own leave request.");
+            return Result.Failure("You cannot approve your own leave request.");
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<Result<LeaveDetailDto>> FinalizeLeaveApprovalAsync(
+        Guid leaveId,
+        Guid userId,
+        string? remark,
+        CancellationToken ct)
+    {
+        Result validation = await ValidateLeaveApprovalActionAsync(leaveId, userId, ct).ConfigureAwait(false);
+        if (!validation.IsSuccess)
+        {
+            return Result<LeaveDetailDto>.Failure(validation.Error!);
+        }
+
+        LeaveRequestEntity? entity = await _leaveRepo.GetByIdAsync(leaveId, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return Result<LeaveDetailDto>.Failure("Leave request not found.");
         }
 
         entity.Status = LeaveRequestStatus.Approved;
@@ -376,6 +396,82 @@ public sealed class WorkflowService : IWorkflowService
         await _workflowRepo.InsertActionAsync(item.Id, outcome, comment, userId, null, ct).ConfigureAwait(false);
     }
 
+    private async Task<Result<MyActionDetailDto>> CompleteNoticeActionAsync(
+        WorkflowItemEntity item,
+        Guid userId,
+        string code,
+        CompleteMyActionRequestDto request,
+        CancellationToken ct)
+    {
+        NoticeEntity? notice = await _noticeRepo.GetByIdAsync(item.ReferenceId, ct).ConfigureAwait(false);
+        if (notice is null || notice.Status != NoticeStatus.Published)
+        {
+            return Result<MyActionDetailDto>.Failure("Notice not found or not published.");
+        }
+
+        if (item.ItemType == WorkflowItemType.FormFill)
+        {
+            if (!code.Equals(WorkflowActionCodes.SubmitForm, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<MyActionDetailDto>.Failure("Invalid action. Use SubmitForm.");
+            }
+
+            string body = request.Payload?.Trim() ?? request.Comment?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return Result<MyActionDetailDto>.Failure("Form answers are required.");
+            }
+
+            await _noticeRepo.UpsertResponseAsync(item.ReferenceId, userId, body, ct).ConfigureAwait(false);
+            await CompleteItemAsync(item, userId, WorkflowActionCodes.SubmitForm, body, ct).ConfigureAwait(false);
+            return Result<MyActionDetailDto>.Success((await GetDetailAsync(item.Id, ct).ConfigureAwait(false)).Value!);
+        }
+
+        if (code.Equals(WorkflowActionCodes.Acknowledge, StringComparison.OrdinalIgnoreCase))
+        {
+            if (notice.RequiresResponse)
+            {
+                return Result<MyActionDetailDto>.Failure("This notice requires a written response.");
+            }
+
+            await CompleteItemAsync(item, userId, WorkflowActionCodes.Acknowledge, null, ct).ConfigureAwait(false);
+            return Result<MyActionDetailDto>.Success((await GetDetailAsync(item.Id, ct).ConfigureAwait(false)).Value!);
+        }
+
+        if (code.Equals(WorkflowActionCodes.Respond, StringComparison.OrdinalIgnoreCase))
+        {
+            string body = request.Payload?.Trim() ?? request.Comment?.Trim() ?? "";
+            if (notice.RequiresResponse && string.IsNullOrWhiteSpace(body))
+            {
+                return Result<MyActionDetailDto>.Failure("Response is required.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                await _noticeRepo.UpsertResponseAsync(item.ReferenceId, userId, body, ct).ConfigureAwait(false);
+            }
+
+            await CompleteItemAsync(item, userId, WorkflowActionCodes.Respond, body, ct).ConfigureAwait(false);
+            return Result<MyActionDetailDto>.Success((await GetDetailAsync(item.Id, ct).ConfigureAwait(false)).Value!);
+        }
+
+        return Result<MyActionDetailDto>.Failure("Invalid action. Use Respond or Acknowledge.");
+    }
+
+    private static NoticeDetailDto MapNoticeDetail(NoticeEntity n) => new(
+        n.Id,
+        n.Title,
+        n.Body,
+        n.RequiresResponse,
+        n.ResponseDeadline,
+        n.Status.ToString(),
+        n.TargetType,
+        n.TargetType.ToString(),
+        n.TargetRefId,
+        n.ContentType,
+        n.ContentType.ToString(),
+        NoticeContentSerializer.Deserialize(n.ContentJson));
+
     private Guid RequireUserId()
     {
         if (!_currentUser.IsAuthenticated || _currentUser.UserId == Guid.Empty)
@@ -384,6 +480,37 @@ public sealed class WorkflowService : IWorkflowService
         }
 
         return _currentUser.UserId;
+    }
+
+    private bool TryGetSchoolId(out Guid schoolId)
+    {
+        schoolId = Guid.Empty;
+        string? raw = _tenantProvider.GetCurrentSchoolId();
+        return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
+    }
+
+    private static string ParseApprovalModeFromPayload(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+        {
+            return LeaveApprovalModes.AnyOne;
+        }
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(payloadJson);
+            if (doc.RootElement.TryGetProperty("approvalMode", out JsonElement mode)
+                && mode.ValueKind == JsonValueKind.String)
+            {
+                return mode.GetString() ?? LeaveApprovalModes.AnyOne;
+            }
+        }
+        catch (JsonException)
+        {
+            // fall through
+        }
+
+        return LeaveApprovalModes.AnyOne;
     }
 
     private static LeaveDetailDto MapLeaveDetail(LeaveDetailRow r)

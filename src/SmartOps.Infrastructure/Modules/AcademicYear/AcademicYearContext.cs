@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.AcademicYear;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.AcademicYear;
@@ -14,16 +15,19 @@ public sealed class AcademicYearContext : IAcademicYearContext
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IAcademicYearRepository _academicYearRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ITenantSchemaProvider _tenantSchemaProvider;
     private bool _resolved;
 
     public AcademicYearContext(
         IHttpContextAccessor httpContextAccessor,
         IAcademicYearRepository academicYearRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ITenantSchemaProvider tenantSchemaProvider)
     {
         _httpContextAccessor = httpContextAccessor;
         _academicYearRepository = academicYearRepository;
         _userRepository = userRepository;
+        _tenantSchemaProvider = tenantSchemaProvider;
     }
 
     public bool IsResolved => _resolved;
@@ -42,6 +46,12 @@ public sealed class AcademicYearContext : IAcademicYearContext
     {
         if (_resolved)
         {
+            return;
+        }
+
+        if (!_tenantSchemaProvider.IsTenantScoped)
+        {
+            _resolved = true;
             return;
         }
 

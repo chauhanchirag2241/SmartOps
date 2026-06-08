@@ -8,7 +8,9 @@ public record CreateNoticeRequestDto(
     bool RequiresResponse,
     DateOnly? ResponseDeadline,
     NoticeTargetType TargetType,
-    Guid? TargetRefId);
+    Guid? TargetRefId,
+    NoticeContentType ContentType,
+    NoticeContentPayloadDto? Content);
 
 public record UpdateNoticeRequestDto(
     string Title,
@@ -16,7 +18,9 @@ public record UpdateNoticeRequestDto(
     bool RequiresResponse,
     DateOnly? ResponseDeadline,
     NoticeTargetType TargetType,
-    Guid? TargetRefId);
+    Guid? TargetRefId,
+    NoticeContentType ContentType,
+    NoticeContentPayloadDto? Content);
 
 public record NoticeListItemDto(
     Guid Id,
@@ -25,10 +29,13 @@ public record NoticeListItemDto(
     string StatusLabel,
     NoticeTargetType TargetType,
     string TargetTypeLabel,
+    NoticeContentType ContentType,
+    string ContentTypeLabel,
     bool RequiresResponse,
     DateOnly? ResponseDeadline,
     DateTimeOffset? PublishedOn,
-    int ResponseCount);
+    int ResponseCount,
+    bool IsActive = true);
 
 public record NoticeResponseItemDto(
     Guid Id,
@@ -45,4 +52,10 @@ public record NoticeDetailDto(
     string Body,
     bool RequiresResponse,
     DateOnly? ResponseDeadline,
-    string StatusLabel);
+    string StatusLabel,
+    NoticeTargetType TargetType,
+    string TargetTypeLabel,
+    Guid? TargetRefId,
+    NoticeContentType ContentType,
+    string ContentTypeLabel,
+    NoticeContentPayloadDto? Content);

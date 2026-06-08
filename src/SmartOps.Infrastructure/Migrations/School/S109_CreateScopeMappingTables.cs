@@ -20,16 +20,12 @@ public sealed class S109_CreateScopeMappingTables : Migration
                     .ForeignKey("fk_cst_mappings_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("subjectid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_subjectid", S, DatabaseConfig.TableSubjects, "id")
-                .WithColumn("teacherid").AsGuid().NotNullable()
+                .WithColumn("teacherid").AsGuid().Nullable()
                     .ForeignKey("fk_cst_mappings_teacherid", S, DatabaseConfig.TableTeachers, "id")
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("isclassteacher").AsBoolean().NotNullable().WithDefaultValue(false)
                 .WithAuditColumns();
-
-            Create.UniqueConstraint("uq_classsubjectteachermappings")
-                .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).WithSchema(S)
-                .Columns("classid", "subjectid", "teacherid", "academicyearid");
 
             Create.Index("ix_cst_mappings_teacherid")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
@@ -53,6 +49,10 @@ public sealed class S109_CreateScopeMappingTables : Migration
 CREATE UNIQUE INDEX uq_cst_mappings_one_class_teacher
 ON {S}.{DatabaseConfig.TableClassSubjectTeacherMappings} (classid, academicyearid)
 WHERE isclassteacher = true AND isactive = true;
+
+CREATE UNIQUE INDEX uq_cst_mappings_class_subject_year
+ON {S}.{DatabaseConfig.TableClassSubjectTeacherMappings} (classid, subjectid, academicyearid)
+WHERE isactive = true;
 """);
         }
 

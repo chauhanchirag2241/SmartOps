@@ -327,6 +327,27 @@ WHERE id = @StudentId AND isactive = true
         }).ConfigureAwait(false);
     }
 
+    public async Task SetStudentParentUserIdAsync(Guid parentId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudentParents}
+SET userid = @UserId, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+WHERE id = @ParentId AND isactive = true
+""";
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    ParentId = parentId,
+                    UserId = userId,
+                    Now = DateTime.UtcNow,
+                    Actor = ResolveUpdateActor()
+                },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
     public async Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);

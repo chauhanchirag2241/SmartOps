@@ -268,10 +268,11 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
     public async Task DeleteAcademicYearAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
 
         var isCurrent = await connection.QuerySingleOrDefaultAsync<bool>(
             $"""
-            SELECT iscurrent FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+            SELECT iscurrent FROM {schema}.{DatabaseConfig.TableAcademicYears}
             WHERE id = @Id AND isactive = true;
             """,
             new { Id = id }).ConfigureAwait(false);
@@ -281,9 +282,29 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             throw new InvalidOperationException("Cannot delete the current academic year. Set another year as current first.");
         }
 
+        // Check for classes mapped to this academic year
+        var classCount = await connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableClasses} WHERE academicyearid = @Id AND isactive = true;",
+            new { Id = id }).ConfigureAwait(false);
+
+        if (classCount > 0)
+        {
+            throw new InvalidOperationException($"Cannot delete this academic year because it has {classCount} class(es) associated with it.");
+        }
+
+        // Check for student academic enrollments
+        var studentCount = await connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableStudentAcademics} WHERE academicyearid = @Id AND isactive = true;",
+            new { Id = id }).ConfigureAwait(false);
+
+        if (studentCount > 0)
+        {
+            throw new InvalidOperationException($"Cannot delete this academic year because it has {studentCount} student enrollment(s) associated with it.");
+        }
+
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, id, tx)
+            await SoftDeleteAsync(conn, schema, DatabaseConfig.TableAcademicYears, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

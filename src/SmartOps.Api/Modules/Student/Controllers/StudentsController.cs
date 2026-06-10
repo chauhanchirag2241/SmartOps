@@ -247,6 +247,21 @@ public sealed class StudentsController(
         return NoContent();
     }
 
+    /// <summary>Recover soft-deleted student.</summary>
+    [HttpPut("{id:guid}/recover")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RecoverStudent(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        await studentRepository.RecoverStudentAsync(id, cancellationToken).ConfigureAwait(false);
+        return NoContent();
+    }
+
     private bool TryGetSchoolId(out Guid schoolId)
     {
         schoolId = Guid.Empty;

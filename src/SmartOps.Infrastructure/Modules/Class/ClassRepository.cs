@@ -267,10 +267,45 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        var studentsCount = await connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(1) FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} WHERE classid = @Id AND isactive = true;", 
+            new { Id = id }).ConfigureAwait(false);
+            
+        if (studentsCount > 0)
+        {
+            throw new InvalidOperationException("Cannot delete class as it is already mapped with students.");
+        }
+
+        var teacherMappingCount = await connection.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(1) FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassSubjectTeacherMappings} WHERE classid = @Id;", 
+            new { Id = id }).ConfigureAwait(false);
+            
+        if (teacherMappingCount > 0)
+        {
+            throw new InvalidOperationException("Cannot delete class as it is already mapped with subject or teacher.");
+        }
+
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, id, tx)
                 .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RecoverClassAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+            UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
+            SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+            WHERE id = @Id AND isactive = false;
+        """;
+        await connection.ExecuteAsync(sql, new
+        {
+            Id = id,
+            Now = DateTime.UtcNow,
+            Actor = ResolveUpdateActor()
         }).ConfigureAwait(false);
     }
 

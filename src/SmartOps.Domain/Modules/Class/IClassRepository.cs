@@ -29,5 +29,13 @@ public interface IClassRepository
 
     Task UpdateClassAsync(ClassEntity classEntity, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Soft deletes a class.
+    /// </summary>
     Task DeleteClassAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recovers a soft-deleted class.
+    /// </summary>
+    Task RecoverClassAsync(Guid id, CancellationToken cancellationToken = default);
 }

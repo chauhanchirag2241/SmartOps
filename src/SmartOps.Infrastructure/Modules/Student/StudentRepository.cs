@@ -212,7 +212,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 WHERE {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
             ) a ON s.id = a.studentid AND a.rn = 1
             LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c
-                ON c.id = a.classid AND c.academicyearid = a.academicyearid AND c.isactive = true
+                ON c.id = a.classid AND c.academicyearid = a.academicyearid
             LEFT JOIN LATERAL (
                 SELECT CAST(ROUND(
                     100.0 * COUNT(*) FILTER (WHERE att.status IN (1, 4))
@@ -361,6 +361,49 @@ WHERE id = @ParentId AND isactive = true
             {
                 await SoftDeleteRelatedAsync(conn, Context.OperationalSchema, table, "StudentId", id, tx)
                     .ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    public async Task RecoverStudentAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        var sqlCheckClass = $"""
+            SELECT c.isactive 
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa
+            INNER JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c ON sa.classid = c.id
+            WHERE sa.studentid = @Id
+            ORDER BY sa.createdon DESC
+            LIMIT 1;
+        """;
+        var isClassActive = await connection.ExecuteScalarAsync<bool?>(sqlCheckClass, new { Id = id }).ConfigureAwait(false);
+        
+        if (isClassActive.HasValue && !isClassActive.Value)
+        {
+            throw new InvalidOperationException("Cannot recover student because the assigned class is inactive. Please recover the class first.");
+        }
+
+        var now = DateTime.UtcNow;
+        var actor = ResolveUpdateActor();
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            var updateStudentSql = $"""
+                UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
+                SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+                WHERE id = @Id AND isactive = false;
+            """;
+            await conn.ExecuteAsync(updateStudentSql, new { Id = id, Now = now, Actor = actor }, tx).ConfigureAwait(false);
+
+            foreach (var table in RelatedTablesForSoftDelete)
+            {
+                var updateRelatedSql = $"""
+                    UPDATE {Context.OperationalSchema}.{table}
+                    SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+                    WHERE studentid = @Id AND isactive = false;
+                """;
+                await conn.ExecuteAsync(updateRelatedSql, new { Id = id, Now = now, Actor = actor }, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
     }

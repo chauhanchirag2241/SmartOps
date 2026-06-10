@@ -46,6 +46,14 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict,
                 new { error = concurrencyException.Message }).ConfigureAwait(false);
         }
+        catch (InvalidOperationException invalidOpException)
+        {
+            _logger.LogWarning(invalidOpException, "Invalid operation.");
+            await WriteJsonAsync(
+                context,
+                StatusCodes.Status400BadRequest,
+                new { error = invalidOpException.Message, message = invalidOpException.Message }).ConfigureAwait(false);
+        }
         catch (Exception exception) when (IsUniqueViolation(exception, out string message))
         {
             _logger.LogWarning(exception, "Unique constraint violation.");

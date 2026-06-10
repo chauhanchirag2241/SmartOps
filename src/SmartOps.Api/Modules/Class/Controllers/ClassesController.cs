@@ -102,6 +102,15 @@ public sealed class ClassesController(
         return NoContent();
     }
 
+    [HttpPut("{id:guid}/recover")]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RecoverClass(Guid id, CancellationToken cancellationToken)
+    {
+        await classRepository.RecoverClassAsync(id, cancellationToken).ConfigureAwait(false);
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}/history")]
     [Authorize(Policy = MenuPolicies.Classes.View)]
     public async Task<IActionResult> GetHistory(

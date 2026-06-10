@@ -1,18 +1,24 @@
+using Microsoft.Extensions.Logging;
 using SmartOps.Application.Abstractions;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 public sealed class TenantProvisioningService : ITenantProvisioningService
 {
-    private readonly ITenantSchemaSyncService _schemaSync;
+    private readonly ILogger<TenantProvisioningService> _logger;
 
-    public TenantProvisioningService(ITenantSchemaSyncService schemaSync)
+    public TenantProvisioningService(ILogger<TenantProvisioningService> logger)
     {
-        _schemaSync = schemaSync;
+        _logger = logger;
     }
 
     public Task ProvisionSchemaAsync(string schemaName, CancellationToken cancellationToken = default)
     {
-        return _schemaSync.SyncTenantSchemaAsync(schemaName, cancellationToken);
+        _logger.LogWarning(
+            "Shared tenant schema provisioning is no longer supported (schema: {Schema}). Enable PerSchoolDatabase to create a dedicated school database.",
+            schemaName);
+
+        throw new NotSupportedException(
+            "Shared tenant schemas are no longer supported. Enable PerSchoolDatabase so migrations run on a dedicated school database.");
     }
 }

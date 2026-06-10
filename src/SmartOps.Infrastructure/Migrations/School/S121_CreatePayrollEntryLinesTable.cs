@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(121, "School template — payrollentrylines")]
 public sealed class S121_CreatePayrollEntryLinesTable : Migration
 {

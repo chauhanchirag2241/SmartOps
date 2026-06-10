@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(8, "Global — refresh tokens")]
 public sealed class G008_CreateRefreshTokensTable : Migration
 {

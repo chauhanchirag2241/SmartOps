@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(105, "School template — attendance")]
 public sealed class S105_CreateAttendanceTable : Migration
 {

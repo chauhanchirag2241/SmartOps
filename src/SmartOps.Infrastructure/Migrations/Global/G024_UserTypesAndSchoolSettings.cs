@@ -5,6 +5,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(24, "Global — user types, school settings, usertypeid on mappings")]
 public sealed class G024_UserTypesAndSchoolSettings : Migration
 {

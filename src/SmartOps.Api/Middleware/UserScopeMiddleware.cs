@@ -13,7 +13,8 @@ public sealed class UserScopeMiddleware
 
     public async Task InvokeAsync(HttpContext context, IUserScopeContext scopeContext)
     {
-        if (context.User.Identity?.IsAuthenticated == true)
+        if (!ApiMiddlewarePaths.IsTenantContextBypass(context)
+            && context.User.Identity?.IsAuthenticated == true)
         {
             await scopeContext.EnsureLoadedAsync(context.RequestAborted).ConfigureAwait(false);
         }

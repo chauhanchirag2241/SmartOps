@@ -11,17 +11,20 @@ namespace SmartOps.Infrastructure.MultiTenancy;
 public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IDatabaseMigrationService _migrationService;
     private readonly IOptions<PerSchoolDatabaseOptions> _options;
     private readonly SchoolDatabaseSeedService _seedService;
     private readonly ILogger<SchoolDatabaseProvisioner> _logger;
 
     public SchoolDatabaseProvisioner(
         IDbConnectionFactory connectionFactory,
+        IDatabaseMigrationService migrationService,
         IOptions<PerSchoolDatabaseOptions> options,
         SchoolDatabaseSeedService seedService,
         ILogger<SchoolDatabaseProvisioner> logger)
     {
         _connectionFactory = connectionFactory;
+        _migrationService = migrationService;
         _options = options;
         _seedService = seedService;
         _logger = logger;
@@ -52,6 +55,10 @@ public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
         await CreateDatabaseIfNotExistsAsync(platformConnectionString, databaseName, cancellationToken)
             .ConfigureAwait(false);
 
+        await _migrationService
+            .MigrateSchoolDatabaseAsync(schoolConnectionString, cancellationToken)
+            .ConfigureAwait(false);
+
         await using NpgsqlConnection platform = (NpgsqlConnection)await _connectionFactory
             .CreatePlatformConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -59,24 +66,6 @@ public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
         await using NpgsqlConnection schoolDb = new(schoolConnectionString);
         await schoolDb.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        PostgresSchemaCopier schemaCopier = new(_logger);
-        await schemaCopier.CopyTablesAsync(
-            platform,
-            DatabaseConfig.Schema_Global,
-            schoolDb,
-            DatabaseConfig.Schema_Global,
-            IdentitySchemaCatalog.Tables,
-            cancellationToken).ConfigureAwait(false);
-
-        await schemaCopier.CopyTablesAsync(
-            platform,
-            DatabaseConfig.Schema_School,
-            schoolDb,
-            DatabaseConfig.Schema_School,
-            SchoolSchemaCatalog.TemplateTables,
-            cancellationToken).ConfigureAwait(false);
-
-        await EnsurePgCryptoAsync(schoolDb, cancellationToken).ConfigureAwait(false);
         await _seedService.SeedDefaultsAsync(platform, schoolDb, schoolId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -85,13 +74,6 @@ public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
             schoolId);
 
         return (databaseName, schoolConnectionString);
-    }
-
-    private static async Task EnsurePgCryptoAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
-    {
-        await connection.ExecuteAsync(
-            new CommandDefinition("CREATE EXTENSION IF NOT EXISTS pgcrypto;", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
     }
 
     private async Task CreateDatabaseIfNotExistsAsync(
@@ -113,7 +95,7 @@ public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
 
         if (exists)
         {
-            _logger.LogInformation("Database {DatabaseName} already exists.", databaseName);
+            _logger.LogInformation("Database {DatabaseName} already exists; applying pending migrations.", databaseName);
             return;
         }
 

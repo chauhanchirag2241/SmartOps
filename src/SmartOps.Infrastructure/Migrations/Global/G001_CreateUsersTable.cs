@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(1, "Global — users")]
 public sealed class G001_CreateUsersTable : Migration
 {

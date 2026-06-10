@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(7, "Global — user school mappings")]
 public sealed class G007_CreateUserSchoolMappingsTable : Migration
 {

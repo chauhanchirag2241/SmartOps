@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(22, "Global — seed dashboard widgets and default role widget permissions")]
 public sealed class G022_SeedDashboardWidgetsAndRolePermissions : Migration
 {

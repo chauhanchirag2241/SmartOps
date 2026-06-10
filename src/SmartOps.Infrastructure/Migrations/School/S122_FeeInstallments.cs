@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(122, "School template — fee installments and amount basis")]
 public sealed class S122_FeeInstallments : Migration
 {

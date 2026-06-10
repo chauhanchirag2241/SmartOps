@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(124, "School template — semester-wise fees, academic year semesters")]
 public sealed class S124_FeeSemesterRestructure : Migration
 {

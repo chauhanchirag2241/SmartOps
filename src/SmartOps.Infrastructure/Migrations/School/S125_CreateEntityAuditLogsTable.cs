@@ -3,6 +3,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(125, "School template — entity audit log table for field-level change history")]
 public sealed class S125_CreateEntityAuditLogsTable : Migration
 {

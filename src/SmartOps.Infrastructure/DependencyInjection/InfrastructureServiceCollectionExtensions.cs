@@ -1,4 +1,3 @@
-using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +7,6 @@ using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Identity.Utilities;
 using SmartOps.Domain.Modules.Identity.Entities;
-using SmartOps.Infrastructure.Migrations.Global;
 using SmartOps.Infrastructure.Modules.Identity;
 using SmartOps.Infrastructure.Modules.Identity.Services;
 using SmartOps.Infrastructure.Modules.Identity.Stores;
@@ -118,19 +116,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ILeaveService, LeaveService>();
         services.AddScoped<INoticeService, NoticeService>();
 
-        string? connectionString = configuration.GetConnectionString("GlobalDb");
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
+            && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PlatformDb")))
         {
-            throw new InvalidOperationException("Connection string 'GlobalDb' is not configured.");
+            throw new InvalidOperationException("Connection string 'GlobalDb' or 'PlatformDb' is not configured.");
         }
 
-        services.AddFluentMigratorCore()
-            .ConfigureRunner(rb => rb
-                .AddPostgres()
-                .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(G000_EnablePgCrypto).Assembly).For.Migrations());
-
-        services.AddLogging(lb => lb.AddFluentMigratorConsole());
+        services.AddSingleton<IDatabaseMigrationService, DatabaseMigrationService>();
 
         return services;
     }
@@ -184,7 +176,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITenantSchemaProvider, TenantSchemaProvider>();
         services.AddScoped<ITenantSchoolResolver, TenantSchoolResolver>();
         services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
-        services.AddScoped<ITenantSchemaSyncService, TenantSchemaSyncService>();
         services.AddScoped<SchoolDatabaseSeedService>();
         services.AddScoped<ISchoolDatabaseProvisioner, SchoolDatabaseProvisioner>();
         services.AddScoped<ISchoolDataMigrationService, SchoolDataMigrationService>();

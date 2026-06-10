@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(109, "School template — scope mapping tables")]
 public sealed class S109_CreateScopeMappingTables : Migration
 {

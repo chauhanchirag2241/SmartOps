@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(3, "Global — menus")]
 public sealed class G003_CreateMenusTable : Migration
 {

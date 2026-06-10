@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(102, "School template — subjects")]
 public sealed class S102_CreateSubjectsTable : Migration
 {

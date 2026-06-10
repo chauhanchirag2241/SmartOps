@@ -17,4 +17,9 @@ public sealed class TenantSchoolResolver : ITenantSchoolResolver
     {
         return _schoolRepository.GetSchoolBySubdomainAsync(subdomain, cancellationToken);
     }
+
+    public Task<SchoolEntity?> ResolveBySchoolIdAsync(Guid schoolId, CancellationToken cancellationToken = default)
+    {
+        return _schoolRepository.GetSchoolByIdAsync(schoolId, cancellationToken);
+    }
 }

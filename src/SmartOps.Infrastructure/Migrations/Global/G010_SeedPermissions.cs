@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(10, "Global — seed menus")]
 public sealed class G010_SeedMenus : Migration
 {

@@ -3,6 +3,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(27, "Global — school database connection metadata")]
 public sealed class G027_SchoolDatabaseConnectionColumns : Migration
 {

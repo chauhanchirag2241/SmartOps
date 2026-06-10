@@ -54,12 +54,23 @@ public sealed class TenantResolverMiddleware
         tenantContext.TenantId = tenantId;
         tenantContext.SchoolId = schoolId;
 
-        if (!string.IsNullOrWhiteSpace(tenantId) &&
-            (string.IsNullOrWhiteSpace(schoolId) || string.IsNullOrWhiteSpace(tenantContext.SchemaName)))
+        if (string.IsNullOrWhiteSpace(tenantContext.ConnectionString))
         {
-            SchoolEntity? school = await tenantSchoolResolver
-                .ResolveBySubdomainAsync(tenantId, context.RequestAborted)
-                .ConfigureAwait(false);
+            SchoolEntity? school = null;
+
+            if (Guid.TryParse(schoolId, out Guid parsedSchoolId))
+            {
+                school = await tenantSchoolResolver
+                    .ResolveBySchoolIdAsync(parsedSchoolId, context.RequestAborted)
+                    .ConfigureAwait(false);
+            }
+
+            if (school is null && !string.IsNullOrWhiteSpace(tenantId))
+            {
+                school = await tenantSchoolResolver
+                    .ResolveBySubdomainAsync(tenantId, context.RequestAborted)
+                    .ConfigureAwait(false);
+            }
 
             if (school is not null)
             {

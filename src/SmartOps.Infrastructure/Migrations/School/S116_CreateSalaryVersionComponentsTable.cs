@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(116, "School template — salaryversioncomponents")]
 public sealed class S116_CreateSalaryVersionComponentsTable : Migration
 {

@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>Retired — claim tables were never used; access uses relational mappings and menu RBAC.</summary>
+[Tags("Global")]
 [Migration(13, "Global — claims (retired)")]
 public sealed class G013_CreateClaimsTables : Migration
 {

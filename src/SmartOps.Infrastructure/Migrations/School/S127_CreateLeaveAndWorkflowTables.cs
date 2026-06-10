@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(127, "School template — leave and workflow tables")]
 public sealed class S127_CreateLeaveAndWorkflowTables : Migration
 {

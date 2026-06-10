@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(112, "School template — homework")]
 public sealed class S112_CreateHomeworkTables : Migration
 {

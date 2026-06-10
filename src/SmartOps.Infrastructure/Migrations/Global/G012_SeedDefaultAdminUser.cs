@@ -5,6 +5,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(12, "Global — seed platform admin")]
 public sealed class G012_SeedDefaultAdminUser : Migration
 {

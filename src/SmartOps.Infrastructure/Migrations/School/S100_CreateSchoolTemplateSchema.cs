@@ -7,6 +7,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 /// <summary>
 /// Template schema <c>school</c> — cloned per tenant when a school is created.
 /// </summary>
+[Tags("School")]
 [Migration(100, "School template — schema and academic years")]
 public sealed class S100_CreateSchoolTemplateSchema : Migration
 {

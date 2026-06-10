@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(101, "School template — classes")]
 public sealed class S101_CreateClassesTable : Migration
 {

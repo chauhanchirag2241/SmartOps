@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(9, "Global — school branches")]
 public sealed class G009_CreateSchoolBranchesTable : Migration
 {

@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(4, "Global — user roles")]
 public sealed class G004_CreateUserRolesTable : Migration
 {

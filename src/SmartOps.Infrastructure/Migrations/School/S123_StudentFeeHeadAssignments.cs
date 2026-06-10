@@ -8,6 +8,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 /// Student admission fee selections (optional heads + custom amount) and per-student installments.
 /// Single migration — no follow-up alter migration required.
 /// </summary>
+[Tags("School")]
 [Migration(123, "School template — student fee assignments and installments at admission")]
 public sealed class S123_StudentFeeHeadAssignments : Migration
 {

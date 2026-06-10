@@ -3,6 +3,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(11, "Global — seed admin role and permissions")]
 public sealed class G011_SeedAdminRoleAndPermissions : Migration
 {

@@ -13,7 +13,8 @@ public sealed class AcademicYearMiddleware
 
     public async Task InvokeAsync(HttpContext context, IAcademicYearContext academicYearContext)
     {
-        if (context.User.Identity?.IsAuthenticated == true)
+        if (!ApiMiddlewarePaths.IsTenantContextBypass(context)
+            && context.User.Identity?.IsAuthenticated == true)
         {
             await academicYearContext.EnsureResolvedAsync(context.RequestAborted).ConfigureAwait(false);
         }

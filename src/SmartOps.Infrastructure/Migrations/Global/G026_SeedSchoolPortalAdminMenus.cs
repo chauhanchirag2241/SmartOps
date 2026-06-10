@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(26, "Global — seed users roles settings menus for school portal")]
 public sealed class G026_SeedSchoolPortalAdminMenus : Migration
 {

@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(17, "Global — seed homework menu")]
 public sealed class G017_SeedHomeworkMenu : Migration
 {

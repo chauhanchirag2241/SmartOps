@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(21, "Global — dashboard widgets and role widget permissions")]
 public sealed class G021_CreateDashboardWidgetsTables : Migration
 {

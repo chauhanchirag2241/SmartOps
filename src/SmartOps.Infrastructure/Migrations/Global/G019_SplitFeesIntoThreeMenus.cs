@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(19, "Global — split fees into three sidebar menus")]
 public sealed class G019_SplitFeesIntoThreeMenus : Migration
 {

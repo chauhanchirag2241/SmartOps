@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(25, "Global — seed Parent and Student user types")]
 public sealed class G025_SeedParentAndStudentUserTypes : Migration
 {

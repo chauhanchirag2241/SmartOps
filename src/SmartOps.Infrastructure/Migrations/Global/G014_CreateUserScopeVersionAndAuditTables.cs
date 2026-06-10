@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(14, "Global — user scope versions and authorization audit")]
 public sealed class G014_CreateUserScopeVersionAndAuditTables : Migration
 {

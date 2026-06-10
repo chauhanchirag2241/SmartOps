@@ -4,6 +4,7 @@ using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(5, "Global — role menu permissions")]
 public sealed class G005_CreateRoleMenuPermissionsTable : Migration
 {

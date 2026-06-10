@@ -12,6 +12,7 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
     private readonly TenantContext _tenantContext;
     private NpgsqlConnection? _connection;
     private NpgsqlConnection? _platformConnection;
+    private string? _operationalBindingKey;
 
     public DapperContext(
         IDbConnectionFactory connectionFactory,
@@ -44,7 +45,18 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
 
     public async Task<IDbConnection> GetGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (_connection is null || IsConnectionDisposed(_connection))
+        string bindingKey = GetOperationalBindingKey();
+
+        if (_connection is not null
+            && (!string.Equals(_operationalBindingKey, bindingKey, StringComparison.Ordinal)
+                || IsConnectionDisposed(_connection)))
+        {
+            await _connection.DisposeAsync().ConfigureAwait(false);
+            _connection = null;
+            _operationalBindingKey = null;
+        }
+
+        if (_connection is null)
         {
             if (_tenantContext.UsesDedicatedDatabase)
             {
@@ -58,9 +70,21 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
                     .CreatePlatformConnectionAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
+
+            _operationalBindingKey = bindingKey;
         }
 
         return _connection;
+    }
+
+    private string GetOperationalBindingKey()
+    {
+        if (_tenantContext.UsesDedicatedDatabase)
+        {
+            return "school:" + _tenantContext.ConnectionString;
+        }
+
+        return "platform";
     }
 
     /// <summary>
@@ -95,6 +119,7 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
         {
             _connection.Dispose();
             _connection = null;
+            _operationalBindingKey = null;
         }
 
         if (_platformConnection is not null)
@@ -110,6 +135,7 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
         {
             await _connection.DisposeAsync().ConfigureAwait(false);
             _connection = null;
+            _operationalBindingKey = null;
         }
 
         if (_platformConnection is not null)

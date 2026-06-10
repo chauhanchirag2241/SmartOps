@@ -5,6 +5,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+[Tags("Global")]
 [Migration(15, "Global — seed school persona roles and menu permissions")]
 public sealed class G015_SeedSchoolRolesAndPermissions : Migration
 {

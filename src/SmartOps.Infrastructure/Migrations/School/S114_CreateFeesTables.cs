@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
+[Tags("School")]
 [Migration(114, "School template — fees with academic-year versioning")]
 public sealed class S114_CreateFeesTables : Migration
 {

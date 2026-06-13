@@ -47,11 +47,11 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableHomework}
-                (id, classid, subjectid, teacherid, title, description,
+                (id, classid, subjectid, employeeid, title, description,
                  assigndate, duedate, priority, marks, submissiontype,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @ClassId, @SubjectId, @TeacherId, @Title, @Description,
+                (@Id, @ClassId, @SubjectId, @EmployeeId, @Title, @Description,
                  @AssignDate, @DueDate, @Priority, @Marks, @SubmissionType,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
@@ -114,7 +114,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
-            SELECT h.id, h.classid, h.subjectid, h.teacherid, h.title, h.description,
+            SELECT h.id, h.classid, h.subjectid, h.employeeid, h.title, h.description,
                    h.assigndate, h.duedate, h.priority, h.marks, h.submissiontype,
                    h.isactive, h.versionno, h.createdby, h.createdon, h.updatedby, h.updatedon
             FROM {Schema}.{DatabaseConfig.TableHomework} h

@@ -19,7 +19,10 @@ public static class MenuCodes
 
     public const string Students = "STUDENTS";
 
-    public const string Teachers = "TEACHERS";
+    public const string Employees = "EMPLOYEES";
+
+    [Obsolete("Use Employees instead.")]
+    public const string Teachers = Employees;
 
     public const string Classes = "CLASSES";
 
@@ -65,7 +68,7 @@ public static class MenuCodes
         Settings,
         Academics,
         Students,
-        Teachers,
+        Employees,
         Classes,
         ClassMappings,
         Subjects,

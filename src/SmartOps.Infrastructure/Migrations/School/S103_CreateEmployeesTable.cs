@@ -5,16 +5,16 @@ using SmartOps.Domain.Common.Configuration;
 namespace SmartOps.Infrastructure.Migrations.School;
 
 [Tags("School")]
-[Migration(103, "School template — teachers")]
-public sealed class S103_CreateTeachersTable : Migration
+[Migration(103, "School template — employees")]
+public sealed class S103_CreateEmployeesTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
 
     public override void Up()
     {
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableTeachers).Exists())
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableEmployees).Exists())
         {
-            Create.Table(DatabaseConfig.TableTeachers).InSchema(S)
+            Create.Table(DatabaseConfig.TableEmployees).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("firstname").AsString(50).NotNullable()
                 .WithColumn("lastname").AsString(50).NotNullable()
@@ -38,33 +38,27 @@ public sealed class S103_CreateTeachersTable : Migration
                 .WithColumn("bankifsccode").AsString(20).Nullable()
                 .WithColumn("bankname").AsString(50).Nullable()
                 .WithColumn("classid").AsGuid().Nullable()
-                    .ForeignKey("fk_teachers_classid", S, DatabaseConfig.TableClasses, "id")
+                    .ForeignKey("fk_employees_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("shiftstarttime").AsString(5).Nullable()
                 .WithColumn("shiftendtime").AsString(5).Nullable()
-                .WithColumn("weeklyperiods").AsInt32().Nullable()
-                .WithColumn("maxperiodsperday").AsInt32().Nullable()
-                .WithColumn("role").AsString(50).NotNullable().WithDefaultValue("Teacher")
+                .WithColumn("usertypecode").AsString(50).NotNullable().WithDefaultValue("TEACHER")
+                .WithColumn("portalrolename").AsString(100).NotNullable().WithDefaultValue("Teacher")
                 .WithColumn("portalaccess").AsBoolean().WithDefaultValue(true)
                 .WithColumn("username").AsString(100).Nullable().Unique()
                 .WithColumn("userid").AsGuid().Nullable()
                 .WithAuditColumns();
 
             Execute.Sql($"""
-ALTER TABLE {S}.{DatabaseConfig.TableTeachers}
-    ADD CONSTRAINT fk_teachers_user FOREIGN KEY (userid)
+ALTER TABLE {S}.{DatabaseConfig.TableEmployees}
+    ADD CONSTRAINT fk_employees_user FOREIGN KEY (userid)
     REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
 """);
         }
-
-       
     }
-
-    /// <summary>Applies column changes when the table already exists (re-run / existing school DB).</summary>
-   
 
     public override void Down()
     {
-        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableTeachers} DROP CONSTRAINT IF EXISTS fk_teachers_user;");
-        Delete.Table(DatabaseConfig.TableTeachers).InSchema(S);
+        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableEmployees} DROP CONSTRAINT IF EXISTS fk_employees_user;");
+        Delete.Table(DatabaseConfig.TableEmployees).InSchema(S);
     }
 }

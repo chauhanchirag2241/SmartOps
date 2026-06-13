@@ -28,7 +28,7 @@ public class SalaryVersionComponentEntity : AuditableEntity
 public class EmployeeSalaryEntity : AuditableEntity
 {
     public Guid Id { get; set; }
-    public Guid TeacherId { get; set; }
+    public Guid EmployeeId { get; set; }
     public Guid SalaryStructureVersionId { get; set; }
     public DateOnly EffectiveDate { get; set; }
 }
@@ -59,7 +59,7 @@ public class PayrollEntryEntity : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid PayrollRunId { get; set; }
-    public Guid TeacherId { get; set; }
+    public Guid EmployeeId { get; set; }
     public decimal BasicSalary { get; set; }
     public decimal GrossSalary { get; set; }
     public decimal TotalDeductions { get; set; }

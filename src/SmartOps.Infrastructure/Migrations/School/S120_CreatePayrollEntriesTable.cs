@@ -10,7 +10,7 @@ public sealed class S120_CreatePayrollEntriesTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
     private const string PayrollEntryRunIndex = "ix_payrollentries_runid";
-    private const string PayrollEntryTeacherIndex = "ix_payrollentries_teacherid";
+    private const string PayrollEntryEmployeeIndex = "ix_payrollentries_employeeid";
 
     public override void Up()
     {
@@ -23,8 +23,8 @@ public sealed class S120_CreatePayrollEntriesTable : Migration
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("payrollrunid").AsGuid().NotNullable()
                 .ForeignKey("fk_payrollentries_payrollrunid", S, DatabaseConfig.TablePayrollRuns, "id")
-            .WithColumn("teacherid").AsGuid().NotNullable()
-                .ForeignKey("fk_payrollentries_teacherid", S, DatabaseConfig.TableTeachers, "id")
+            .WithColumn("employeeid").AsGuid().NotNullable()
+                .ForeignKey("fk_payrollentries_employeeid", S, DatabaseConfig.TableEmployees, "id")
             .WithColumn("basicsalary").AsDecimal(12, 2).NotNullable().WithDefaultValue(0)
             .WithColumn("grosssalary").AsDecimal(12, 2).NotNullable().WithDefaultValue(0)
             .WithColumn("totaldeductions").AsDecimal(12, 2).NotNullable().WithDefaultValue(0)
@@ -38,9 +38,9 @@ public sealed class S120_CreatePayrollEntriesTable : Migration
             .OnTable(DatabaseConfig.TablePayrollEntries).InSchema(S)
             .OnColumn("payrollrunid").Ascending();
 
-        Create.Index(PayrollEntryTeacherIndex)
+        Create.Index(PayrollEntryEmployeeIndex)
             .OnTable(DatabaseConfig.TablePayrollEntries).InSchema(S)
-            .OnColumn("teacherid").Ascending();
+            .OnColumn("employeeid").Ascending();
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TablePayrollEntries).InSchema(S);

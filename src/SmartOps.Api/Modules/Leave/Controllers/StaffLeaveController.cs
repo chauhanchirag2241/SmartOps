@@ -19,12 +19,12 @@ public sealed class StaffLeaveController : ControllerBase
     [Authorize(Policy = MenuPolicies.LeaveStaff.View)]
     public async Task<IActionResult> GetList(
         [FromQuery] string? status,
-        [FromQuery] Guid? teacherId,
+        [FromQuery] Guid? employeeid,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
         CancellationToken ct)
     {
-        var result = await _service.GetStaffListAsync(status, teacherId, from, to, ct).ConfigureAwait(false);
+        var result = await _service.GetStaffListAsync(status, employeeid, from, to, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

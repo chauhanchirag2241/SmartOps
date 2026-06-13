@@ -90,7 +90,7 @@ public sealed class HomeworkService : IHomeworkService
             return Result<HomeworkDetailResponseDto>.Failure("Due date cannot be before assign date.");
         }
 
-        Guid teacherId = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
+        Guid employeeid = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
             ? _currentUser.UserId
             : Guid.Parse(DatabaseConfig.SystemUserId);
 
@@ -98,7 +98,7 @@ public sealed class HomeworkService : IHomeworkService
         {
             ClassId = request.ClassId,
             SubjectId = request.SubjectId,
-            TeacherId = teacherId,
+            EmployeeId = employeeid,
             Title = request.Title.Trim(),
             Description = request.Description?.Trim(),
             AssignDate = request.AssignDate,

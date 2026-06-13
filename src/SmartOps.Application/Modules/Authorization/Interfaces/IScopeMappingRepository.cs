@@ -4,17 +4,17 @@ public interface IScopeMappingRepository
 {
     Task<Guid?> GetActiveAcademicYearIdAsync(string schema, CancellationToken cancellationToken = default);
 
-    Task EnsureTeacherLinkedToUserAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
+    Task EnsureEmployeeLinkedToUserAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Guid>> GetTeacherClassIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetEmployeeClassIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Guid>> GetTeacherSubjectIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetEmployeeSubjectIdsAsync(string schema, Guid userId, Guid? academicYearId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetDepartmentIdsForHodAsync(string schema, Guid userId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetClassIdsByDepartmentsAsync(string schema, IReadOnlyList<Guid> departmentIds, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Guid>> GetTeacherIdsByDepartmentsAsync(string schema, IReadOnlyList<Guid> departmentIds, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetEmployeeIdsByDepartmentsAsync(string schema, IReadOnlyList<Guid> departmentIds, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetStudentIdsByClassIdsAsync(string schema, IReadOnlyList<Guid> classIds, Guid? academicYearId, CancellationToken cancellationToken = default);
 

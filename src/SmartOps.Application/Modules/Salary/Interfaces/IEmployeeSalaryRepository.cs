@@ -10,11 +10,11 @@ public interface IEmployeeSalaryRepository
         string? designation,
         CancellationToken ct = default);
 
-    Task<EmployeeSalaryEntity?> GetActiveAssignmentByTeacherIdAsync(Guid teacherId, CancellationToken ct = default);
+    Task<EmployeeSalaryEntity?> GetActiveAssignmentByEmployeeIdAsync(Guid employeeId, CancellationToken ct = default);
 
-    Task<TeacherSalaryContextRow?> GetTeacherSalaryContextAsync(Guid teacherId, CancellationToken ct = default);
+    Task<EmployeeSalaryContextRow?> GetEmployeeSalaryContextAsync(Guid employeeId, CancellationToken ct = default);
 
-    Task DeactivateAssignmentsForTeacherAsync(Guid teacherId, CancellationToken ct = default);
+    Task DeactivateAssignmentsForEmployeeAsync(Guid employeeId, CancellationToken ct = default);
 
     Task<Guid> CreateAssignmentAsync(EmployeeSalaryEntity entity, CancellationToken ct = default);
 
@@ -29,7 +29,7 @@ public interface IEmployeeSalaryRepository
 
 public sealed class EmployeeSalaryListRow
 {
-    public Guid TeacherId { get; init; }
+    public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
     public string? EmployeeId { get; init; }
     public string? Department { get; init; }
@@ -38,9 +38,9 @@ public sealed class EmployeeSalaryListRow
     public Guid? SalaryStructureVersionId { get; init; }
 }
 
-public sealed class TeacherSalaryContextRow
+public sealed class EmployeeSalaryContextRow
 {
-    public Guid TeacherId { get; init; }
+    public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
     public string? EmployeeId { get; init; }
     public string? Department { get; init; }

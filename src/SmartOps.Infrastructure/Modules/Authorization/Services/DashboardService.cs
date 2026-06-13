@@ -87,7 +87,7 @@ public sealed class DashboardService : IDashboardService
         DashboardSummaryDto? summary = null;
         if (HasAny(visible,
                 DashboardWidgetCodes.StudentsStat,
-                DashboardWidgetCodes.TeachersStat,
+                DashboardWidgetCodes.EmployeesStat,
                 DashboardWidgetCodes.ClassesStat,
                 DashboardWidgetCodes.AttendanceRate))
         {
@@ -109,7 +109,7 @@ public sealed class DashboardService : IDashboardService
                 summary = new DashboardSummaryDto
                 {
                     TotalStudents = summary.TotalStudents,
-                    TotalTeachers = summary.TotalTeachers,
+                    TotalEmployees = summary.TotalEmployees,
                     TotalClasses = summary.TotalClasses,
                     AttendanceMarkedToday = summary.AttendanceMarkedToday,
                     AverageAttendancePercent = attendanceToday.PresentPercent,
@@ -131,7 +131,7 @@ public sealed class DashboardService : IDashboardService
         }
 
         IReadOnlyList<DashboardTeacherDto>? teachers = null;
-        if (visible.Contains(DashboardWidgetCodes.TeachersList))
+        if (visible.Contains(DashboardWidgetCodes.EmployeesList))
         {
             teachers = await LoadTeachersAsync(connection, schema, cancellationToken).ConfigureAwait(false);
         }
@@ -173,7 +173,7 @@ public sealed class DashboardService : IDashboardService
             AttendanceToday = attendanceToday,
             Salary = salary,
             RecentStudents = recentStudents,
-            Teachers = teachers,
+            Employees = teachers,
             HomeworkDue = homework,
             ClassesOverview = classesOverview,
             Alerts = alerts,
@@ -224,7 +224,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
     {
         string studentFilter = BuildStudentExistsFilter(schema, "s");
         string classFilter = BuildClassFilter(schema, "c");
-        string teacherFilter = BuildTeacherFilter(schema, "t");
+        string employeeFilter = BuildemployeeFilter(schema, "t");
 
         string attendanceDateFilter = attendanceRange is null
             ? "a.attendancedate = @SchoolToday"
@@ -233,7 +233,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
         string sql = $"""
 SELECT
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableStudents} s WHERE s.isactive = true {studentFilter}) AS TotalStudents,
-    (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableTeachers} t WHERE t.isactive = true {teacherFilter}) AS TotalTeachers,
+    (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableEmployees} t WHERE t.isactive = true {employeeFilter}) AS TotalEmployees,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableClasses} c WHERE c.isactive = true {classFilter}) AS TotalClasses,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableAttendance} a
         WHERE {attendanceDateFilter} AND a.isactive = true
@@ -249,7 +249,7 @@ SELECT
         return new DashboardSummaryDto
         {
             TotalStudents = row.TotalStudents,
-            TotalTeachers = row.TotalTeachers,
+            TotalEmployees = row.TotalEmployees,
             TotalClasses = row.TotalClasses,
             AttendanceMarkedToday = row.AttendanceMarkedToday,
             AverageAttendancePercent = 0,
@@ -403,11 +403,11 @@ LIMIT 5
         string schema,
         CancellationToken cancellationToken)
     {
-        string filter = BuildTeacherFilter(schema, "t");
+        string filter = BuildemployeeFilter(schema, "t");
         string sql = $"""
 SELECT
     TRIM(CONCAT(t.firstname, ' ', t.lastname)) AS Name
-FROM {schema}.{DatabaseConfig.TableTeachers} t
+FROM {schema}.{DatabaseConfig.TableEmployees} t
 WHERE t.isactive = true {filter}
 ORDER BY t.firstname, t.lastname
 LIMIT 5
@@ -707,16 +707,16 @@ WHERE id = @Id AND isactive = true LIMIT 1
     private static string AcademicYearClassFilter(string classTableAlias) =>
         $" AND (@ScopeAcademicYearId IS NULL OR {classTableAlias}.academicyearid = @ScopeAcademicYearId)";
 
-    private string BuildTeacherFilter(string schema, string alias)
+    private string BuildemployeeFilter(string schema, string alias)
     {
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
         {
             return string.Empty;
         }
 
-        if (_scope.AllowedTeacherIds.Count > 0)
+        if (_scope.AllowedEmployeeIds.Count > 0)
         {
-            return $" AND {alias}.id = ANY(@ScopeTeacherIds)";
+            return $" AND {alias}.id = ANY(@ScopeEmployeeIds)";
         }
 
         if (_scope.AllowedDepartmentIds.Count > 0)
@@ -768,7 +768,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
     {
         ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
         ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-        ScopeTeacherIds = _scope.AllowedTeacherIds.ToArray(),
+        ScopeEmployeeIds = _scope.AllowedEmployeeIds.ToArray(),
         ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray(),
         ScopeAcademicYearId = _scope.ActiveAcademicYearId,
         SchoolToday = schoolToday ?? attendanceRange?.From,
@@ -780,7 +780,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
     {
         public int TotalStudents { get; init; }
 
-        public int TotalTeachers { get; init; }
+        public int TotalEmployees { get; init; }
 
         public int TotalClasses { get; init; }
 

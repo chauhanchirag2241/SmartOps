@@ -19,7 +19,7 @@ public record EmployeeSalaryComponentItemDto(
     bool IsTaxable);
 
 public record EmployeeSalaryListItemDto(
-    Guid TeacherId,
+    Guid EmployeeRecordId,
     string EmployeeName,
     string? EmployeeId,
     string? Department,
@@ -36,7 +36,7 @@ public record SalaryLineItemDto(
     bool IsEarning);
 
 public record EmployeeSalaryDetailDto(
-    Guid TeacherId,
+    Guid EmployeeRecordId,
     string EmployeeName,
     string? EmployeeId,
     string? Department,
@@ -73,7 +73,7 @@ public record PayrollRunDto(
 
 public record PayrollEntryListItemDto(
     Guid Id,
-    Guid TeacherId,
+    Guid EmployeeRecordId,
     string EmployeeName,
     string? Department,
     decimal BasicSalary,

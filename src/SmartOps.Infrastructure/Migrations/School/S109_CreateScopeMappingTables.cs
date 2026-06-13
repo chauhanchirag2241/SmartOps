@@ -21,16 +21,16 @@ public sealed class S109_CreateScopeMappingTables : Migration
                     .ForeignKey("fk_cst_mappings_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("subjectid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_subjectid", S, DatabaseConfig.TableSubjects, "id")
-                .WithColumn("teacherid").AsGuid().Nullable()
-                    .ForeignKey("fk_cst_mappings_teacherid", S, DatabaseConfig.TableTeachers, "id")
+                .WithColumn("employeeid").AsGuid().Nullable()
+                    .ForeignKey("fk_cst_mappings_employeeid", S, DatabaseConfig.TableEmployees, "id")
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("isclassteacher").AsBoolean().NotNullable().WithDefaultValue(false)
                 .WithAuditColumns();
 
-            Create.Index("ix_cst_mappings_teacherid")
+            Create.Index("ix_cst_mappings_employeeid")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
-                .OnColumn("teacherid").Ascending();
+                .OnColumn("employeeid").Ascending();
 
             Create.Index("ix_cst_mappings_classid")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
@@ -41,9 +41,9 @@ public sealed class S109_CreateScopeMappingTables : Migration
                 .OnColumn("classid").Ascending()
                 .OnColumn("academicyearid").Ascending();
 
-            Create.Index("ix_cst_mappings_teacher_year")
+            Create.Index("ix_cst_mappings_employee_year")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
-                .OnColumn("teacherid").Ascending()
+                .OnColumn("employeeid").Ascending()
                 .OnColumn("academicyearid").Ascending();
 
             Execute.Sql($"""

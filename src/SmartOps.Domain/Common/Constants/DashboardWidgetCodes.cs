@@ -6,7 +6,7 @@ namespace SmartOps.Domain.Common.Constants;
 public static class DashboardWidgetCodes
 {
     public const string StudentsStat = "STUDENTS_STAT";
-    public const string TeachersStat = "TEACHERS_STAT";
+    public const string EmployeesStat = "EMPLOYEES_STAT";
     public const string ClassesStat = "CLASSES_STAT";
     public const string SubjectsStat = "SUBJECTS_STAT";
     public const string SalaryDisbursed = "SALARY_DISBURSED";
@@ -14,7 +14,13 @@ public static class DashboardWidgetCodes
     public const string AttendanceDetail = "ATTENDANCE_DETAIL";
     public const string SalaryStatus = "SALARY_STATUS";
     public const string RecentStudents = "RECENT_STUDENTS";
-    public const string TeachersList = "TEACHERS_LIST";
+    public const string EmployeesList = "EMPLOYEES_LIST";
+
+    [Obsolete("Use EmployeesStat instead.")]
+    public const string TeachersStat = EmployeesStat;
+
+    [Obsolete("Use EmployeesList instead.")]
+    public const string TeachersList = EmployeesList;
     public const string HomeworkDue = "HOMEWORK_DUE";
     public const string ClassesOverview = "CLASSES_OVERVIEW";
     public const string AlertsActions = "ALERTS_ACTIONS";
@@ -22,7 +28,7 @@ public static class DashboardWidgetCodes
     public static IReadOnlyList<string> All { get; } =
     [
         StudentsStat,
-        TeachersStat,
+        EmployeesStat,
         ClassesStat,
         SubjectsStat,
         SalaryDisbursed,
@@ -30,7 +36,7 @@ public static class DashboardWidgetCodes
         AttendanceDetail,
         SalaryStatus,
         RecentStudents,
-        TeachersList,
+        EmployeesList,
         HomeworkDue,
         ClassesOverview,
         AlertsActions

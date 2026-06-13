@@ -7,7 +7,7 @@ public sealed class LeaveRequestEntity : AuditableEntity
 {
     public Guid Id { get; set; }
     public LeaveRequestType RequestType { get; set; }
-    public Guid? TeacherId { get; set; }
+    public Guid? EmployeeId { get; set; }
     public Guid? StudentId { get; set; }
     public Guid RequestedByUserId { get; set; }
     public DateOnly FromDate { get; set; }

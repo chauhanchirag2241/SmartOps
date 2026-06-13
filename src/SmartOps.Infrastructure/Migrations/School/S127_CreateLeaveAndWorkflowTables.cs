@@ -17,7 +17,7 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
             Create.Table(DatabaseConfig.TableLeaveRequests).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("requesttype").AsInt16().NotNullable()
-                .WithColumn("teacherid").AsGuid().Nullable()
+                .WithColumn("employeeid").AsGuid().Nullable()
                 .WithColumn("studentid").AsGuid().Nullable()
                 .WithColumn("requestedbyuserid").AsGuid().NotNullable()
                 .WithColumn("fromdate").AsDate().NotNullable()
@@ -39,9 +39,9 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
                 .OnTable(DatabaseConfig.TableLeaveRequests).InSchema(S)
                 .OnColumn("studentid").Ascending();
 
-            Create.Index("ix_leaverequests_teacherid")
+            Create.Index("ix_leaverequests_employeeid")
                 .OnTable(DatabaseConfig.TableLeaveRequests).InSchema(S)
-                .OnColumn("teacherid").Ascending();
+                .OnColumn("employeeid").Ascending();
 
             Create.Index("ix_leaverequests_requestedby")
                 .OnTable(DatabaseConfig.TableLeaveRequests).InSchema(S)

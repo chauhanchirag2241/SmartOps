@@ -40,8 +40,8 @@ public static class DatabaseConfig
     // Subject Module
     public const string TableSubjects = "subjects";
 
-    // Teacher Module
-    public const string TableTeachers = "teachers";
+    // Employee Module
+    public const string TableEmployees = "employees";
     public const string TableDepartments = "departments";
     public const string TableClassSubjectTeacherMappings = "classsubjectteachermappings";
     public const string TableHodDepartmentAssignments = "hoddepartmentassignments";

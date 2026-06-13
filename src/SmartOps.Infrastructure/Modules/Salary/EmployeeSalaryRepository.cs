@@ -37,16 +37,16 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT t.id AS TeacherId,
+            SELECT t.id AS EmployeeRecordId,
                    TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
                    t.employeeid AS EmployeeId,
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
                    es.id AS EmployeeSalaryId,
                    es.salarystructureversionid AS SalaryStructureVersionId
-            FROM {Schema}.{DatabaseConfig.TableTeachers} t
+            FROM {Schema}.{DatabaseConfig.TableEmployees} t
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
-                ON es.teacherid = t.id AND es.isactive = true
+                ON es.employeeid = t.id AND es.isactive = true
             WHERE t.isactive = true
             {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (TRIM(t.firstname || ' ' || t.lastname) ILIKE @Search OR COALESCE(t.employeeid, '') ILIKE @Search)")}
             {(departmentId.HasValue ? "AND t.departmentid = @DepartmentId" : string.Empty)}
@@ -66,29 +66,29 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         return rows.ToList();
     }
 
-    public async Task<EmployeeSalaryEntity?> GetActiveAssignmentByTeacherIdAsync(Guid teacherId, CancellationToken ct = default)
+    public async Task<EmployeeSalaryEntity?> GetActiveAssignmentByEmployeeIdAsync(Guid employeeId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, teacherid AS TeacherId, salarystructureversionid AS SalaryStructureVersionId,
+            SELECT id AS Id, employeeid AS EmployeeId, salarystructureversionid AS SalaryStructureVersionId,
                    effectivedate AS EffectiveDate,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
             FROM {Schema}.{DatabaseConfig.TableEmployeeSalaries}
-            WHERE teacherid = @TeacherId AND isactive = true
+            WHERE employeeid = @EmployeeId AND isactive = true
             LIMIT 1;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<EmployeeSalaryEntity>(new CommandDefinition(sql, new { TeacherId = teacherId }, cancellationToken: ct))
+            .QueryFirstOrDefaultAsync<EmployeeSalaryEntity>(new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<TeacherSalaryContextRow?> GetTeacherSalaryContextAsync(Guid teacherId, CancellationToken ct = default)
+    public async Task<EmployeeSalaryContextRow?> GetEmployeeSalaryContextAsync(Guid employeeId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT t.id AS TeacherId,
+            SELECT t.id AS EmployeeRecordId,
                    TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
                    t.employeeid AS EmployeeId,
                    {DepartmentExpr} AS Department,
@@ -99,17 +99,17 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
                    es.id AS EmployeeSalaryId,
                    es.salarystructureversionid AS SalaryStructureVersionId,
                    es.effectivedate AS EffectiveDate
-            FROM {Schema}.{DatabaseConfig.TableTeachers} t
+            FROM {Schema}.{DatabaseConfig.TableEmployees} t
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
-                ON es.teacherid = t.id AND es.isactive = true
-            WHERE t.id = @TeacherId AND t.isactive = true;
+                ON es.employeeid = t.id AND es.isactive = true
+            WHERE t.id = @EmployeeId AND t.isactive = true;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<TeacherSalaryContextRow>(new CommandDefinition(sql, new { TeacherId = teacherId }, cancellationToken: ct))
+            .QueryFirstOrDefaultAsync<EmployeeSalaryContextRow>(new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task DeactivateAssignmentsForTeacherAsync(Guid teacherId, CancellationToken ct = default)
+    public async Task DeactivateAssignmentsForEmployeeAsync(Guid employeeId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
@@ -117,9 +117,9 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeSalaries}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-            WHERE teacherid = @TeacherId AND isactive = true;
+            WHERE employeeid = @EmployeeId AND isactive = true;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, new { TeacherId = teacherId, UpdatedBy = actorId, UpdatedOn = utcNow }, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { EmployeeId = employeeId, UpdatedBy = actorId, UpdatedOn = utcNow }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -133,10 +133,10 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableEmployeeSalaries}
-                (id, teacherid, salarystructureversionid, effectivedate,
+                (id, employeeid, salarystructureversionid, effectivedate,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @TeacherId, @SalaryStructureVersionId, @EffectiveDate,
+                (@Id, @EmployeeId, @SalaryStructureVersionId, @EffectiveDate,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
@@ -190,8 +190,6 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
             Guid actorId = ResolveInsertActor();
             DateTime utcNow = DateTime.UtcNow;
 
-            // Physical delete avoids unique constraint on (employeesalaryid, salaryversioncomponentid)
-            // when prior soft-deleted rows still exist.
             await conn.ExecuteAsync(
                 $"""
                 DELETE FROM {Schema}.{DatabaseConfig.TableEmployeeSalaryComponents}
@@ -225,7 +223,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, teacherid AS TeacherId, salarystructureversionid AS SalaryStructureVersionId,
+            SELECT id AS Id, employeeid AS EmployeeId, salarystructureversionid AS SalaryStructureVersionId,
                    effectivedate AS EffectiveDate,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,

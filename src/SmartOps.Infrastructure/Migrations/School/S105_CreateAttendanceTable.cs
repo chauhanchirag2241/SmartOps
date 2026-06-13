@@ -21,7 +21,7 @@ public sealed class S105_CreateAttendanceTable : Migration
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classid").AsGuid().NotNullable()
                 .WithColumn("studentid").AsGuid().NotNullable()
-                .WithColumn("teacherid").AsGuid().NotNullable()
+                .WithColumn("employeeid").AsGuid().NotNullable()
                 .WithColumn("attendancedate").AsDate().NotNullable()
                 .WithColumn("status").AsInt16().NotNullable()
                 .WithColumn("remarks").AsString(int.MaxValue).Nullable()

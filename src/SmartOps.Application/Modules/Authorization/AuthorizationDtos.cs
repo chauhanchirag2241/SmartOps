@@ -6,7 +6,7 @@ public sealed class DashboardSummaryDto
 {
     public int TotalStudents { get; init; }
 
-    public int TotalTeachers { get; init; }
+    public int TotalEmployees { get; init; }
 
     public int TotalClasses { get; init; }
 
@@ -53,7 +53,7 @@ public sealed class UserScopeDto
 
     public IReadOnlyList<Guid> AllowedDepartmentIds { get; init; } = [];
 
-    public IReadOnlyList<Guid> AllowedTeacherIds { get; init; } = [];
+    public IReadOnlyList<Guid> AllowedEmployeeIds { get; init; } = [];
 
     public Guid? OwnStudentId { get; init; }
 

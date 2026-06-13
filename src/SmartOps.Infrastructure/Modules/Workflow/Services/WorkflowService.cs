@@ -516,14 +516,14 @@ public sealed class WorkflowService : IWorkflowService
     private static LeaveDetailDto MapLeaveDetail(LeaveDetailRow r)
     {
         int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
-        string? teacherName = string.Join(" ", new[] { r.TeacherFirstName, r.TeacherLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+        string? EmployeeName = string.Join(" ", new[] { r.TeacherFirstName, r.TeacherLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         string? studentName = string.Join(" ", new[] { r.StudentFirstName, r.StudentLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         return new LeaveDetailDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
             ((LeaveRequestType)r.RequestType).ToString(),
-            r.TeacherId,
-            string.IsNullOrEmpty(teacherName) ? null : teacherName,
+            r.EmployeeId,
+            string.IsNullOrEmpty(EmployeeName) ? null : EmployeeName,
             r.StudentId,
             string.IsNullOrEmpty(studentName) ? null : studentName,
             r.ClassName,

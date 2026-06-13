@@ -45,20 +45,20 @@ public sealed class LeaveService : ILeaveService
     }
 
     public async Task<Result<IList<LeaveListItemDto>>> GetStaffListAsync(
-        string? status, Guid? teacherId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
+        string? status, Guid? employeeid, DateOnly? from, DateOnly? to, CancellationToken ct = default)
     {
-        IList<LeaveListRow> rows = await _leaveRepo.GetStaffListAsync(status, teacherId, from, to, ct).ConfigureAwait(false);
+        IList<LeaveListRow> rows = await _leaveRepo.GetStaffListAsync(status, employeeid, from, to, ct).ConfigureAwait(false);
         return Result<IList<LeaveListItemDto>>.Success(rows.Select(MapList).ToList());
     }
 
     public async Task<Result<IList<LeaveListItemDto>>> GetStaffMineAsync(CancellationToken ct = default)
     {
         Guid userId = RequireUserId();
-        Guid? teacherId = await _leaveRepo.GetTeacherIdByUserIdAsync(userId, ct).ConfigureAwait(false);
+        Guid? employeeId = await _leaveRepo.GetEmployeeIdByUserIdAsync(userId, ct).ConfigureAwait(false);
         IList<LeaveListRow> rows = await _leaveRepo.GetMineAsync(LeaveRequestType.Staff, userId, ct).ConfigureAwait(false);
-        if (teacherId.HasValue)
+        if (employeeId.HasValue)
         {
-            rows = rows.Where(r => r.TeacherId == teacherId || r.RequestedByUserId == userId).ToList();
+            rows = rows.Where(r => r.EmployeeId == employeeId || r.RequestedByUserId == userId).ToList();
         }
 
         return Result<IList<LeaveListItemDto>>.Success(rows.Select(MapList).ToList());
@@ -81,14 +81,14 @@ public sealed class LeaveService : ILeaveService
         }
 
         Guid userId = RequireUserId();
-        Guid? teacherId = await _leaveRepo.GetTeacherIdByUserIdAsync(userId, ct).ConfigureAwait(false);
-        if (!teacherId.HasValue)
+        Guid? employeeId = await _leaveRepo.GetEmployeeIdByUserIdAsync(userId, ct).ConfigureAwait(false);
+        if (!employeeId.HasValue)
         {
             return Result<LeaveDetailDto>.Failure("No teacher profile linked to your account.");
         }
 
         if (await _leaveRepo.HasOverlappingApprovedAsync(
-                LeaveRequestType.Staff, teacherId, null, request.FromDate, request.ToDate, null, ct)
+                LeaveRequestType.Staff, employeeId, null, request.FromDate, request.ToDate, null, ct)
             .ConfigureAwait(false))
         {
             return Result<LeaveDetailDto>.Failure("Overlapping approved leave already exists for this period.");
@@ -97,7 +97,7 @@ public sealed class LeaveService : ILeaveService
         var entity = new LeaveRequestEntity
         {
             RequestType = LeaveRequestType.Staff,
-            TeacherId = teacherId,
+            EmployeeId = employeeId,
             RequestedByUserId = userId,
             FromDate = request.FromDate,
             ToDate = request.ToDate,
@@ -304,7 +304,7 @@ public sealed class LeaveService : ILeaveService
             r.Id,
             (LeaveRequestType)r.RequestType,
             ((LeaveRequestType)r.RequestType).ToString(),
-            r.TeacherId,
+            r.EmployeeId,
             FormatName(r.TeacherFirstName, r.TeacherLastName),
             r.StudentId,
             FormatName(r.StudentFirstName, r.StudentLastName),
@@ -328,7 +328,7 @@ public sealed class LeaveService : ILeaveService
             r.Id,
             (LeaveRequestType)r.RequestType,
             ((LeaveRequestType)r.RequestType).ToString(),
-            r.TeacherId,
+            r.EmployeeId,
             FormatName(r.TeacherFirstName, r.TeacherLastName),
             r.StudentId,
             FormatName(r.StudentFirstName, r.StudentLastName),

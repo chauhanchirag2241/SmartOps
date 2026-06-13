@@ -44,11 +44,11 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableLeaveRequests}
-                (id, requesttype, teacherid, studentid, requestedbyuserid, fromdate, todate,
+                (id, requesttype, employeeid, studentid, requestedbyuserid, fromdate, todate,
                  leavetype, reason, status, approvedbyuserid, approvedon, approverremark,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @RequestType, @TeacherId, @StudentId, @RequestedByUserId, @FromDate, @ToDate,
+                (@Id, @RequestType, @EmployeeId, @StudentId, @RequestedByUserId, @FromDate, @ToDate,
                  @LeaveType, @Reason, @Status, @ApprovedByUserId, @ApprovedOn, @ApproverRemark,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
@@ -57,7 +57,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         {
             entity.Id,
             RequestType = (short)entity.RequestType,
-            entity.TeacherId,
+            entity.EmployeeId,
             entity.StudentId,
             entity.RequestedByUserId,
             entity.FromDate,
@@ -120,7 +120,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, requesttype AS RequestType, teacherid AS TeacherId, studentid AS StudentId,
+            SELECT id AS Id, requesttype AS RequestType, employeeid AS EmployeeId, studentid AS StudentId,
                    requestedbyuserid AS RequestedByUserId, fromdate AS FromDate, todate AS ToDate,
                    leavetype AS LeaveType, reason AS Reason, status AS Status,
                    approvedbyuserid AS ApprovedByUserId, approvedon AS ApprovedOn, approverremark AS ApproverRemark,
@@ -134,8 +134,8 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             new CommandDefinition(sql, new { Id = id }, cancellationToken: ct)).ConfigureAwait(false);
     }
 
-    public Task<IList<LeaveListRow>> GetStaffListAsync(string? statusFilter, Guid? teacherId, DateOnly? from, DateOnly? to, CancellationToken ct = default) =>
-        GetListInternalAsync(LeaveRequestType.Staff, statusFilter, teacherId, null, from, to, null, ct);
+    public Task<IList<LeaveListRow>> GetStaffListAsync(string? statusFilter, Guid? employeeid, DateOnly? from, DateOnly? to, CancellationToken ct = default) =>
+        GetListInternalAsync(LeaveRequestType.Staff, statusFilter, employeeid, null, from, to, null, ct);
 
     public Task<IList<LeaveListRow>> GetStudentListAsync(string? statusFilter, Guid? studentId, CancellationToken ct = default) =>
         GetListInternalAsync(LeaveRequestType.Student, statusFilter, null, studentId, null, null, null, ct);
@@ -146,7 +146,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     private async Task<IList<LeaveListRow>> GetListInternalAsync(
         LeaveRequestType requestType,
         string? statusFilter,
-        Guid? teacherId,
+        Guid? employeeid,
         Guid? studentId,
         DateOnly? from,
         DateOnly? to,
@@ -155,7 +155,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         var sb = new StringBuilder($"""
-            SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.teacherid AS TeacherId,
+            SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.employeeid AS EmployeeId,
                    t.firstname AS TeacherFirstName, t.lastname AS TeacherLastName,
                    lr.studentid AS StudentId, s.firstname AS StudentFirstName, s.lastname AS StudentLastName,
                    {ClassDisplayNameSql} AS ClassName,
@@ -163,7 +163,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
                    lr.status AS Status, lr.createdon AS CreatedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
-            LEFT JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = lr.teacherid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = lr.studentid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
@@ -176,9 +176,9 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             sb.Append(" AND lr.status = @Status");
         }
 
-        if (teacherId.HasValue)
+        if (employeeid.HasValue)
         {
-            sb.Append(" AND lr.teacherid = @TeacherId");
+            sb.Append(" AND lr.employeeid = @EmployeeId");
         }
 
         if (studentId.HasValue)
@@ -215,7 +215,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             {
                 RequestType = (short)requestType,
                 Status = statusVal,
-                TeacherId = teacherId,
+                EmployeeId = employeeid,
                 StudentId = studentId,
                 From = from,
                 To = to,
@@ -230,7 +230,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.teacherid AS TeacherId,
+            SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.employeeid AS EmployeeId,
                    t.firstname AS TeacherFirstName, t.lastname AS TeacherLastName,
                    lr.studentid AS StudentId, s.firstname AS StudentFirstName, s.lastname AS StudentLastName,
                    {ClassDisplayNameSql} AS ClassName,
@@ -241,7 +241,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    lr.approvedon AS ApprovedOn, lr.approverremark AS ApproverRemark,
                    lr.createdon AS CreatedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
-            LEFT JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = lr.teacherid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = lr.studentid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
@@ -256,7 +256,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
 
     public async Task<bool> HasOverlappingApprovedAsync(
         LeaveRequestType type,
-        Guid? teacherId,
+        Guid? employeeid,
         Guid? studentId,
         DateOnly from,
         DateOnly to,
@@ -270,7 +270,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
               AND fromdate <= @To AND todate >= @From
               AND (@ExcludeId IS NULL OR id <> @ExcludeId)
               AND (
-                (@TeacherId IS NOT NULL AND teacherid = @TeacherId)
+                (@EmployeeId IS NOT NULL AND employeeid = @EmployeeId)
                 OR (@StudentId IS NOT NULL AND studentid = @StudentId)
               );
             """;
@@ -281,7 +281,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             Approved = (short)LeaveRequestStatus.Approved,
             From = from,
             To = to,
-            TeacherId = teacherId,
+            employeeid = employeeid,
             StudentId = studentId,
             ExcludeId = excludeId
         }, cancellationToken: ct)).ConfigureAwait(false);
@@ -289,11 +289,11 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         return count > 0;
     }
 
-    public async Task<Guid?> GetTeacherIdByUserIdAsync(Guid userId, CancellationToken ct = default)
+    public async Task<Guid?> GetEmployeeIdByUserIdAsync(Guid userId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id FROM {Schema}.{DatabaseConfig.TableTeachers}
+            SELECT id FROM {Schema}.{DatabaseConfig.TableEmployees}
             WHERE userid = @UserId AND isactive = true LIMIT 1;
             """;
         return await connection.ExecuteScalarAsync<Guid?>(new CommandDefinition(sql, new { UserId = userId }, cancellationToken: ct))
@@ -317,7 +317,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT t.userid FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-            INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid AND t.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid AND t.isactive = true
             WHERE m.classid = @ClassId AND m.isclassteacher = true AND m.isactive = true
               AND t.userid IS NOT NULL
             ORDER BY m.createdon DESC LIMIT 1;
@@ -379,7 +379,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT DISTINCT COALESCE(t.userid, u.id) AS UserId
-            FROM {Schema}.{DatabaseConfig.TableTeachers} t
+            FROM {Schema}.{DatabaseConfig.TableEmployees} t
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} u
                 ON u.isactive = true
                AND t.userid IS NULL

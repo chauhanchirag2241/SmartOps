@@ -71,8 +71,8 @@ public sealed class ResourceAuthorizationService : IResourceAuthorizationService
         return _scope.HasSubjectInClassAccess(classId, subjectId);
     }
 
-    public async Task<bool> CanAccessTeacherAsync(
-        Guid teacherId,
+    public async Task<bool> CanAccessEmployeeAsync(
+        Guid employeeId,
         AccessLevel level,
         CancellationToken cancellationToken = default)
     {
@@ -90,6 +90,6 @@ public sealed class ResourceAuthorizationService : IResourceAuthorizationService
             return true;
         }
 
-        return _scope.HasTeacherAccess(teacherId);
+        return _scope.HasEmployeeAccess(employeeId);
     }
 }

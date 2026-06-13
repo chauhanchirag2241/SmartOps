@@ -123,7 +123,7 @@ public sealed class PayrollService : IPayrollService
             var entry = new PayrollEntryEntity
             {
                 PayrollRunId = run.Id,
-                TeacherId = assignment.TeacherId,
+                EmployeeId = assignment.EmployeeId,
                 BasicSalary = breakdown.BasicSalary,
                 GrossSalary = breakdown.GrossSalary,
                 TotalDeductions = breakdown.TotalDeductions,
@@ -237,7 +237,7 @@ public sealed class PayrollService : IPayrollService
 
     private static PayrollEntryListItemDto MapEntry(PayrollEntryListRow row) => new(
         row.Id,
-        row.TeacherId,
+        row.EmployeeRecordId,
         row.EmployeeName,
         string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
         row.BasicSalary,

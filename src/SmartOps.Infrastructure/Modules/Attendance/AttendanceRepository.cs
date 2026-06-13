@@ -35,7 +35,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
-            SELECT id, classid, studentid, teacherid,
+            SELECT id, classid, studentid, employeeid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
@@ -61,7 +61,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
-            SELECT id, classid, studentid, teacherid,
+            SELECT id, classid, studentid, employeeid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
@@ -85,7 +85,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
-            SELECT id, classid, studentid, teacherid,
+            SELECT id, classid, studentid, employeeid,
                    attendancedate, status, remarks,
                    isactive, versionno,
                    createdby, createdon, updatedby, updatedon
@@ -260,12 +260,12 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
 
         string sql = $"""
             INSERT INTO {AttendanceSchema}.{DatabaseConfig.TableAttendance}
-                (id, classid, studentid, teacherid,
+                (id, classid, studentid, employeeid,
                  attendancedate, status, remarks,
                  isactive, versionno,
                  createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @ClassId, @StudentId, @TeacherId,
+                (@Id, @ClassId, @StudentId, @EmployeeId,
                  @AttendanceDate, @Status, @Remarks,
                  true, 1,
                  @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
@@ -290,7 +290,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
             UPDATE {AttendanceSchema}.{DatabaseConfig.TableAttendance}
             SET status = @Status,
                 remarks = @Remarks,
-                teacherid = @TeacherId,
+                employeeid = @EmployeeId,
                 isactive = true,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
@@ -306,7 +306,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
                     Id = existingId,
                     attendance.Status,
                     attendance.Remarks,
-                    attendance.TeacherId,
+                    attendance.EmployeeId,
                     UpdatedBy = actorId,
                     UpdatedOn = utcNow
                 },

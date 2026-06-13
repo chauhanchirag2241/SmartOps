@@ -4,7 +4,7 @@ namespace SmartOps.Application.Modules.Leave.Interfaces;
 
 public interface ILeaveService
 {
-    Task<Result<IList<LeaveListItemDto>>> GetStaffListAsync(string? status, Guid? teacherId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
+    Task<Result<IList<LeaveListItemDto>>> GetStaffListAsync(string? status, Guid? employeeid, DateOnly? from, DateOnly? to, CancellationToken ct = default);
     Task<Result<IList<LeaveListItemDto>>> GetStaffMineAsync(CancellationToken ct = default);
     Task<Result<LeaveDetailDto>> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Result<IList<LeaveApproverDto>>> GetStaffApproversAsync(CancellationToken ct = default);

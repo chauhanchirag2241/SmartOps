@@ -8,11 +8,11 @@ public interface ILeaveRepository
     Task<Guid> CreateAsync(LeaveRequestEntity entity, CancellationToken ct = default);
     Task UpdateAsync(LeaveRequestEntity entity, CancellationToken ct = default);
     Task<LeaveRequestEntity?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<IList<LeaveListRow>> GetStaffListAsync(string? statusFilter, Guid? teacherId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
+    Task<IList<LeaveListRow>> GetStaffListAsync(string? statusFilter, Guid? employeeid, DateOnly? from, DateOnly? to, CancellationToken ct = default);
     Task<IList<LeaveListRow>> GetStudentListAsync(string? statusFilter, Guid? studentId, CancellationToken ct = default);
     Task<IList<LeaveListRow>> GetMineAsync(LeaveRequestType requestType, Guid userId, CancellationToken ct = default);
-    Task<bool> HasOverlappingApprovedAsync(LeaveRequestType type, Guid? teacherId, Guid? studentId, DateOnly from, DateOnly to, Guid? excludeId, CancellationToken ct = default);
-    Task<Guid?> GetTeacherIdByUserIdAsync(Guid userId, CancellationToken ct = default);
+    Task<bool> HasOverlappingApprovedAsync(LeaveRequestType type, Guid? employeeid, Guid? studentId, DateOnly from, DateOnly to, Guid? excludeId, CancellationToken ct = default);
+    Task<Guid?> GetEmployeeIdByUserIdAsync(Guid userId, CancellationToken ct = default);
     Task<Guid?> GetClassIdForStudentAsync(Guid studentId, CancellationToken ct = default);
     Task<Guid?> GetClassTeacherUserIdAsync(Guid classId, CancellationToken ct = default);
     Task<IList<Guid>> GetSchoolAdminUserIdsAsync(Guid schoolId, CancellationToken ct = default);
@@ -42,7 +42,7 @@ public class LeaveListRow
 {
     public Guid Id { get; set; }
     public short RequestType { get; set; }
-    public Guid? TeacherId { get; set; }
+    public Guid? EmployeeId { get; set; }
     public string? TeacherFirstName { get; set; }
     public string? TeacherLastName { get; set; }
     public Guid? StudentId { get; set; }

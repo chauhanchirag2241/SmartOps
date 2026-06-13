@@ -34,7 +34,7 @@ public interface IPayrollRepository
 public sealed class PayrollEntryListRow
 {
     public Guid Id { get; init; }
-    public Guid TeacherId { get; init; }
+    public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
     public string? Department { get; init; }
     public decimal BasicSalary { get; init; }
@@ -52,7 +52,7 @@ public sealed class PayslipContextRow
     public Guid RunId { get; init; }
     public int PayYear { get; init; }
     public int PayMonth { get; init; }
-    public Guid TeacherId { get; init; }
+    public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
     public string? EmployeeId { get; init; }
     public string? Department { get; init; }

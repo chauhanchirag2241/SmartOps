@@ -1,10 +1,10 @@
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Attributes;
 
-namespace SmartOps.Domain.Modules.Teacher.Entities;
+namespace SmartOps.Domain.Modules.Employee.Entities;
 
 [TrackHistory]
-public class TeacherEntity : AuditableEntity
+public class EmployeeEntity : AuditableEntity
 {
     public Guid Id { get; set; }
     public string FirstName { get; set; } = null!;
@@ -29,17 +29,14 @@ public class TeacherEntity : AuditableEntity
     public string? BankIfscCode { get; set; }
     public string? BankName { get; set; }
     public Guid? ClassId { get; set; }
-    /// <summary>24-hour time HH:mm (e.g. 07:30).</summary>
     public string? ShiftStartTime { get; set; }
-
-    /// <summary>24-hour time HH:mm (e.g. 13:30).</summary>
     public string? ShiftEndTime { get; set; }
-
-    public int? WeeklyPeriods { get; set; }
-    public int? MaxPeriodsPerDay { get; set; }
-    public string Role { get; set; } = "Teacher";
+    public string UserTypeCode { get; set; } = "TEACHER";
+    public string PortalRoleName { get; set; } = "Teacher";
     public bool PortalAccess { get; set; } = true;
     public string? Username { get; set; }
     public Guid? UserId { get; set; }
+    public Guid? DepartmentId { get; set; }
+    public Guid? ReportingManagerId { get; set; }
     public bool IsActive { get; set; } = true;
 }

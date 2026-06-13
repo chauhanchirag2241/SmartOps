@@ -51,7 +51,7 @@ public sealed class ScopesController(
     }
 
     [HttpPost("hod-departments")]
-    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
+    [Authorize(Policy = MenuPolicies.Employees.Edit)]
     public async Task<IActionResult> AssignHodDepartment(
         [FromBody] AssignHodDepartmentDto request,
         CancellationToken cancellationToken)

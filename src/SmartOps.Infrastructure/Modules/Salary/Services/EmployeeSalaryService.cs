@@ -43,7 +43,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             }
 
             dtos.Add(new EmployeeSalaryListItemDto(
-                row.TeacherId,
+                row.EmployeeRecordId,
                 row.EmployeeName,
                 row.EmployeeId,
                 string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
@@ -55,9 +55,9 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
         return Result<IList<EmployeeSalaryListItemDto>>.Success(dtos);
     }
 
-    public async Task<Result<EmployeeSalaryDetailDto>> GetEmployeeDetailAsync(Guid teacherId, CancellationToken ct = default)
+    public async Task<Result<EmployeeSalaryDetailDto>> GetEmployeeDetailAsync(Guid employeeId, CancellationToken ct = default)
     {
-        TeacherSalaryContextRow? context = await _employeeRepo.GetTeacherSalaryContextAsync(teacherId, ct).ConfigureAwait(false);
+        EmployeeSalaryContextRow? context = await _employeeRepo.GetEmployeeSalaryContextAsync(employeeId, ct).ConfigureAwait(false);
         if (context is null)
         {
             return Result<EmployeeSalaryDetailDto>.Failure("Employee not found.");
@@ -75,7 +75,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
     }
 
     public async Task<Result<EmployeeSalaryDetailDto>> AssignOrUpdateAsync(
-        Guid teacherId,
+        Guid employeeId,
         AssignEmployeeSalaryRequestDto request,
         CancellationToken ct = default)
     {
@@ -110,8 +110,8 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             return Result<EmployeeSalaryDetailDto>.Failure("Assign salary only from a published or active structure version.");
         }
 
-        TeacherSalaryContextRow? teacher = await _employeeRepo.GetTeacherSalaryContextAsync(teacherId, ct).ConfigureAwait(false);
-        if (teacher is null)
+        EmployeeSalaryContextRow? employee = await _employeeRepo.GetEmployeeSalaryContextAsync(employeeId, ct).ConfigureAwait(false);
+        if (employee is null)
         {
             return Result<EmployeeSalaryDetailDto>.Failure("Employee not found.");
         }
@@ -125,14 +125,14 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
         }
 
         EmployeeSalaryEntity? activeAssignment =
-            await _employeeRepo.GetActiveAssignmentByTeacherIdAsync(teacherId, ct).ConfigureAwait(false);
+            await _employeeRepo.GetActiveAssignmentByEmployeeIdAsync(employeeId, ct).ConfigureAwait(false);
 
         Guid assignmentId;
         if (activeAssignment is null)
         {
             var assignment = new EmployeeSalaryEntity
             {
-                TeacherId = teacherId,
+                EmployeeId = employeeId,
                 SalaryStructureVersionId = request.SalaryStructureVersionId,
                 EffectiveDate = request.EffectiveDate
             };
@@ -156,11 +156,11 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             .ToList();
 
         await _employeeRepo.ReplaceComponentValuesAsync(assignmentId, valueRows, ct).ConfigureAwait(false);
-        return await GetEmployeeDetailAsync(teacherId, ct).ConfigureAwait(false);
+        return await GetEmployeeDetailAsync(employeeId, ct).ConfigureAwait(false);
     }
 
     private static EmployeeSalaryDetailDto MapDetail(
-        TeacherSalaryContextRow context,
+        EmployeeSalaryContextRow context,
         IList<SalaryVersionComponentListRow> versionComponents,
         IList<EmployeeSalaryComponentEntity> employeeValues)
     {
@@ -185,7 +185,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
         if (!context.EmployeeSalaryId.HasValue)
         {
             return new EmployeeSalaryDetailDto(
-                context.TeacherId,
+                context.EmployeeRecordId,
                 context.EmployeeName,
                 context.EmployeeId,
                 string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,
@@ -207,7 +207,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             employeeValues);
         SalaryBreakdown breakdown = SalaryCalculationHelper.Calculate(merged);
         return new EmployeeSalaryDetailDto(
-            context.TeacherId,
+            context.EmployeeRecordId,
             context.EmployeeName,
             context.EmployeeId,
             string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,

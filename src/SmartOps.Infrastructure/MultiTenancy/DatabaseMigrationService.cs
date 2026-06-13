@@ -16,13 +16,16 @@ public sealed class DatabaseMigrationService : IDatabaseMigrationService
     private const string SchoolMigrationTag = "School";
 
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DatabaseMigrationService> _logger;
 
     public DatabaseMigrationService(
         IDbConnectionFactory connectionFactory,
+        IServiceScopeFactory scopeFactory,
         ILogger<DatabaseMigrationService> logger)
     {
         _connectionFactory = connectionFactory;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -82,6 +85,8 @@ WHERE isactive = true
                 await MigrateSchoolDatabaseAsync(school.ConnectionString, cancellationToken).ConfigureAwait(false);
                 await VerifySchoolOperationalSchemaAsync(school.ConnectionString, school.Id, cancellationToken)
                     .ConfigureAwait(false);
+                await EnsureSchoolIdentitySeededAsync(school.Id, school.ConnectionString, cancellationToken)
+                    .ConfigureAwait(false);
                 _logger.LogInformation("School database migrations applied for school {SchoolId}.", school.Id);
             }
             catch (Exception ex)
@@ -135,6 +140,54 @@ SELECT EXISTS (
 
             RunMigrations(connectionString, SchoolMigrationTag);
         }
+    }
+
+    private async Task EnsureSchoolIdentitySeededAsync(
+        Guid schoolId,
+        string connectionString,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection schoolDb = new(connectionString);
+        await schoolDb.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        string g = DatabaseConfig.Schema_Global;
+        int menuCount = await schoolDb.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                $"""
+SELECT COUNT(*)::int
+FROM {g}.{DatabaseConfig.TableMenus}
+WHERE isactive = true
+""",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        bool hasEmployeesMenu = await schoolDb.ExecuteScalarAsync<bool>(
+            new CommandDefinition(
+                $"""
+SELECT EXISTS (
+    SELECT 1 FROM {g}.{DatabaseConfig.TableMenus}
+    WHERE code = 'EMPLOYEES' AND isactive = true
+)
+""",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (menuCount > 0 && hasEmployeesMenu)
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "School {SchoolId} dedicated database is missing identity menu seed data (menus={MenuCount}, employeesMenu={HasEmployees}); seeding from platform.",
+            schoolId,
+            menuCount,
+            hasEmployeesMenu);
+
+        await using NpgsqlConnection platform = (NpgsqlConnection)await _connectionFactory
+            .CreatePlatformConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        using IServiceScope scope = _scopeFactory.CreateScope();
+        SchoolDatabaseSeedService seedService = scope.ServiceProvider.GetRequiredService<SchoolDatabaseSeedService>();
+        await seedService.SeedDefaultsAsync(platform, schoolDb, schoolId, cancellationToken).ConfigureAwait(false);
     }
 
     private void RunMigrations(string connectionString, string migrationTag)

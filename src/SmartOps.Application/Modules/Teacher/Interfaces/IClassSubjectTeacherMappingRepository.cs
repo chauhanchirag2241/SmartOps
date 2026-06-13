@@ -5,8 +5,8 @@ namespace SmartOps.Application.Modules.Teacher.Interfaces;
 
 public interface IClassSubjectTeacherMappingRepository
 {
-    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByTeacherIdAsync(
-        Guid teacherId,
+    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeIdAsync(
+        Guid employeeid,
         Guid? academicYearId,
         CancellationToken cancellationToken = default);
 

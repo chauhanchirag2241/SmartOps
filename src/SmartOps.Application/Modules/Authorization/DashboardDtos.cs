@@ -42,7 +42,7 @@ public sealed class DashboardResponseDto
 
     public IReadOnlyList<RecentStudentDto>? RecentStudents { get; init; }
 
-    public IReadOnlyList<DashboardTeacherDto>? Teachers { get; init; }
+    public IReadOnlyList<DashboardTeacherDto>? Employees { get; init; }
 
     public IReadOnlyList<HomeworkDueDto>? HomeworkDue { get; init; }
 

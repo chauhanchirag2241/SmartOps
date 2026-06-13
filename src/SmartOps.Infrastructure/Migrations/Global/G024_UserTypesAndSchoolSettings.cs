@@ -21,7 +21,7 @@ public sealed class G024_UserTypesAndSchoolSettings : Migration
         (Guid.Parse("30000000-0000-0000-0000-000000000004"), UserTypeCodes.Hod, "HOD"),
         (Guid.Parse("30000000-0000-0000-0000-000000000005"), UserTypeCodes.Teacher, "Teacher"),
         (Guid.Parse("30000000-0000-0000-0000-000000000006"), UserTypeCodes.Accountant, "Accountant"),
-        (Guid.Parse("30000000-0000-0000-0000-000000000007"), UserTypeCodes.Staff, "Staff"),
+        (Guid.Parse("30000000-0000-0000-0000-000000000007"), UserTypeCodes.Staff, "Other Staff"),
     ];
 
     public override void Up()

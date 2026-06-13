@@ -22,7 +22,7 @@ public sealed class S112_CreateHomeworkTables : Migration
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classid").AsGuid().NotNullable()
                 .WithColumn("subjectid").AsGuid().NotNullable()
-                .WithColumn("teacherid").AsGuid().NotNullable()
+                .WithColumn("employeeid").AsGuid().NotNullable()
                 .WithColumn("title").AsString(300).NotNullable()
                 .WithColumn("description").AsString(int.MaxValue).Nullable()
                 .WithColumn("assigndate").AsDate().NotNullable()

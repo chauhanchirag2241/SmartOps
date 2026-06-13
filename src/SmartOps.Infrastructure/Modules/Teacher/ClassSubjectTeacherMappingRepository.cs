@@ -32,18 +32,18 @@ END
 
     private string Schema => _context.OperationalSchema;
 
-    public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByTeacherIdAsync(
-        Guid teacherId,
+    public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeIdAsync(
+        Guid employeeid,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
         string sql = BuildSelectSql("""
-            m.teacherid = @TeacherId
+            m.employeeid = @EmployeeId
             AND m.isactive = true
             AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
             """);
 
-        return await QueryMappingsAsync(sql, new { TeacherId = teacherId, AcademicYearId = academicYearId }, cancellationToken)
+        return await QueryMappingsAsync(sql, new { employeeid = employeeid, AcademicYearId = academicYearId }, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -65,7 +65,7 @@ END
     public async Task<ClassSubjectTeacherMappingEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, teacherid AS TeacherId,
+SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
        academicyearid AS AcademicYearId, isclassteacher AS IsClassTeacher,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -86,7 +86,7 @@ LIMIT 1
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, teacherid AS TeacherId,
+SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
        academicyearid AS AcademicYearId, isclassteacher AS IsClassTeacher,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -166,10 +166,10 @@ SELECT EXISTS (
 
         string sql = $"""
 INSERT INTO {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-    (id, classid, subjectid, teacherid, academicyearid, isclassteacher,
+    (id, classid, subjectid, employeeid, academicyearid, isclassteacher,
      isactive, versionno, createdby, createdon, updatedby, updatedon)
 VALUES
-    (@Id, @ClassId, @SubjectId, @TeacherId, @AcademicYearId, @IsClassTeacher,
+    (@Id, @ClassId, @SubjectId, @EmployeeId, @AcademicYearId, @IsClassTeacher,
      true, 1, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn)
 RETURNING id
 """;
@@ -187,7 +187,7 @@ RETURNING id
 
         string sql = $"""
 UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-SET teacherid = @TeacherId,
+SET employeeid = @EmployeeId,
     isclassteacher = @IsClassTeacher,
     isactive = @IsActive,
     updatedby = @UpdatedBy,
@@ -291,9 +291,9 @@ WHERE classid = @ClassId AND academicyearid = @AcademicYearId AND isactive = tru
         string sql = $"""
 SELECT DISTINCT m.classid
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
-WHERE {BuildTeacherUserMatchSql()}
-  AND m.teacherid IS NOT NULL
+INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+WHERE {BuildEmployeeUserMatchSql()}
+  AND m.employeeid IS NOT NULL
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -311,9 +311,9 @@ WHERE {BuildTeacherUserMatchSql()}
         string sql = $"""
 SELECT DISTINCT m.subjectid
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
-WHERE {BuildTeacherUserMatchSql()}
-  AND m.teacherid IS NOT NULL
+INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+WHERE {BuildEmployeeUserMatchSql()}
+  AND m.employeeid IS NOT NULL
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -331,9 +331,9 @@ WHERE {BuildTeacherUserMatchSql()}
         string sql = $"""
 SELECT m.classid AS ClassId, m.subjectid AS SubjectId
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
-WHERE {BuildTeacherUserMatchSql()}
-  AND m.teacherid IS NOT NULL
+INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+WHERE {BuildEmployeeUserMatchSql()}
+  AND m.employeeid IS NOT NULL
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -381,7 +381,7 @@ SELECT
     c.classname AS ClassName,
     {SectionLabelSql} AS Section,
     COUNT(m.id) FILTER (WHERE m.isactive = true) AS SubjectCount,
-    COUNT(m.id) FILTER (WHERE m.isactive = true AND m.teacherid IS NOT NULL) AS TeachersAssignedCount,
+    COUNT(m.id) FILTER (WHERE m.isactive = true AND m.employeeid IS NOT NULL) AS EmployeesAssignedCount,
     COUNT(m.id) FILTER (WHERE m.isactive = true AND m.isclassteacher = true) AS ClassTeacherCount
 FROM {Schema}.{DatabaseConfig.TableClasses} c
 LEFT JOIN {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
@@ -402,7 +402,7 @@ ORDER BY c.classname, c.section
         return rows.ToList();
     }
 
-    private static string BuildTeacherUserMatchSql() =>
+    private static string BuildEmployeeUserMatchSql() =>
         $"""
 (t.userid = @UserId OR EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
@@ -418,14 +418,14 @@ SELECT
     m.subjectid AS SubjectId,
     s.subjectname AS SubjectName,
     s.subjectcode AS SubjectCode,
-    m.teacherid AS TeacherId,
-    CASE WHEN m.teacherid IS NULL THEN NULL ELSE trim(t.firstname || ' ' || t.lastname) END AS TeacherName,
+    m.employeeid AS employeeid,
+    CASE WHEN m.employeeid IS NULL THEN NULL ELSE trim(t.firstname || ' ' || t.lastname) END AS EmployeeName,
     m.academicyearid AS AcademicYearId,
     m.isclassteacher AS IsClassTeacher
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = m.classid
 INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = m.subjectid
-LEFT JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE {whereClause}
 ORDER BY s.subjectname
 """;

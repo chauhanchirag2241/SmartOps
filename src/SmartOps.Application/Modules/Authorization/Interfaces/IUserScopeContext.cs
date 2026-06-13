@@ -22,7 +22,7 @@ public interface IUserScopeContext
 
     IReadOnlyList<Guid> AllowedDepartmentIds { get; }
 
-    IReadOnlyList<Guid> AllowedTeacherIds { get; }
+    IReadOnlyList<Guid> AllowedEmployeeIds { get; }
 
     Guid? OwnStudentId { get; }
 
@@ -40,5 +40,5 @@ public interface IUserScopeContext
 
     bool HasDepartmentAccess(Guid departmentId);
 
-    bool HasTeacherAccess(Guid teacherId);
+    bool HasEmployeeAccess(Guid employeeId);
 }

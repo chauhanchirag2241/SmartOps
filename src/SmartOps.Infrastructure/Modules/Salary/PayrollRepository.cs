@@ -155,7 +155,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT pe.id AS Id,
-                   pe.teacherid AS TeacherId,
+                   pe.employeeid AS EmployeeRecordId,
                    TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
                    {DepartmentExpr} AS Department,
                    pe.basicsalary AS BasicSalary,
@@ -177,7 +177,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pe.netsalary AS NetSalary,
                    pe.status AS Status
             FROM {Schema}.{DatabaseConfig.TablePayrollEntries} pe
-            INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = pe.teacherid
+            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = pe.employeeid
             WHERE pe.payrollrunid = @RunId AND pe.isactive = true
             ORDER BY EmployeeName;
             """;
@@ -191,7 +191,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, payrollrunid AS PayrollRunId, teacherid AS TeacherId,
+            SELECT id AS Id, payrollrunid AS PayrollRunId, employeeid AS EmployeeId,
                    basicsalary AS BasicSalary,
                    grosssalary AS GrossSalary, totaldeductions AS TotalDeductions,
                    netsalary AS NetSalary, status AS Status,
@@ -217,11 +217,11 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TablePayrollEntries}
-                (id, payrollrunid, teacherid, basicsalary, grosssalary,
+                (id, payrollrunid, employeeid, basicsalary, grosssalary,
                  totaldeductions, netsalary, status, workingdays, presentdays,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @PayrollRunId, @TeacherId, @BasicSalary, @GrossSalary,
+                (@Id, @PayrollRunId, @EmployeeId, @BasicSalary, @GrossSalary,
                  @TotalDeductions, @NetSalary, @Status, @WorkingDays, @PresentDays,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
@@ -333,7 +333,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pe.payrollrunid AS RunId,
                    pr.payyear AS PayYear,
                    pr.paymonth AS PayMonth,
-                   pe.teacherid AS TeacherId,
+                   pe.employeeid AS EmployeeRecordId,
                    TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
                    t.employeeid AS EmployeeId,
                    {DepartmentExpr} AS Department,
@@ -349,7 +349,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    t.bankifsccode AS BankIfscCode
             FROM {Schema}.{DatabaseConfig.TablePayrollEntries} pe
             INNER JOIN {Schema}.{DatabaseConfig.TablePayrollRuns} pr ON pr.id = pe.payrollrunid
-            INNER JOIN {Schema}.{DatabaseConfig.TableTeachers} t ON t.id = pe.teacherid
+            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = pe.employeeid
             WHERE pe.id = @EntryId AND pe.isactive = true;
             """;
         return await connection

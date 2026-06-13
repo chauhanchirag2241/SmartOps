@@ -13,7 +13,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableAcademicYearSemesters,
         DatabaseConfig.TableClasses,
         DatabaseConfig.TableSubjects,
-        DatabaseConfig.TableTeachers,
+        DatabaseConfig.TableEmployees,
         DatabaseConfig.TableStudents,
         DatabaseConfig.TableStudentParents,
         DatabaseConfig.TableStudentAcademics,

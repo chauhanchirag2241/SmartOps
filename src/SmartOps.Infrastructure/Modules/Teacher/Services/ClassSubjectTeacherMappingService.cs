@@ -97,7 +97,7 @@ ORDER BY subjectname
                 new CommandDefinition(
                     $"""
 SELECT id AS Id, trim(firstname || ' ' || lastname) AS Name
-FROM {schema}.{DatabaseConfig.TableTeachers}
+FROM {schema}.{DatabaseConfig.TableEmployees}
 WHERE isactive = true
 ORDER BY firstname, lastname
 """,
@@ -121,7 +121,7 @@ ORDER BY firstname, lastname
             AcademicYears = academicYears.ToList(),
             Classes = classList,
             Subjects = subjectList,
-            Teachers = teachers.ToList(),
+            Employees = teachers.ToList(),
             ClassSummaries = summaryList
         };
     }
@@ -167,7 +167,7 @@ ORDER BY firstname, lastname
             Guid academicYearId = await ResolveAcademicYearForClassAsync(request.ClassId, cancellationToken)
                 .ConfigureAwait(false);
 
-            Guid? teacherId = NormalizeTeacherId(request.TeacherId);
+            Guid? employeeId = NormalizeEmployeeId(request.EmployeeId);
 
             ClassSubjectTeacherMappingEntity? existing = await _repository
                 .FindByClassSubjectYearAsync(request.ClassId, request.SubjectId, academicYearId, cancellationToken)
@@ -187,7 +187,7 @@ ORDER BY firstname, lastname
             Guid mappingId;
             if (existing is not null)
             {
-                existing.TeacherId = teacherId;
+                existing.EmployeeId = employeeId;
                 existing.IsClassTeacher = request.IsClassTeacher;
                 existing.IsActive = true;
                 await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
@@ -200,7 +200,7 @@ ORDER BY firstname, lastname
                     {
                         ClassId = request.ClassId,
                         SubjectId = request.SubjectId,
-                        TeacherId = teacherId,
+                        EmployeeId = employeeId,
                         AcademicYearId = academicYearId,
                         IsClassTeacher = request.IsClassTeacher
                     },
@@ -210,9 +210,9 @@ ORDER BY firstname, lastname
             ClassSubjectTeacherMappingDto created = await RequireDtoByIdAsync(mappingId, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (teacherId.HasValue)
+            if (employeeId.HasValue)
             {
-                await BumpTeacherScopeIfLinkedAsync(teacherId.Value, cancellationToken).ConfigureAwait(false);
+                await BumpEmployeeScopeIfLinkedAsync(employeeId.Value, cancellationToken).ConfigureAwait(false);
             }
 
             return created;
@@ -253,7 +253,7 @@ ORDER BY firstname, lastname
         CancellationToken cancellationToken = default)
     {
         bool classTeacherOnly = request.IsClassTeacher.HasValue
-            && !request.TeacherId.HasValue
+            && !request.EmployeeId.HasValue
             && !request.AssignLater;
 
         if (classTeacherOnly)
@@ -264,21 +264,21 @@ ORDER BY firstname, lastname
 
         ClassSubjectTeacherMappingEntity entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
 
-        Guid? previousTeacherId = entity.TeacherId;
-        Guid? teacherId = request.AssignLater
+        Guid? previousEmployeeId = entity.EmployeeId;
+        Guid? employeeId = request.AssignLater
             ? null
-            : request.TeacherId.HasValue
-                ? NormalizeTeacherId(request.TeacherId)
-                : entity.TeacherId;
+            : request.EmployeeId.HasValue
+                ? NormalizeEmployeeId(request.EmployeeId)
+                : entity.EmployeeId;
 
-        if (!request.AssignLater && request.TeacherId.HasValue && teacherId is null)
+        if (!request.AssignLater && request.EmployeeId.HasValue && employeeId is null)
         {
             throw new InvalidOperationException("A valid teacher is required unless assign later is selected.");
         }
 
-        if (request.TeacherId.HasValue || request.AssignLater)
+        if (request.EmployeeId.HasValue || request.AssignLater)
         {
-            entity.TeacherId = teacherId;
+            entity.EmployeeId = employeeId;
         }
 
         if (request.IsClassTeacher.HasValue)
@@ -315,7 +315,7 @@ ORDER BY firstname, lastname
             {
                 throw new InvalidOperationException("Mapping could not be updated. Please refresh and try again.");
             }
-            await BumpTeacherChangesAsync(previousTeacherId, entity.TeacherId, cancellationToken).ConfigureAwait(false);
+            await BumpEmployeeChangesAsync(previousEmployeeId, entity.EmployeeId, cancellationToken).ConfigureAwait(false);
 
             return await RequireDtoByIdAsync(entity.Id, cancellationToken).ConfigureAwait(false);
         }
@@ -335,7 +335,7 @@ ORDER BY firstname, lastname
             new UpdateClassSubjectTeacherMappingDto
             {
                 AssignLater = request.AssignLater,
-                TeacherId = request.TeacherId
+                EmployeeId = request.EmployeeId
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -345,9 +345,9 @@ ORDER BY firstname, lastname
         ClassSubjectTeacherMappingEntity? entity = await _repository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
         await _repository.SoftDeleteAsync(id, cancellationToken).ConfigureAwait(false);
 
-        if (entity?.TeacherId is Guid teacherId)
+        if (entity?.EmployeeId is Guid empId)
         {
-            await BumpTeacherScopeIfLinkedAsync(teacherId, cancellationToken).ConfigureAwait(false);
+            await BumpEmployeeScopeIfLinkedAsync(empId, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -388,7 +388,7 @@ ORDER BY firstname, lastname
 
         return pg.SqlState switch
         {
-            PostgresErrorCodes.NotNullViolation when pg.ColumnName == "teacherid" =>
+            PostgresErrorCodes.NotNullViolation when pg.ColumnName == "EmployeeId" =>
                 new InvalidOperationException(
                     "Cannot save without a teacher. Assign a teacher, or run database migration S111 to allow \"Assign later\"."),
             PostgresErrorCodes.NotNullViolation =>
@@ -425,29 +425,29 @@ ORDER BY firstname, lastname
         return entity ?? throw new InvalidOperationException("Mapping not found.");
     }
 
-    private static Guid? NormalizeTeacherId(Guid? teacherId)
+    private static Guid? NormalizeEmployeeId(Guid? employeeId)
     {
-        if (!teacherId.HasValue || teacherId.Value == Guid.Empty)
+        if (!employeeId.HasValue || employeeId.Value == Guid.Empty)
         {
             return null;
         }
 
-        return teacherId;
+        return employeeId;
     }
 
-    private async Task BumpTeacherChangesAsync(
-        Guid? previousTeacherId,
-        Guid? currentTeacherId,
+    private async Task BumpEmployeeChangesAsync(
+        Guid? previousEmployeeId,
+        Guid? currentEmployeeId,
         CancellationToken cancellationToken)
     {
-        if (previousTeacherId.HasValue && previousTeacherId != currentTeacherId)
+        if (previousEmployeeId.HasValue && previousEmployeeId != currentEmployeeId)
         {
-            await BumpTeacherScopeIfLinkedAsync(previousTeacherId.Value, cancellationToken).ConfigureAwait(false);
+            await BumpEmployeeScopeIfLinkedAsync(previousEmployeeId.Value, cancellationToken).ConfigureAwait(false);
         }
 
-        if (currentTeacherId.HasValue)
+        if (currentEmployeeId.HasValue)
         {
-            await BumpTeacherScopeIfLinkedAsync(currentTeacherId.Value, cancellationToken).ConfigureAwait(false);
+            await BumpEmployeeScopeIfLinkedAsync(currentEmployeeId.Value, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -490,7 +490,7 @@ LIMIT 1
         return latest ?? throw new InvalidOperationException("No academic year found.");
     }
 
-    private async Task BumpTeacherScopeIfLinkedAsync(Guid teacherId, CancellationToken cancellationToken)
+    private async Task BumpEmployeeScopeIfLinkedAsync(Guid employeeId, CancellationToken cancellationToken)
     {
         if (!TryGetSchoolId(out Guid schoolId))
         {
@@ -498,13 +498,13 @@ LIMIT 1
         }
 
         string sql = $"""
-SELECT userid FROM {_context.OperationalSchema}.teachers
-WHERE id = @TeacherId AND userid IS NOT NULL AND isactive = true
+SELECT userid FROM {_context.OperationalSchema}.{DatabaseConfig.TableEmployees}
+WHERE id = @EmployeeId AND userid IS NOT NULL AND isactive = true
 LIMIT 1
 """;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         Guid? userId = await connection.QuerySingleOrDefaultAsync<Guid?>(
-            new CommandDefinition(sql, new { TeacherId = teacherId }, cancellationToken: cancellationToken));
+            new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: cancellationToken));
 
         if (userId.HasValue)
         {

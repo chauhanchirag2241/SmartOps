@@ -7,7 +7,7 @@ public class HomeworkEntity : AuditableEntity
     public Guid Id { get; set; }
     public Guid ClassId { get; set; }
     public Guid SubjectId { get; set; }
-    public Guid TeacherId { get; set; }
+    public Guid EmployeeId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateOnly AssignDate { get; set; }

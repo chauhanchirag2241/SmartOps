@@ -153,7 +153,7 @@ LIMIT 1
 
         string sql = $"""
 SELECT userid AS UserId, email AS Email
-FROM {schema}.teachers
+FROM {schema}.employees
 WHERE isactive = true
   AND right(regexp_replace(mobile, '\D', '', 'g'), 10) = @Mobile
 UNION ALL

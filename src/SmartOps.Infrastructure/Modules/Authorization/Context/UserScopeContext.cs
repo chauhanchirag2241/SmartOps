@@ -48,7 +48,7 @@ public sealed class UserScopeContext : IUserScopeContext
 
     public IReadOnlyList<Guid> AllowedDepartmentIds => _scope?.AllowedDepartmentIds ?? [];
 
-    public IReadOnlyList<Guid> AllowedTeacherIds => _scope?.AllowedTeacherIds ?? [];
+    public IReadOnlyList<Guid> AllowedEmployeeIds => _scope?.AllowedEmployeeIds ?? [];
 
     public Guid? OwnStudentId => _scope?.OwnStudentId;
 
@@ -89,8 +89,8 @@ public sealed class UserScopeContext : IUserScopeContext
     public bool HasDepartmentAccess(Guid departmentId) =>
         IsGlobalScope || AllowedDepartmentIds.Contains(departmentId);
 
-    public bool HasTeacherAccess(Guid teacherId) =>
-        IsGlobalScope || AllowedTeacherIds.Contains(teacherId);
+    public bool HasEmployeeAccess(Guid employeeId) =>
+        IsGlobalScope || AllowedEmployeeIds.Contains(employeeId);
 
     private Guid? GetCurrentUserId()
     {

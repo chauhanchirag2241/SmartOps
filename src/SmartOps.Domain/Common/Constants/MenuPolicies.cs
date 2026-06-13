@@ -71,13 +71,23 @@ public static class MenuPolicies
         public const string ListForAttendanceOrModule = "Menu:STUDENTS:ViewOrAttendanceView";
     }
 
+    public static class Employees
+    {
+        public const string View = "Menu:EMPLOYEES:View";
+        public const string Add = "Menu:EMPLOYEES:Add";
+        public const string Edit = "Menu:EMPLOYEES:Edit";
+        public const string Delete = "Menu:EMPLOYEES:Delete";
+        public const string Export = "Menu:EMPLOYEES:Export";
+    }
+
+    [Obsolete("Use Employees instead.")]
     public static class Teachers
     {
-        public const string View = "Menu:TEACHERS:View";
-        public const string Add = "Menu:TEACHERS:Add";
-        public const string Edit = "Menu:TEACHERS:Edit";
-        public const string Delete = "Menu:TEACHERS:Delete";
-        public const string Export = "Menu:TEACHERS:Export";
+        public const string View = Employees.View;
+        public const string Add = Employees.Add;
+        public const string Edit = Employees.Edit;
+        public const string Delete = Employees.Delete;
+        public const string Export = Employees.Export;
     }
 
     public static class Classes

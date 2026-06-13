@@ -174,7 +174,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
             SELECT DISTINCT COALESCE(t.userid, u.id) AS Id,
                    TRIM(COALESCE(t.firstname, '') || ' ' || COALESCE(t.lastname, '')) AS Name,
                    t.email AS Subtitle
-            FROM {Schema}.{DatabaseConfig.TableTeachers} t
+            FROM {Schema}.{DatabaseConfig.TableEmployees} t
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} u
                 ON u.isactive = true
                AND t.userid IS NULL

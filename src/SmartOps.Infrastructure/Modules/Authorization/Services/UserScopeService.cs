@@ -170,8 +170,8 @@ ON CONFLICT (userid) DO UPDATE SET
             classIds = await GetClassIdsFromDepartmentTeachersAsync(schema, departmentIds, cancellationToken).ConfigureAwait(false);
         }
 
-        IReadOnlyList<Guid> teacherIds = await _scopeMapping
-            .GetTeacherIdsByDepartmentsAsync(schema, departmentIds, cancellationToken)
+        IReadOnlyList<Guid> employeeids = await _scopeMapping
+            .GetEmployeeIdsByDepartmentsAsync(schema, departmentIds, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<Guid> studentIds = await _scopeMapping
@@ -185,7 +185,7 @@ ON CONFLICT (userid) DO UPDATE SET
             IsGlobalScope = false,
             AllowedDepartmentIds = departmentIds,
             AllowedClassIds = classIds,
-            AllowedTeacherIds = teacherIds,
+            AllowedEmployeeIds = employeeids,
             AllowedStudentIds = studentIds,
             ActiveAcademicYearId = academicYearId
         };
@@ -199,7 +199,7 @@ ON CONFLICT (userid) DO UPDATE SET
         string sql = $"""
 SELECT DISTINCT m.classid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE t.departmentid = ANY(@DepartmentIds)
   AND m.isactive = true
   AND t.isactive = true
@@ -219,7 +219,7 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         CancellationToken cancellationToken)
     {
         await _scopeMapping
-            .EnsureTeacherLinkedToUserAsync(schema, userId, cancellationToken)
+            .EnsureEmployeeLinkedToUserAsync(schema, userId, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<Guid> classIds = await ResolveTeacherClassIdsWithFallbackAsync(
@@ -251,13 +251,13 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         CancellationToken cancellationToken)
     {
         IReadOnlyList<Guid> classIds = await _scopeMapping
-            .GetTeacherClassIdsAsync(schema, userId, academicYearId, cancellationToken)
+            .GetEmployeeClassIdsAsync(schema, userId, academicYearId, cancellationToken)
             .ConfigureAwait(false);
 
         if (classIds.Count == 0 && academicYearId.HasValue)
         {
             classIds = await _scopeMapping
-                .GetTeacherClassIdsAsync(schema, userId, null, cancellationToken)
+                .GetEmployeeClassIdsAsync(schema, userId, null, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -271,13 +271,13 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         CancellationToken cancellationToken)
     {
         IReadOnlyList<Guid> subjectIds = await _scopeMapping
-            .GetTeacherSubjectIdsAsync(schema, userId, academicYearId, cancellationToken)
+            .GetEmployeeSubjectIdsAsync(schema, userId, academicYearId, cancellationToken)
             .ConfigureAwait(false);
 
         if (subjectIds.Count == 0 && academicYearId.HasValue)
         {
             subjectIds = await _scopeMapping
-                .GetTeacherSubjectIdsAsync(schema, userId, null, cancellationToken)
+                .GetEmployeeSubjectIdsAsync(schema, userId, null, cancellationToken)
                 .ConfigureAwait(false);
         }
 

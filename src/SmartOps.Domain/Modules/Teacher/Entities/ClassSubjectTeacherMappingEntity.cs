@@ -10,7 +10,7 @@ public sealed class ClassSubjectTeacherMappingEntity : AuditableEntity
 
     public Guid SubjectId { get; set; }
 
-    public Guid? TeacherId { get; set; }
+    public Guid? EmployeeId { get; set; }
 
     public Guid AcademicYearId { get; set; }
 

@@ -27,7 +27,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             [
                 DashboardWidgetCodes.StudentsStat,
                 DashboardWidgetCodes.SalaryDisbursed,
-                DashboardWidgetCodes.TeachersStat
+                DashboardWidgetCodes.EmployeesStat
             ]);
 
         widgetRepo
@@ -36,7 +36,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             [
                 Template(DashboardWidgetCodes.StudentsStat, MenuCodes.Students, 1),
                 Template(DashboardWidgetCodes.SalaryDisbursed, MenuCodes.SalaryPayroll, 5),
-                Template(DashboardWidgetCodes.TeachersStat, MenuCodes.Teachers, 2),
+                Template(DashboardWidgetCodes.EmployeesStat, MenuCodes.Employees, 2),
             ]);
 
         var permissionService = new Mock<IPermissionService>();
@@ -45,7 +45,7 @@ public sealed class DashboardWidgetPermissionServiceTests
             .Returns(Task.CompletedTask);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.Students)).Returns(true);
         permissionService.Setup(p => p.HasViewAccess(MenuCodes.SalaryPayroll)).Returns(false);
-        permissionService.Setup(p => p.HasViewAccess(MenuCodes.Teachers)).Returns(true);
+        permissionService.Setup(p => p.HasViewAccess(MenuCodes.Employees)).Returns(true);
 
         var sut = new DashboardWidgetPermissionService(
             currentUser.Object,
@@ -56,7 +56,7 @@ public sealed class DashboardWidgetPermissionServiceTests
 
         Assert.Equal(2, result.Count);
         Assert.Contains(result, w => w.Code == DashboardWidgetCodes.StudentsStat);
-        Assert.Contains(result, w => w.Code == DashboardWidgetCodes.TeachersStat);
+        Assert.Contains(result, w => w.Code == DashboardWidgetCodes.EmployeesStat);
         Assert.DoesNotContain(result, w => w.Code == DashboardWidgetCodes.SalaryDisbursed);
     }
 

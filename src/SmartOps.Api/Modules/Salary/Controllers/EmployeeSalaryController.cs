@@ -28,12 +28,12 @@ public sealed class EmployeeSalaryController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
-    [HttpGet("{teacherId:guid}")]
+    [HttpGet("{EmployeeId:guid}")]
     [Authorize(Policy = MenuPolicies.SalaryEmployees.View)]
     [ProducesResponseType(typeof(EmployeeSalaryDetailDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetEmployeeDetail(Guid teacherId, CancellationToken ct)
+    public async Task<IActionResult> GetEmployeeDetail(Guid employeeId, CancellationToken ct)
     {
-        var result = await _service.GetEmployeeDetailAsync(teacherId, ct).ConfigureAwait(false);
+        var result = await _service.GetEmployeeDetailAsync(employeeId, ct).ConfigureAwait(false);
         if (!result.IsSuccess)
         {
             return result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true
@@ -44,11 +44,11 @@ public sealed class EmployeeSalaryController : ControllerBase
         return Ok(result.Value);
     }
 
-    [HttpPut("{teacherId:guid}")]
+    [HttpPut("{EmployeeId:guid}")]
     [Authorize(Policy = MenuPolicies.SalaryEmployees.Edit)]
     [ProducesResponseType(typeof(EmployeeSalaryDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> AssignOrUpdate(
-        Guid teacherId,
+        Guid employeeId,
         [FromBody] AssignEmployeeSalaryRequestDto? request,
         CancellationToken ct)
     {
@@ -57,7 +57,7 @@ public sealed class EmployeeSalaryController : ControllerBase
             return BadRequest("Request body is required.");
         }
 
-        var result = await _service.AssignOrUpdateAsync(teacherId, request, ct).ConfigureAwait(false);
+        var result = await _service.AssignOrUpdateAsync(employeeId, request, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 }

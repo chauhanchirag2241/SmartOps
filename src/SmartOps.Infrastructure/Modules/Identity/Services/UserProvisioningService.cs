@@ -4,7 +4,7 @@ using SmartOps.Application.Modules.Identity.Models;
 using SmartOps.Application.Modules.Identity.Utilities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Modules.Student.Entities;
-using SmartOps.Domain.Modules.Teacher.Entities;
+using SmartOps.Domain.Modules.Employee.Entities;
 using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
@@ -106,24 +106,24 @@ public sealed class UserProvisioningService : IUserProvisioningService
         };
     }
 
-    public async Task<Guid?> ProvisionTeacherUserAsync(
-        TeacherEntity teacher,
+    public async Task<Guid?> ProvisionEmployeeUserAsync(
+        EmployeeEntity employee,
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        string roleName = _roleMapper.ResolveRoleName(teacher.Role, RoleNames.Teacher);
+        string roleName = _roleMapper.ResolveRoleName(employee.PortalRoleName, RoleNames.Teacher);
 
         ProvisionUserResult? result = await ProvisionSchoolUserAsync(
             new ProvisionUserRequest
             {
                 SchoolId = schoolId,
                 RoleName = roleName,
-                UserTypeCode = UserTypeCodes.Teacher,
-                PortalAccess = teacher.PortalAccess,
-                Email = teacher.Email,
-                Username = teacher.Username,
-                DateOfBirth = teacher.Dob,
-                LoginIdentifier = teacher.EmployeeId
+                UserTypeCode = employee.UserTypeCode,
+                PortalAccess = employee.PortalAccess,
+                Email = employee.Email,
+                Username = employee.Username,
+                DateOfBirth = employee.Dob,
+                LoginIdentifier = employee.EmployeeId
             },
             cancellationToken).ConfigureAwait(false);
 

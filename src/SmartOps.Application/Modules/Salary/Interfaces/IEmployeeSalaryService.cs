@@ -10,10 +10,10 @@ public interface IEmployeeSalaryService
         string? designation,
         CancellationToken ct = default);
 
-    Task<Result<EmployeeSalaryDetailDto>> GetEmployeeDetailAsync(Guid teacherId, CancellationToken ct = default);
+    Task<Result<EmployeeSalaryDetailDto>> GetEmployeeDetailAsync(Guid employeeid, CancellationToken ct = default);
 
     Task<Result<EmployeeSalaryDetailDto>> AssignOrUpdateAsync(
-        Guid teacherId,
+        Guid employeeid,
         AssignEmployeeSalaryRequestDto request,
         CancellationToken ct = default);
 }

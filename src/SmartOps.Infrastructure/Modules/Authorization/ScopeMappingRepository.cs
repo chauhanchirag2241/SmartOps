@@ -32,13 +32,13 @@ LIMIT 1
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    public async Task EnsureTeacherLinkedToUserAsync(
+    public async Task EnsureEmployeeLinkedToUserAsync(
         string schema,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-UPDATE {schema}.{DatabaseConfig.TableTeachers} t
+UPDATE {schema}.{DatabaseConfig.TableEmployees} t
 SET userid = @UserId,
     updatedon = NOW(),
     versionno = t.versionno + 1
@@ -54,17 +54,17 @@ WHERE u.id = @UserId
             new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetTeacherClassIdsAsync(
+    public async Task<IReadOnlyList<Guid>> GetEmployeeClassIdsAsync(
         string schema,
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildTeacherUserMatchSql();
+        string teacherMatch = BuildEmployeeUserMatchSql();
         string sql = $"""
 SELECT DISTINCT m.classid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE {teacherMatch}
   AND m.isactive = true
   AND t.isactive = true
@@ -73,17 +73,17 @@ WHERE {teacherMatch}
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetTeacherSubjectIdsAsync(
+    public async Task<IReadOnlyList<Guid>> GetEmployeeSubjectIdsAsync(
         string schema,
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildTeacherUserMatchSql();
+        string teacherMatch = BuildEmployeeUserMatchSql();
         string sql = $"""
 SELECT DISTINCT m.subjectid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE {teacherMatch}
   AND m.isactive = true
   AND t.isactive = true
@@ -92,7 +92,7 @@ WHERE {teacherMatch}
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string BuildTeacherUserMatchSql() =>
+    private static string BuildEmployeeUserMatchSql() =>
         $"""
 (t.userid = @UserId OR EXISTS (
     SELECT 1
@@ -128,7 +128,7 @@ WHERE userid = @UserId AND isactive = true
         string sql = $"""
 SELECT DISTINCT m.classid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableTeachers} t ON t.id = m.teacherid
+INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE t.departmentid = ANY(@DepartmentIds)
   AND m.isactive = true
   AND t.isactive = true
@@ -136,7 +136,7 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         return await QueryGuidListAsync(sql, new { DepartmentIds = departmentIds.ToArray() }, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetTeacherIdsByDepartmentsAsync(
+    public async Task<IReadOnlyList<Guid>> GetEmployeeIdsByDepartmentsAsync(
         string schema,
         IReadOnlyList<Guid> departmentIds,
         CancellationToken cancellationToken = default)
@@ -147,7 +147,7 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         }
 
         string sql = $"""
-SELECT id FROM {schema}.{DatabaseConfig.TableTeachers}
+SELECT id FROM {schema}.{DatabaseConfig.TableEmployees}
 WHERE departmentid = ANY(@DepartmentIds) AND isactive = true
 """;
         return await QueryGuidListAsync(sql, new { DepartmentIds = departmentIds.ToArray() }, cancellationToken).ConfigureAwait(false);

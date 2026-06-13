@@ -19,7 +19,7 @@ public sealed class G010_SeedMenus : Migration
         (Guid.Parse("10000000-0000-0000-0000-000000000005"), "Settings", MenuCodes.Settings, MenuApplications.Config, null, "/settings", "settings", 5),
         (Guid.Parse("10000000-0000-0000-0000-000000000010"), "Academics", MenuCodes.Academics, MenuApplications.School, null, null, "menu_book", 10),
         (Guid.Parse("10000000-0000-0000-0000-000000000011"), "Students", MenuCodes.Students, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/students", "groups", 11),
-        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Teachers", MenuCodes.Teachers, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/teachers", "co_present", 12),
+        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/employees", "co_present", 12),
         (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/classes", "class", 13),
         (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/subjects", "subject", 14),
         (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/academic-years", "calendar_month", 15),

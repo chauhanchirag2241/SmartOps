@@ -128,6 +128,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IDatabaseMigrationService, DatabaseMigrationService>();
 
+        services.Configure<SmartOps.Infrastructure.Storage.BlobStorageOptions>(configuration.GetSection("BlobStorage"));
+        services.AddScoped<SmartOps.Application.Abstractions.Storage.IBlobStorageService, SmartOps.Infrastructure.Storage.BlobStorageService>();
+
         return services;
     }
 

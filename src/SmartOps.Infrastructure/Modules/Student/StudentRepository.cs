@@ -111,6 +111,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         student.FeeHeadAssignments = (await multi.ReadAsync<StudentFeeHeadAssignmentEntity>().ConfigureAwait(false)).ToList();
         student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
         student.CustomFields = (await multi.ReadAsync<StudentCustomFieldEntity>().ConfigureAwait(false)).ToList();
+        student.Documents = (await multi.ReadAsync<StudentDocumentEntity>().ConfigureAwait(false)).ToList();
 
         return student;
     }
@@ -539,6 +540,7 @@ WHERE id = @ParentId AND isactive = true
             SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
+            SELECT * FROM {g}.{DatabaseConfig.TableStudentDocuments} WHERE studentid = @Id AND isactive = true;
         ";
     }
 
@@ -1253,6 +1255,45 @@ WHERE id = @ParentId AND isactive = true
             .ConfigureAwait(false);
 
         return pending;
+    }
+
+    #endregion
+
+    #region Documents and Photo
+
+    public async Task AddDocumentAsync(StudentDocumentEntity document, CancellationToken cancellationToken = default)
+    {
+        var utcNow = DateTime.UtcNow;
+        if (document.Id == Guid.Empty) document.Id = Guid.NewGuid();
+        EnsureInsertAudit(document, utcNow);
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await InsertWithoutReturnAsync(
+            connection,
+            Context.OperationalSchema,
+            DatabaseConfig.TableStudentDocuments,
+            document,
+            null).ConfigureAwait(false);
+    }
+
+    public async Task DeleteDocumentAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await SoftDeleteAsync(connection, Context.OperationalSchema, DatabaseConfig.TableStudentDocuments, documentId, null).ConfigureAwait(false);
+    }
+
+    public async Task<StudentDocumentEntity?> GetDocumentByIdAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentDocuments} WHERE id = @Id AND isactive = true";
+        return await connection.QuerySingleOrDefaultAsync<StudentDocumentEntity>(sql, new { Id = documentId }).ConfigureAwait(false);
+    }
+
+    public async Task UpdatePhotoUrlAsync(Guid studentId, string photoUrl, CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudents} SET photourl = @PhotoUrl, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1 WHERE id = @StudentId AND isactive = true";
+        await connection.ExecuteAsync(sql, new { StudentId = studentId, PhotoUrl = photoUrl, Now = DateTime.UtcNow, Actor = ResolveUpdateActor() }).ConfigureAwait(false);
     }
 
     #endregion

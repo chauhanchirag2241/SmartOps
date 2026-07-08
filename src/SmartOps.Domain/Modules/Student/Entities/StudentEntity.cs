@@ -36,4 +36,6 @@ public class StudentEntity : AuditableEntity
     [TrackHistoryIgnore]
     [JsonPropertyName("customFields")]
     public List<StudentCustomFieldEntity> CustomFields { get; set; } = new();
+
+    [DbIgnore] [TrackHistoryIgnore] public List<StudentDocumentEntity> Documents { get; set; } = new();
 }

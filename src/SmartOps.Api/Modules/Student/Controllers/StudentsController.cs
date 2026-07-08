@@ -467,4 +467,102 @@ public sealed class StudentsController(
             result.StudentsWithFeesTransferred,
             result.TotalPendingTransferred));
     }
+
+    /// <summary>Upload student photo.</summary>
+    [HttpPost("{id:guid}/photo")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadPhoto(
+        [FromRoute] Guid id,
+        IFormFile photo,
+        [FromServices] SmartOps.Application.Abstractions.Storage.IBlobStorageService blobStorage,
+        CancellationToken cancellationToken)
+    {
+        if (photo == null || photo.Length == 0) return BadRequest("Photo is required.");
+        
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        using var stream = photo.OpenReadStream();
+        string extension = System.IO.Path.GetExtension(photo.FileName);
+        string blobName = $"students/{id}/photo{extension}";
+        string url = await blobStorage.UploadFileAsync("student-documents", blobName, stream, photo.ContentType, cancellationToken);
+
+        await studentRepository.UpdatePhotoUrlAsync(id, url, cancellationToken);
+        return Ok(new { Url = url });
+    }
+
+    /// <summary>Upload student document.</summary>
+    [HttpPost("{id:guid}/documents")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadDocument(
+        [FromRoute] Guid id,
+        [FromForm] string documentName,
+        IFormFile document,
+        [FromServices] SmartOps.Application.Abstractions.Storage.IBlobStorageService blobStorage,
+        CancellationToken cancellationToken)
+    {
+        if (document == null || document.Length == 0) return BadRequest("Document is required.");
+        if (string.IsNullOrWhiteSpace(documentName)) return BadRequest("Document name is required.");
+
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        var docEntity = new StudentDocumentEntity
+        {
+            Id = Guid.NewGuid(),
+            StudentId = id,
+            DocumentName = documentName.Trim(),
+            ContentType = document.ContentType
+        };
+
+        using var stream = document.OpenReadStream();
+        string extension = System.IO.Path.GetExtension(document.FileName);
+        string blobName = $"students/{id}/documents/{docEntity.Id}{extension}";
+        docEntity.FileUrl = await blobStorage.UploadFileAsync("student-documents", blobName, stream, document.ContentType, cancellationToken);
+
+        await studentRepository.AddDocumentAsync(docEntity, cancellationToken);
+        return Ok(docEntity);
+    }
+
+    /// <summary>Delete student document.</summary>
+    [HttpDelete("{id:guid}/documents/{documentId:guid}")]
+    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    public async Task<IActionResult> DeleteDocument(
+        [FromRoute] Guid id,
+        [FromRoute] Guid documentId,
+        [FromServices] SmartOps.Application.Abstractions.Storage.IBlobStorageService blobStorage,
+        CancellationToken cancellationToken)
+    {
+        if (!await resourceAuthorization.CanAccessStudentAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        var doc = await studentRepository.GetDocumentByIdAsync(documentId, cancellationToken);
+        if (doc == null || doc.StudentId != id) return NotFound();
+
+        try 
+        {
+            var uri = new Uri(doc.FileUrl);
+            string blobName = uri.AbsolutePath.TrimStart('/');
+            string[] parts = blobName.Split('/', 2);
+            if (parts.Length == 2)
+            {
+                 await blobStorage.DeleteFileAsync("student-documents", parts[1], cancellationToken);
+            }
+        }
+        catch 
+        {
+            // Ignore blob deletion errors
+        }
+
+        await studentRepository.DeleteDocumentAsync(documentId, cancellationToken);
+        return NoContent();
+    }
 }

@@ -60,5 +60,10 @@ public interface IStudentRepository
         Guid sourceAcademicYearId,
         IReadOnlyList<Guid> studentIds,
         CancellationToken cancellationToken = default);
+
+    Task AddDocumentAsync(StudentDocumentEntity document, CancellationToken cancellationToken = default);
+    Task DeleteDocumentAsync(Guid documentId, CancellationToken cancellationToken = default);
+    Task<StudentDocumentEntity?> GetDocumentByIdAsync(Guid documentId, CancellationToken cancellationToken = default);
+    Task UpdatePhotoUrlAsync(Guid studentId, string photoUrl, CancellationToken cancellationToken = default);
 }
 

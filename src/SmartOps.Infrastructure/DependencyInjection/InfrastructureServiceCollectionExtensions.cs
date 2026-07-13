@@ -88,6 +88,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
+        services.AddScoped<IAttendanceReportRepository, AttendanceReportRepository>();
         services.AddScoped<IAttendanceService, AttendanceService>();
         services.AddScoped<IHomeworkRepository, HomeworkRepository>();
         services.AddScoped<IHomeworkService, HomeworkService>();

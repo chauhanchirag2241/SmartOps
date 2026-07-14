@@ -11,7 +11,6 @@ using SmartOps.Application.Modules.Student;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
-using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Constants;
@@ -501,7 +500,7 @@ public sealed class StudentsController(
     public async Task<IActionResult> UploadDocument(
         [FromRoute] Guid id,
         [FromForm] string documentName,
-        IFormFile document,
+        IFormFile document, 
         [FromServices] SmartOps.Application.Abstractions.Storage.IBlobStorageService blobStorage,
         CancellationToken cancellationToken)
     {

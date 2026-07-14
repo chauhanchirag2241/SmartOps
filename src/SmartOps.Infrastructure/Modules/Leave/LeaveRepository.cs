@@ -392,6 +392,22 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         return ids.Distinct().ToList();
     }
 
+    public async Task<Guid?> GetReportingManagerUserIdAsync(Guid employeeId, CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT mgr.userid
+            FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} mgr
+                ON mgr.id = e.reportingmanagerid AND mgr.isactive = true AND mgr.userid IS NOT NULL
+            WHERE e.id = @EmployeeId AND e.isactive = true
+            LIMIT 1;
+            """;
+        return await connection.ExecuteScalarAsync<Guid?>(
+            new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
     public async Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);

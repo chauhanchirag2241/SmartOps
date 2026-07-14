@@ -10,7 +10,7 @@ public sealed class G029_SeedAttendanceReportMenu : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid MenuId = Guid.Parse("10000000-0000-0000-0000-000000000019");
-    private static readonly Guid AcademicsParentId = Guid.Parse("10000000-0000-0000-0000-000000000010");
+    private static readonly Guid ReportsParentId = Guid.Parse("10000000-0000-0000-0000-000000000044");
 
     public override void Up()
     {
@@ -19,7 +19,7 @@ public sealed class G029_SeedAttendanceReportMenu : Migration
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{MenuId}', 'Attendance Report', '{MenuCodes.AttendanceReport}', '{AcademicsParentId}', '/attendance-report', 'analytics', 19, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{MenuId}', 'Attendance Report', '{MenuCodes.AttendanceReport}', '{ReportsParentId}', '/attendance-report', 'analytics', 61, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{MenuCodes.AttendanceReport}'
 );

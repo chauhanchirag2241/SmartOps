@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.AcademicYear;
+using SmartOps.Application.Modules.Audit.Interfaces;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
@@ -13,7 +15,9 @@ namespace SmartOps.Api.Modules.AcademicYear.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class AcademicYearsController(IAcademicYearRepository academicYearRepository) : ControllerBase
+public sealed class AcademicYearsController(
+    IAcademicYearRepository academicYearRepository,
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = MenuPolicies.AcademicYears.Add)]
@@ -92,6 +96,23 @@ public sealed class AcademicYearsController(IAcademicYearRepository academicYear
         {
             return BadRequest(ex.Message);
         }
+    }
+
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = MenuPolicies.AcademicYears.View)]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableAcademicYears, id, page, pageSize, cancellationToken);
+
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

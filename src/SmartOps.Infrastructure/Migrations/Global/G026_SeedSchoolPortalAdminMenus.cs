@@ -9,23 +9,27 @@ namespace SmartOps.Infrastructure.Migrations.Global;
 public sealed class G026_SeedSchoolPortalAdminMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-    private static readonly (Guid Id, string Name, string Code, string Route, string Icon, int Order)[] Menus =
+    private static readonly Guid AdministrationParentId = Guid.Parse("10000000-0000-0000-0000-000000000043");
+
+    private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string Route, string Icon, int Order)[] Menus =
     [
-        (Guid.Parse("10000000-0000-0000-0000-000000000030"), "Users", MenuCodes.Users, "/configuration/users", "group", 30),
-        (Guid.Parse("10000000-0000-0000-0000-000000000031"), "Roles", MenuCodes.Roles, "/configuration/roles", "admin_panel_settings", 31),
-        (Guid.Parse("10000000-0000-0000-0000-000000000032"), "Settings", MenuCodes.Settings, "/settings", "settings", 32),
+        (Guid.Parse("10000000-0000-0000-0000-000000000030"), "Users", MenuCodes.Users, AdministrationParentId, "/configuration/users", "group", 51),
+        (Guid.Parse("10000000-0000-0000-0000-000000000031"), "Roles", MenuCodes.Roles, AdministrationParentId, "/configuration/roles", "admin_panel_settings", 52),
+        // Settings stays as a standalone root link at the end
+        (Guid.Parse("10000000-0000-0000-0000-000000000032"), "Settings", MenuCodes.Settings, null, "/settings", "settings", 90),
     ];
 
     public override void Up()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        foreach ((Guid id, string name, string code, string route, string icon, int order) in Menus)
+        foreach ((Guid id, string name, string code, Guid? parentId, string route, string icon, int order) in Menus)
         {
+            string parentSql = parentId.HasValue ? $"'{parentId}'" : "NULL";
             Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name}', '{code}', NULL, '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{id}', '{name}', '{code}', {parentSql}, '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     WHERE code = '{code}' AND application = '{MenuApplications.School}'

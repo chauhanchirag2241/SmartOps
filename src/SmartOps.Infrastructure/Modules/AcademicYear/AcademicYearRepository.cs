@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Audit;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
@@ -186,6 +187,14 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 throw new InvalidOperationException("Academic year not found or has been deleted.");
             }
 
+            var previousCurrentId = await conn.QuerySingleOrDefaultAsync<Guid?>(
+                $"""
+                SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
+                WHERE isactive = true AND iscurrent = true
+                LIMIT 1;
+                """,
+                transaction: tx).ConfigureAwait(false);
+
             await conn.ExecuteAsync(
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
@@ -209,6 +218,34 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 """,
                 new { Id = id, UpdatedBy = actorId, UpdatedOn = utcNow },
                 tx).ConfigureAwait(false);
+
+            if (previousCurrentId is Guid previousId && previousId != id)
+            {
+                await WriteAuditLogInternalAsync(
+                    conn,
+                    schema,
+                    DatabaseConfig.TableAcademicYears,
+                    previousId,
+                    "Updated",
+                    actorId,
+                    utcNow,
+                    [new FieldChangeDto { Field = "IsCurrent", OldValue = "True", NewValue = "False" }],
+                    tx).ConfigureAwait(false);
+            }
+
+            if (previousCurrentId != id)
+            {
+                await WriteAuditLogInternalAsync(
+                    conn,
+                    schema,
+                    DatabaseConfig.TableAcademicYears,
+                    id,
+                    "Updated",
+                    actorId,
+                    utcNow,
+                    [new FieldChangeDto { Field = "IsCurrent", OldValue = "False", NewValue = "True" }],
+                    tx).ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
     }
 

@@ -476,7 +476,7 @@ public abstract class BaseRepository
 
     #region Audit log writer
 
-    private static async Task WriteAuditLogInternalAsync(
+    private protected static async Task WriteAuditLogInternalAsync(
         IDbConnection connection,
         string schema,
         string tableName,

@@ -5,17 +5,17 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
-[Migration(19, "Global — split fees into three sidebar menus")]
+[Migration(19, "Global — ensure fee menus sit under Fee group")]
 public sealed class G019_SplitFeesIntoThreeMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-    private static readonly Guid AcademicsParentId = Guid.Parse("10000000-0000-0000-0000-000000000010");
+    private static readonly Guid FeesManagementParentId = Guid.Parse("10000000-0000-0000-0000-000000000040");
 
     private static readonly (Guid Id, string Name, string Code, string Route, string Icon, int Order)[] Menus =
     [
-        (Guid.Parse("10000000-0000-0000-0000-000000000020"), "Fee Structure", MenuCodes.FeesStructure, "/fees-structure", "list_alt", 19),
-        (Guid.Parse("10000000-0000-0000-0000-000000000021"), "Class-wise Amounts", MenuCodes.FeesClassAmounts, "/fees-class-amounts", "school", 20),
-        (Guid.Parse("10000000-0000-0000-0000-000000000022"), "Student Collection", MenuCodes.FeesCollection, "/fees-collection", "groups", 21),
+        (Guid.Parse("10000000-0000-0000-0000-000000000020"), "Fee Structure", MenuCodes.FeesStructure, "/fees-structure", "list_alt", 21),
+        (Guid.Parse("10000000-0000-0000-0000-000000000021"), "Class-wise Amounts", MenuCodes.FeesClassAmounts, "/fees-class-amounts", "school", 22),
+        (Guid.Parse("10000000-0000-0000-0000-000000000022"), "Fee Collection", MenuCodes.FeesCollection, "/fees-collection", "payments", 23),
     ];
 
     public override void Up()
@@ -33,10 +33,25 @@ WHERE code = 'FEES';
             Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name}', '{code}', '{AcademicsParentId}', '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{id}', '{name}', '{code}', '{FeesManagementParentId}', '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{code}'
 );
+""");
+
+            // Reparent + rename if menus were seeded earlier under Academics / as Student Collection
+            Execute.Sql($"""
+UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
+SET name = '{name}',
+    parentmenuid = '{FeesManagementParentId}',
+    route = '{route}',
+    icon = '{icon}',
+    displayorder = {order},
+    isactive = true,
+    updatedby = '{SeedActor}',
+    updatedon = '{now:O}',
+    versionno = versionno + 1
+WHERE code = '{code}';
 """);
         }
 

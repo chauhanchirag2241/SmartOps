@@ -1,7 +1,9 @@
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Attributes;
 
 namespace SmartOps.Domain.Modules.AcademicYear.Entities;
 
+[TrackHistory]
 public class AcademicYearEntity : AuditableEntity
 {
     public Guid Id { get; set; }

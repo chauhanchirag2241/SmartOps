@@ -9,26 +9,29 @@ namespace SmartOps.Infrastructure.Migrations.Global;
 public sealed class G023_SeedLeaveAndActionsMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-    private static readonly Guid AcademicsParentId = Guid.Parse("10000000-0000-0000-0000-000000000010");
+    private static readonly Guid LeaveManagementParentId = Guid.Parse("10000000-0000-0000-0000-000000000042");
+    private static readonly Guid AdministrationParentId = Guid.Parse("10000000-0000-0000-0000-000000000043");
 
-    private static readonly (Guid Id, string Name, string Code, string Route, string Icon, int Order)[] Menus =
+    private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string Route, string Icon, int Order)[] Menus =
     [
-        (Guid.Parse("10000000-0000-0000-0000-000000000026"), "Staff Leave", MenuCodes.LeaveStaff, "/leave/staff", "event_busy", 25),
-        (Guid.Parse("10000000-0000-0000-0000-000000000027"), "Student Leave", MenuCodes.LeaveStudent, "/leave/students", "child_care", 26),
-        (Guid.Parse("10000000-0000-0000-0000-000000000028"), "My Actions", MenuCodes.MyActions, "/my-actions", "pending_actions", 27),
-        (Guid.Parse("10000000-0000-0000-0000-000000000029"), "Notices", MenuCodes.Notices, "/notices", "campaign", 28),
+        (Guid.Parse("10000000-0000-0000-0000-000000000026"), "Staff Leave", MenuCodes.LeaveStaff, LeaveManagementParentId, "/leave/staff", "event_busy", 41),
+        (Guid.Parse("10000000-0000-0000-0000-000000000027"), "Student Leave", MenuCodes.LeaveStudent, LeaveManagementParentId, "/leave/students", "child_care", 42),
+        // Root-level like Dashboard (directly after Dashboard in display order)
+        (Guid.Parse("10000000-0000-0000-0000-000000000028"), "My Actions", MenuCodes.MyActions, null, "/my-actions", "pending_actions", 2),
+        (Guid.Parse("10000000-0000-0000-0000-000000000029"), "Notices", MenuCodes.Notices, AdministrationParentId, "/notices", "campaign", 53),
     ];
 
     public override void Up()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        foreach ((Guid id, string name, string code, string route, string icon, int order) in Menus)
+        foreach ((Guid id, string name, string code, Guid? parentId, string route, string icon, int order) in Menus)
         {
+            string parentSql = parentId.HasValue ? $"'{parentId}'" : "NULL";
             Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name}', '{code}', '{AcademicsParentId}', '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{id}', '{name}', '{code}', {parentSql}, '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{code}'
 );
@@ -64,7 +67,6 @@ WHERE r.code = 'ADMIN' AND m.code IN ('{menuCodes}')
         bool myActions,
         bool notices)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
         InsertPerm(roleCode, MenuCodes.LeaveStaff, leaveStaffView, leaveStaffAdd, leaveStaffAdd, false);
         InsertPerm(roleCode, MenuCodes.LeaveStudent, leaveStudentView, leaveStudentAdd, leaveStudentAdd, false);
         InsertPerm(roleCode, MenuCodes.MyActions, myActions, myActions, myActions, false);

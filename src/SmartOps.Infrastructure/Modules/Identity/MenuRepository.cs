@@ -240,7 +240,26 @@ ORDER BY m.displayorder, m.name
             parent.Children = children;
         }
 
+        SortTree(roots);
         return roots;
+    }
+
+    private static void SortTree(List<MenuDto> nodes)
+    {
+        nodes.Sort((a, b) => a.DisplayOrder.CompareTo(b.DisplayOrder));
+        foreach (MenuDto node in nodes)
+        {
+            if (node.Children is List<MenuDto> children)
+            {
+                SortTree(children);
+            }
+            else if (node.Children.Count > 0)
+            {
+                List<MenuDto> sorted = node.Children.ToList();
+                SortTree(sorted);
+                node.Children = sorted;
+            }
+        }
     }
 
     private sealed class MenuRow

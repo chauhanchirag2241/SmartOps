@@ -17,6 +17,16 @@ public static class MenuCodes
 
     public const string Academics = "ACADEMICS";
 
+    public const string FeesManagement = "FEES_MANAGEMENT";
+
+    public const string SalaryManagement = "SALARY_MANAGEMENT";
+
+    public const string LeaveManagement = "LEAVE_MANAGEMENT";
+
+    public const string Administration = "ADMINISTRATION";
+
+    public const string Reports = "REPORTS";
+
     public const string Students = "STUDENTS";
 
     public const string Employees = "EMPLOYEES";
@@ -69,6 +79,11 @@ public static class MenuCodes
         Roles,
         Settings,
         Academics,
+        FeesManagement,
+        SalaryManagement,
+        LeaveManagement,
+        Administration,
+        Reports,
         Students,
         Employees,
         Classes,

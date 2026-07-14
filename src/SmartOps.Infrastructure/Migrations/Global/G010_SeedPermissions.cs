@@ -10,6 +10,13 @@ public sealed class G010_SeedMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
 
+    private static readonly Guid AcademicsId = Guid.Parse("10000000-0000-0000-0000-000000000010");
+    private static readonly Guid FeesManagementId = Guid.Parse("10000000-0000-0000-0000-000000000040");
+    private static readonly Guid SalaryManagementId = Guid.Parse("10000000-0000-0000-0000-000000000041");
+    private static readonly Guid LeaveManagementId = Guid.Parse("10000000-0000-0000-0000-000000000042");
+    private static readonly Guid AdministrationId = Guid.Parse("10000000-0000-0000-0000-000000000043");
+    private static readonly Guid ReportsId = Guid.Parse("10000000-0000-0000-0000-000000000044");
+
     private static readonly (Guid Id, string Name, string Code, string Application, Guid? ParentId, string? Route, string? Icon, int Order)[] Menus =
     [
         (Guid.Parse("10000000-0000-0000-0000-000000000001"), "Dashboard", MenuCodes.Dashboard, MenuApplications.Common, null, "/dashboard", "dashboard", 1),
@@ -17,13 +24,22 @@ public sealed class G010_SeedMenus : Migration
         (Guid.Parse("10000000-0000-0000-0000-000000000003"), "Users", MenuCodes.Users, MenuApplications.Config, null, "/configuration/users", "group", 3),
         (Guid.Parse("10000000-0000-0000-0000-000000000004"), "Roles", MenuCodes.Roles, MenuApplications.Config, null, "/configuration/roles", "admin_panel_settings", 4),
         (Guid.Parse("10000000-0000-0000-0000-000000000005"), "Settings", MenuCodes.Settings, MenuApplications.Config, null, "/settings", "settings", 5),
-        (Guid.Parse("10000000-0000-0000-0000-000000000010"), "Academics", MenuCodes.Academics, MenuApplications.School, null, null, "menu_book", 10),
-        (Guid.Parse("10000000-0000-0000-0000-000000000011"), "Students", MenuCodes.Students, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/students", "groups", 11),
-        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/employees", "co_present", 12),
-        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/classes", "class", 13),
-        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/subjects", "subject", 14),
-        (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/academic-years", "calendar_month", 15),
-        (Guid.Parse("10000000-0000-0000-0000-000000000016"), "Attendance", MenuCodes.Attendance, MenuApplications.School, Guid.Parse("10000000-0000-0000-0000-000000000010"), "/attendance", "how_to_reg", 16),
+
+        // School sidebar group roots (no route)
+        (AcademicsId, "Academics", MenuCodes.Academics, MenuApplications.School, null, null, "menu_book", 10),
+        (FeesManagementId, "Fee", MenuCodes.FeesManagement, MenuApplications.School, null, null, "payments", 20),
+        (SalaryManagementId, "Salary", MenuCodes.SalaryManagement, MenuApplications.School, null, null, "account_balance_wallet", 30),
+        (LeaveManagementId, "Leave", MenuCodes.LeaveManagement, MenuApplications.School, null, null, "event_busy", 40),
+        (AdministrationId, "Administration", MenuCodes.Administration, MenuApplications.School, null, null, "admin_panel_settings", 50),
+        (ReportsId, "Reports", MenuCodes.Reports, MenuApplications.School, null, null, "analytics", 60),
+
+        // Academics children
+        (Guid.Parse("10000000-0000-0000-0000-000000000011"), "Students", MenuCodes.Students, MenuApplications.School, AcademicsId, "/students", "groups", 11),
+        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, AcademicsId, "/employees", "co_present", 12),
+        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, AcademicsId, "/classes", "class", 13),
+        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, AcademicsId, "/subjects", "subject", 14),
+        (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, AcademicsId, "/academic-years", "calendar_month", 15),
+        (Guid.Parse("10000000-0000-0000-0000-000000000016"), "Attendance", MenuCodes.Attendance, MenuApplications.School, AcademicsId, "/attendance", "how_to_reg", 16),
     ];
 
     public override void Up()

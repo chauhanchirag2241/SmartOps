@@ -8,6 +8,15 @@ public class CreateAcademicYearDto
     public string Title { get; set; } = null!;
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
+    public IList<UpsertAcademicYearSemesterDto>? Semesters { get; set; }
+}
+
+public class UpdateAcademicYearDto
+{
+    public string Title { get; set; } = null!;
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public IList<UpsertAcademicYearSemesterDto>? Semesters { get; set; }
 }
 
 public static class AcademicYearMappingExtensions
@@ -16,11 +25,12 @@ public static class AcademicYearMappingExtensions
     {
         return new AcademicYearEntity
         {
-            Title = dto.Title,
+            Title = dto.Title.Trim(),
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             IsActive = true,
-            IsCurrent = false
+            IsCurrent = false,
+            Status = AcademicYearStatus.Draft,
         };
     }
 }
@@ -68,4 +78,43 @@ public static class AcademicYearSemesterMapping
 
     public static AcademicYearSemesterInput ToInput(this UpsertAcademicYearSemesterDto dto) =>
         new(dto.SemesterIndex, dto.Name, dto.StartDate, dto.EndDate);
+}
+
+public static class AcademicYearValidation
+{
+    public static string? ValidateYearDates(DateOnly startDate, DateOnly endDate)
+    {
+        if (endDate < startDate)
+        {
+            return "End date cannot be earlier than start date.";
+        }
+
+        return null;
+    }
+
+    public static string? ValidateSemesters(
+        DateOnly yearStart,
+        DateOnly yearEnd,
+        IEnumerable<UpsertAcademicYearSemesterDto> semesters)
+    {
+        foreach (UpsertAcademicYearSemesterDto semester in semesters)
+        {
+            if (string.IsNullOrWhiteSpace(semester.Name))
+            {
+                return "Semester name is required.";
+            }
+
+            if (semester.EndDate < semester.StartDate)
+            {
+                return $"Semester '{semester.Name.Trim()}': end date cannot be earlier than start date.";
+            }
+
+            if (semester.StartDate < yearStart || semester.EndDate > yearEnd)
+            {
+                return $"Semester '{semester.Name.Trim()}': dates must fall within the academic year range.";
+            }
+        }
+
+        return null;
+    }
 }

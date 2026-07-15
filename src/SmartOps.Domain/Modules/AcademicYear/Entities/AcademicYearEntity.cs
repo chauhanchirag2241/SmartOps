@@ -11,5 +11,9 @@ public class AcademicYearEntity : AuditableEntity
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public bool IsActive { get; set; }
+
+    /// <summary>Synced with Status == Current for existing consumers.</summary>
     public bool IsCurrent { get; set; }
+
+    public AcademicYearStatus Status { get; set; } = AcademicYearStatus.Draft;
 }

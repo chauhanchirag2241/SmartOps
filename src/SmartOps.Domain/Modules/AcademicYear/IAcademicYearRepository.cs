@@ -36,6 +36,8 @@ public interface IAcademicYearRepository
     Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default);
     Task DeleteAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<bool> TitleExistsAsync(string title, Guid? excludeId = null, CancellationToken cancellationToken = default);
+
     Task<IList<AcademicYearSemesterEntity>> GetSemestersAsync(Guid academicYearId, CancellationToken cancellationToken = default);
 
     Task SaveSemestersAsync(Guid academicYearId, IList<AcademicYearSemesterInput> semesters, CancellationToken cancellationToken = default);

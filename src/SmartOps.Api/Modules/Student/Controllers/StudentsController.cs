@@ -94,7 +94,7 @@ public sealed class StudentsController(
                     message = "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first."
                 });
             }
-
+             
             if (academic.ClassId != Guid.Empty)
             {
                 bool classHasConfiguredAmounts = await classFeeAmountRepository

@@ -61,5 +61,7 @@ public enum AcademicYearFilter
     All = 0,
     Active = 1,
     Inactive = 2,
-    Current = 3
+    Current = 3,
+    Draft = 4,
+    Archived = 5,
 }

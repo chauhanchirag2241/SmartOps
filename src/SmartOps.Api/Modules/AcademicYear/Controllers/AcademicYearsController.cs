@@ -32,8 +32,42 @@ public sealed class AcademicYearsController(
             return BadRequest("Academic year data is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest("Title is required.");
+        }
+
+        string? dateError = AcademicYearValidation.ValidateYearDates(request.StartDate, request.EndDate);
+        if (dateError is not null)
+        {
+            return BadRequest(dateError);
+        }
+
+        IList<UpsertAcademicYearSemesterDto> semesters = request.Semesters ?? [];
+        if (semesters.Count == 0)
+        {
+            return BadRequest("At least one semester is required.");
+        }
+
+        string? semesterError = AcademicYearValidation.ValidateSemesters(
+            request.StartDate, request.EndDate, semesters);
+        if (semesterError is not null)
+        {
+            return BadRequest(semesterError);
+        }
+
+        if (await academicYearRepository.TitleExistsAsync(request.Title, null, cancellationToken).ConfigureAwait(false))
+        {
+            return BadRequest("An academic year with this title already exists.");
+        }
+
         var entity = request.ToEntity();
-        var id = await academicYearRepository.CreateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
+        Guid id = await academicYearRepository.CreateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
+
+        await academicYearRepository.SaveSemestersAsync(
+            id,
+            semesters.Select(s => s.ToInput()).ToList(),
+            cancellationToken).ConfigureAwait(false);
 
         return Ok(new CreateAcademicYearResponse("Academic year created successfully", id));
     }
@@ -129,14 +163,67 @@ public sealed class AcademicYearsController(
     [Authorize(Policy = MenuPolicies.AcademicYears.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateAcademicYear(Guid id, [FromBody] AcademicYearEntity entity, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateAcademicYear(
+        Guid id,
+        [FromBody] UpdateAcademicYearDto request,
+        CancellationToken cancellationToken)
     {
-        if (id != entity.Id)
+        if (request is null)
         {
-            return BadRequest("Route id and payload id must match.");
+            return BadRequest("Academic year data is required.");
         }
 
-        await academicYearRepository.UpdateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest("Title is required.");
+        }
+
+        string? dateError = AcademicYearValidation.ValidateYearDates(request.StartDate, request.EndDate);
+        if (dateError is not null)
+        {
+            return BadRequest(dateError);
+        }
+
+        IList<UpsertAcademicYearSemesterDto> semesters = request.Semesters ?? [];
+        if (semesters.Count == 0)
+        {
+            return BadRequest("At least one semester is required.");
+        }
+
+        string? semesterError = AcademicYearValidation.ValidateSemesters(
+            request.StartDate, request.EndDate, semesters);
+        if (semesterError is not null)
+        {
+            return BadRequest(semesterError);
+        }
+
+        if (await academicYearRepository.TitleExistsAsync(request.Title, id, cancellationToken).ConfigureAwait(false))
+        {
+            return BadRequest("An academic year with this title already exists.");
+        }
+
+        try
+        {
+            await academicYearRepository.UpdateAcademicYearAsync(
+                new AcademicYearEntity
+                {
+                    Id = id,
+                    Title = request.Title.Trim(),
+                    StartDate = request.StartDate,
+                    EndDate = request.EndDate,
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            await academicYearRepository.SaveSemestersAsync(
+                id,
+                semesters.Select(s => s.ToInput()).ToList(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
         return NoContent();
     }
 
@@ -145,8 +232,15 @@ public sealed class AcademicYearsController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteAcademicYear(Guid id, CancellationToken cancellationToken)
     {
-        await academicYearRepository.DeleteAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await academicYearRepository.DeleteAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet("{id:guid}/semesters")]
@@ -169,6 +263,19 @@ public sealed class AcademicYearsController(
         if (request?.Semesters is null || request.Semesters.Count == 0)
         {
             return BadRequest("At least one semester is required.");
+        }
+
+        var year = await academicYearRepository.GetAcademicYearByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (year is null)
+        {
+            return NotFound();
+        }
+
+        string? semesterError = AcademicYearValidation.ValidateSemesters(
+            year.StartDate, year.EndDate, request.Semesters);
+        if (semesterError is not null)
+        {
+            return BadRequest(semesterError);
         }
 
         await academicYearRepository.SaveSemestersAsync(

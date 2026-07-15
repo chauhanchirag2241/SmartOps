@@ -26,12 +26,13 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             academicYear.Id = Guid.NewGuid();
         }
 
+        academicYear.Title = academicYear.Title.Trim();
         academicYear.IsActive = true;
+        academicYear.Status = AcademicYearStatus.Draft;
+        academicYear.IsCurrent = false;
         EnsureInsertAudit(academicYear, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        academicYear.IsCurrent = false;
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -83,7 +84,9 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 ay.enddate AS EndDate,
                 CASE
                     WHEN NOT ay.isactive THEN 'Deleted'
-                    WHEN ay.iscurrent THEN 'Current'
+                    WHEN ay.status = {(int)AcademicYearStatus.Draft} THEN 'Draft'
+                    WHEN ay.status = {(int)AcademicYearStatus.Current} OR ay.iscurrent THEN 'Current'
+                    WHEN ay.status = {(int)AcademicYearStatus.Archived} THEN 'Archived'
                     ELSE 'Archived'
                 END AS Status,
                 ay.isactive AS IsActive,
@@ -114,6 +117,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
         string scopeFilter = currentAndFutureOnly
             ? $"""
+              AND ay.status IN ({(int)AcademicYearStatus.Current}, {(int)AcademicYearStatus.Archived})
               AND (
                   ay.iscurrent = true
                   OR ay.startdate >= (
@@ -124,7 +128,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                   )
               )
               """
-            : string.Empty;
+            : $" AND ay.status <> {(int)AcademicYearStatus.Draft}";
 
         var sql = $@"
             SELECT
@@ -170,56 +174,77 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var schema = Context.OperationalSchema;
         var utcNow = DateTime.UtcNow;
         var actorId = ResolveUpdateActor();
+        int draft = (int)AcademicYearStatus.Draft;
+        int current = (int)AcademicYearStatus.Current;
+        int archived = (int)AcademicYearStatus.Archived;
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var exists = await conn.QuerySingleOrDefaultAsync<bool>(
+            var statusValue = await conn.QuerySingleOrDefaultAsync<short?>(
                 $"""
-                SELECT EXISTS(
-                    SELECT 1 FROM {schema}.{DatabaseConfig.TableAcademicYears}
-                    WHERE id = @Id AND isactive = true);
+                SELECT status FROM {schema}.{DatabaseConfig.TableAcademicYears}
+                WHERE id = @Id AND isactive = true;
                 """,
                 new { Id = id },
                 tx).ConfigureAwait(false);
 
-            if (!exists)
+            if (statusValue is null)
             {
                 throw new InvalidOperationException("Academic year not found or has been deleted.");
             }
 
-            var previousCurrentId = await conn.QuerySingleOrDefaultAsync<Guid?>(
+            if (statusValue.Value != draft)
+            {
+                throw new InvalidOperationException("Only draft academic years can be set as current.");
+            }
+
+            var previousCurrentIds = (await conn.QueryAsync<Guid>(
                 $"""
                 SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
-                WHERE isactive = true AND iscurrent = true
-                LIMIT 1;
+                WHERE isactive = true AND (iscurrent = true OR status = @CurrentStatus);
                 """,
-                transaction: tx).ConfigureAwait(false);
+                new { CurrentStatus = current },
+                tx).ConfigureAwait(false)).ToList();
 
             await conn.ExecuteAsync(
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
                 SET iscurrent = false,
+                    status = @ArchivedStatus,
                     updatedby = @UpdatedBy,
                     updatedon = @UpdatedOn,
                     versionno = versionno + 1
-                WHERE isactive = true AND iscurrent = true;
+                WHERE isactive = true AND (iscurrent = true OR status = @CurrentStatus);
                 """,
-                new { UpdatedBy = actorId, UpdatedOn = utcNow },
+                new
+                {
+                    ArchivedStatus = archived,
+                    CurrentStatus = current,
+                    UpdatedBy = actorId,
+                    UpdatedOn = utcNow,
+                },
                 tx).ConfigureAwait(false);
 
             await conn.ExecuteAsync(
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
                 SET iscurrent = true,
+                    status = @CurrentStatus,
                     updatedby = @UpdatedBy,
                     updatedon = @UpdatedOn,
                     versionno = versionno + 1
                 WHERE id = @Id AND isactive = true;
                 """,
-                new { Id = id, UpdatedBy = actorId, UpdatedOn = utcNow },
+                new
+                {
+                    Id = id,
+                    CurrentStatus = current,
+                    UpdatedBy = actorId,
+                    UpdatedOn = utcNow,
+                },
                 tx).ConfigureAwait(false);
 
-            if (previousCurrentId is Guid previousId && previousId != id)
+            foreach (Guid previousId in previousCurrentIds.Where(x => x != id))
             {
                 await WriteAuditLogInternalAsync(
                     conn,
@@ -229,24 +254,46 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                     "Updated",
                     actorId,
                     utcNow,
-                    [new FieldChangeDto { Field = "IsCurrent", OldValue = "True", NewValue = "False" }],
+                    [
+                        new FieldChangeDto { Field = "Status", OldValue = "Current", NewValue = "Archived" },
+                        new FieldChangeDto { Field = "IsCurrent", OldValue = "True", NewValue = "False" },
+                    ],
                     tx).ConfigureAwait(false);
             }
 
-            if (previousCurrentId != id)
-            {
-                await WriteAuditLogInternalAsync(
-                    conn,
-                    schema,
-                    DatabaseConfig.TableAcademicYears,
-                    id,
-                    "Updated",
-                    actorId,
-                    utcNow,
-                    [new FieldChangeDto { Field = "IsCurrent", OldValue = "False", NewValue = "True" }],
-                    tx).ConfigureAwait(false);
-            }
+            await WriteAuditLogInternalAsync(
+                conn,
+                schema,
+                DatabaseConfig.TableAcademicYears,
+                id,
+                "Updated",
+                actorId,
+                utcNow,
+                [
+                    new FieldChangeDto { Field = "Status", OldValue = "Draft", NewValue = "Current" },
+                    new FieldChangeDto { Field = "IsCurrent", OldValue = "False", NewValue = "True" },
+                ],
+                tx).ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+    public async Task<bool> TitleExistsAsync(
+        string title,
+        Guid? excludeId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+            SELECT EXISTS(
+                SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+                WHERE isactive = true
+                  AND LOWER(title) = LOWER(@Title)
+                  AND (@ExcludeId IS NULL OR id <> @ExcludeId));
+            """;
+
+        return await connection.QuerySingleAsync<bool>(
+            sql,
+            new { Title = title.Trim(), ExcludeId = excludeId }).ConfigureAwait(false);
     }
 
     public async Task<bool> AcademicYearExistsAsync(Guid id, bool requireNotDeleted = true, CancellationToken cancellationToken = default)
@@ -291,13 +338,31 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
     {
         var utcNow = DateTime.UtcNow;
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(academicYear, actorId, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, academicYear, tx, "Id")
+            var existing = await conn.QuerySingleOrDefaultAsync<AcademicYearEntity>(
+                $"""
+                SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
+                WHERE id = @Id;
+                """,
+                new { academicYear.Id },
+                tx).ConfigureAwait(false);
+
+            if (existing is null || !existing.IsActive)
+            {
+                throw new InvalidOperationException("Academic year not found or has been deleted.");
+            }
+
+            existing.Title = academicYear.Title.Trim();
+            existing.StartDate = academicYear.StartDate;
+            existing.EndDate = academicYear.EndDate;
+            // Keep Status / IsCurrent from existing
+            ApplyUpdateAudit(existing, actorId, utcNow);
+
+            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, existing, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -435,7 +500,13 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 where += " AND ay.isactive = false";
                 break;
             case AcademicYearFilter.Current:
-                where += " AND ay.isactive = true AND ay.iscurrent = true";
+                where += $" AND ay.isactive = true AND (ay.iscurrent = true OR ay.status = {(int)AcademicYearStatus.Current})";
+                break;
+            case AcademicYearFilter.Draft:
+                where += $" AND ay.isactive = true AND ay.status = {(int)AcademicYearStatus.Draft}";
+                break;
+            case AcademicYearFilter.Archived:
+                where += $" AND ay.isactive = true AND ay.status = {(int)AcademicYearStatus.Archived}";
                 break;
         }
 

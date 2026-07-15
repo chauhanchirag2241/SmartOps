@@ -19,7 +19,7 @@ public sealed class G017_SeedHomeworkMenu : Migration
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{MenuId}', 'Homework', '{MenuCodes.Homework}', '{AcademicsParentId}', '/homework', 'menu_book', 18, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{MenuId}', 'Homework', '{MenuCodes.Homework}', '{AcademicsParentId}', '/homework', 'menu_book', 13, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{MenuCodes.Homework}'
 );

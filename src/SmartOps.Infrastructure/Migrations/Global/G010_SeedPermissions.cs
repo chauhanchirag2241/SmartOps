@@ -11,6 +11,7 @@ public sealed class G010_SeedMenus : Migration
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
 
     private static readonly Guid AcademicsId = Guid.Parse("10000000-0000-0000-0000-000000000010");
+    private static readonly Guid AcademicSetupId = Guid.Parse("10000000-0000-0000-0000-000000000045");
     private static readonly Guid FeesManagementId = Guid.Parse("10000000-0000-0000-0000-000000000040");
     private static readonly Guid SalaryManagementId = Guid.Parse("10000000-0000-0000-0000-000000000041");
     private static readonly Guid LeaveManagementId = Guid.Parse("10000000-0000-0000-0000-000000000042");
@@ -27,6 +28,7 @@ public sealed class G010_SeedMenus : Migration
 
         // School sidebar group roots (no route)
         (AcademicsId, "Academics", MenuCodes.Academics, MenuApplications.School, null, null, "menu_book", 10),
+        (AcademicSetupId, "Academic Setup", MenuCodes.AcademicSetup, MenuApplications.School, null, null, "tune", 15),
         (FeesManagementId, "Fee", MenuCodes.FeesManagement, MenuApplications.School, null, null, "payments", 20),
         (SalaryManagementId, "Salary", MenuCodes.SalaryManagement, MenuApplications.School, null, null, "account_balance_wallet", 30),
         (LeaveManagementId, "Leave", MenuCodes.LeaveManagement, MenuApplications.School, null, null, "event_busy", 40),
@@ -35,11 +37,15 @@ public sealed class G010_SeedMenus : Migration
 
         // Academics children
         (Guid.Parse("10000000-0000-0000-0000-000000000011"), "Students", MenuCodes.Students, MenuApplications.School, AcademicsId, "/students", "groups", 11),
-        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, AcademicsId, "/employees", "co_present", 12),
-        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, AcademicsId, "/classes", "class", 13),
-        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, AcademicsId, "/subjects", "subject", 14),
-        (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, AcademicsId, "/academic-years", "calendar_month", 15),
-        (Guid.Parse("10000000-0000-0000-0000-000000000016"), "Attendance", MenuCodes.Attendance, MenuApplications.School, AcademicsId, "/attendance", "how_to_reg", 16),
+        (Guid.Parse("10000000-0000-0000-0000-000000000016"), "Attendance", MenuCodes.Attendance, MenuApplications.School, AcademicsId, "/attendance", "how_to_reg", 12),
+
+        // Academic Setup children
+        (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, AcademicSetupId, "/academic-years", "calendar_month", 16),
+        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, AcademicSetupId, "/classes", "class", 17),
+        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, AcademicSetupId, "/subjects", "subject", 18),
+
+        // Administration children (Users/Roles/Notices seeded in later migrations)
+        (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, AdministrationId, "/employees", "co_present", 50),
     ];
 
     public override void Up()

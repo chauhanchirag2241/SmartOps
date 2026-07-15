@@ -11,37 +11,46 @@ public sealed class G023_SeedLeaveAndActionsMenus : Migration
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid LeaveManagementParentId = Guid.Parse("10000000-0000-0000-0000-000000000042");
     private static readonly Guid AdministrationParentId = Guid.Parse("10000000-0000-0000-0000-000000000043");
+    private static readonly Guid FrontOfficeParentId = Guid.Parse("10000000-0000-0000-0000-000000000050");
 
-    private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string Route, string Icon, int Order)[] Menus =
+    private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string? Route, string Icon, int Order)[] Menus =
     [
         (Guid.Parse("10000000-0000-0000-0000-000000000026"), "Staff Leave", MenuCodes.LeaveStaff, LeaveManagementParentId, "/leave/staff", "event_busy", 41),
         (Guid.Parse("10000000-0000-0000-0000-000000000027"), "Student Leave", MenuCodes.LeaveStudent, LeaveManagementParentId, "/leave/students", "child_care", 42),
         // Root-level like Dashboard (directly after Dashboard in display order)
         (Guid.Parse("10000000-0000-0000-0000-000000000028"), "My Actions", MenuCodes.MyActions, null, "/my-actions", "pending_actions", 2),
         (Guid.Parse("10000000-0000-0000-0000-000000000029"), "Notices", MenuCodes.Notices, AdministrationParentId, "/notices", "campaign", 53),
+        // Front Office (after My Actions)
+        (FrontOfficeParentId, "Front Office", MenuCodes.FrontOffice, null, null, "support_agent", 3),
+        (Guid.Parse("10000000-0000-0000-0000-000000000051"), "Visitor Book", MenuCodes.VisitorBook, FrontOfficeParentId, "/front-office/visitors", "badge", 31),
+        (Guid.Parse("10000000-0000-0000-0000-000000000052"), "Phone Logs", MenuCodes.PhoneLogs, FrontOfficeParentId, "/front-office/phone-logs", "phone", 32),
+        (Guid.Parse("10000000-0000-0000-0000-000000000053"), "Complaints", MenuCodes.Complaints, FrontOfficeParentId, "/front-office/complaints", "report_problem", 33),
+        (Guid.Parse("10000000-0000-0000-0000-000000000054"), "Admission Inquiries", MenuCodes.AdmissionInquiries, FrontOfficeParentId, "/front-office/admission-inquiries", "school", 34),
+        (Guid.Parse("10000000-0000-0000-0000-000000000055"), "Front Office Setup", MenuCodes.FrontOfficeSetup, FrontOfficeParentId, "/front-office/setup", "tune", 35),
     ];
 
     public override void Up()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        foreach ((Guid id, string name, string code, Guid? parentId, string route, string icon, int order) in Menus)
+        foreach ((Guid id, string name, string code, Guid? parentId, string? route, string icon, int order) in Menus)
         {
             string parentSql = parentId.HasValue ? $"'{parentId}'" : "NULL";
+            string routeSql = route is null ? "NULL" : $"'{route}'";
             Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
     (id, name, code, parentmenuid, route, icon, displayorder, application, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name}', '{code}', {parentSql}, '{route}', '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{id}', '{name}', '{code}', {parentSql}, {routeSql}, '{icon}', {order}, '{MenuApplications.School}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} WHERE code = '{code}'
 );
 """);
         }
 
-        SeedRole(RoleCodes.Teacher, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: false, leaveStudentAdd: false, myActions: true, notices: false);
-        SeedRole(RoleCodes.Hod, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true);
-        SeedRole(RoleCodes.SchoolAdmin, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true);
-        SeedRole(RoleCodes.Parent, leaveStaffView: false, leaveStaffAdd: false, leaveStudentView: true, leaveStudentAdd: true, myActions: true, notices: false);
+        SeedRole(RoleCodes.Teacher, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: false, leaveStudentAdd: false, myActions: true, notices: false, frontOfficeFull: false, frontOfficeOpsEdit: true);
+        SeedRole(RoleCodes.Hod, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true, frontOfficeFull: false, frontOfficeOpsEdit: true);
+        SeedRole(RoleCodes.SchoolAdmin, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true, frontOfficeFull: true, frontOfficeOpsEdit: false);
+        SeedRole(RoleCodes.Parent, leaveStaffView: false, leaveStaffAdd: false, leaveStudentView: true, leaveStudentAdd: true, myActions: true, notices: false, frontOfficeFull: false, frontOfficeOpsEdit: false);
 
         string menuCodes = string.Join("','", Menus.Select(m => m.Code));
         Execute.Sql($"""
@@ -65,12 +74,33 @@ WHERE r.code = 'ADMIN' AND m.code IN ('{menuCodes}')
         bool leaveStudentView,
         bool leaveStudentAdd,
         bool myActions,
-        bool notices)
+        bool notices,
+        bool frontOfficeFull,
+        bool frontOfficeOpsEdit)
     {
         InsertPerm(roleCode, MenuCodes.LeaveStaff, leaveStaffView, leaveStaffAdd, leaveStaffAdd, false);
         InsertPerm(roleCode, MenuCodes.LeaveStudent, leaveStudentView, leaveStudentAdd, leaveStudentAdd, false);
         InsertPerm(roleCode, MenuCodes.MyActions, myActions, myActions, myActions, false);
         InsertPerm(roleCode, MenuCodes.Notices, notices, notices, notices, notices);
+
+        if (frontOfficeFull)
+        {
+            InsertPerm(roleCode, MenuCodes.FrontOffice, true, true, true, true);
+            InsertPerm(roleCode, MenuCodes.VisitorBook, true, true, true, true);
+            InsertPerm(roleCode, MenuCodes.PhoneLogs, true, true, true, true);
+            InsertPerm(roleCode, MenuCodes.Complaints, true, true, true, true);
+            InsertPerm(roleCode, MenuCodes.AdmissionInquiries, true, true, true, true);
+            InsertPerm(roleCode, MenuCodes.FrontOfficeSetup, true, true, true, true);
+        }
+        else if (frontOfficeOpsEdit)
+        {
+            InsertPerm(roleCode, MenuCodes.FrontOffice, true, false, false, false);
+            InsertPerm(roleCode, MenuCodes.VisitorBook, true, true, true, false);
+            InsertPerm(roleCode, MenuCodes.PhoneLogs, true, true, true, false);
+            InsertPerm(roleCode, MenuCodes.Complaints, true, true, true, false);
+            InsertPerm(roleCode, MenuCodes.AdmissionInquiries, true, true, true, false);
+            InsertPerm(roleCode, MenuCodes.FrontOfficeSetup, true, true, true, false);
+        }
     }
 
     private void InsertPerm(string roleCode, string menuCode, bool view, bool add, bool edit, bool delete)

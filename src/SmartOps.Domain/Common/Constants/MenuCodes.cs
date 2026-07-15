@@ -17,6 +17,8 @@ public static class MenuCodes
 
     public const string Academics = "ACADEMICS";
 
+    public const string AcademicSetup = "ACADEMIC_SETUP";
+
     public const string FeesManagement = "FEES_MANAGEMENT";
 
     public const string SalaryManagement = "SALARY_MANAGEMENT";
@@ -71,6 +73,18 @@ public static class MenuCodes
 
     public const string Notices = "NOTICES";
 
+    public const string FrontOffice = "FRONT_OFFICE";
+
+    public const string VisitorBook = "VISITOR_BOOK";
+
+    public const string PhoneLogs = "PHONE_LOGS";
+
+    public const string Complaints = "COMPLAINTS";
+
+    public const string AdmissionInquiries = "ADMISSION_INQUIRIES";
+
+    public const string FrontOfficeSetup = "FRONT_OFFICE_SETUP";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -79,6 +93,7 @@ public static class MenuCodes
         Roles,
         Settings,
         Academics,
+        AcademicSetup,
         FeesManagement,
         SalaryManagement,
         LeaveManagement,
@@ -102,6 +117,12 @@ public static class MenuCodes
         LeaveStaff,
         LeaveStudent,
         MyActions,
-        Notices
+        Notices,
+        FrontOffice,
+        VisitorBook,
+        PhoneLogs,
+        Complaints,
+        AdmissionInquiries,
+        FrontOfficeSetup
     ];
 }

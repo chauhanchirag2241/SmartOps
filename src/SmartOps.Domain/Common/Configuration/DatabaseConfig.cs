@@ -82,4 +82,12 @@ public static class DatabaseConfig
     public const string TableWorkflowItemActions = "workflowitemactions";
     public const string TableNotices = "notices";
     public const string TableNoticeResponses = "noticeresponses";
+
+    // Front Office Module
+    public const string TableComplaintTypes = "complainttypes";
+    public const string TableVisitorPurposes = "visitorpurposes";
+    public const string TableVisitors = "visitors";
+    public const string TablePhoneLogs = "phonelogs";
+    public const string TableComplaints = "complaints";
+    public const string TableAdmissionInquiries = "admissioninquiries";
 }

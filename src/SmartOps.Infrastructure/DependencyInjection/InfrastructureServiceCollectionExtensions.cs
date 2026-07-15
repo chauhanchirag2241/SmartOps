@@ -29,6 +29,7 @@ using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Application.Modules.Workflow.Interfaces;
 using SmartOps.Application.Modules.Notice.Interfaces;
+using SmartOps.Application.Modules.FrontOffice.Interfaces;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Application.Modules.Salary.Interfaces;
@@ -43,6 +44,8 @@ using SmartOps.Infrastructure.Modules.Workflow;
 using SmartOps.Infrastructure.Modules.Workflow.Services;
 using SmartOps.Infrastructure.Modules.Notice;
 using SmartOps.Infrastructure.Modules.Notice.Services;
+using SmartOps.Infrastructure.Modules.FrontOffice;
+using SmartOps.Infrastructure.Modules.FrontOffice.Services;
 using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Infrastructure.Modules.Fees.Services;
 using SmartOps.Infrastructure.Modules.Salary;
@@ -120,6 +123,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IWorkflowService, WorkflowService>();
         services.AddScoped<ILeaveService, LeaveService>();
         services.AddScoped<INoticeService, NoticeService>();
+        services.AddScoped<IFrontOfficeRepository, FrontOfficeRepository>();
+        services.AddScoped<IFrontOfficeService, FrontOfficeService>();
 
         if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
             && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PlatformDb")))

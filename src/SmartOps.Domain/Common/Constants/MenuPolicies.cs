@@ -59,6 +59,15 @@ public static class MenuPolicies
         public const string Export = "Menu:ACADEMICS:Export";
     }
 
+    public static class AcademicSetup
+    {
+        public const string View = "Menu:ACADEMIC_SETUP:View";
+        public const string Add = "Menu:ACADEMIC_SETUP:Add";
+        public const string Edit = "Menu:ACADEMIC_SETUP:Edit";
+        public const string Delete = "Menu:ACADEMIC_SETUP:Delete";
+        public const string Export = "Menu:ACADEMIC_SETUP:Export";
+    }
+
     public static class Students
     {
         public const string View = "Menu:STUDENTS:View";
@@ -236,4 +245,64 @@ public static class MenuPolicies
         public const string Delete = "Menu:NOTICES:Delete";
         public const string Export = "Menu:NOTICES:Export";
     }
+
+    public static class FrontOffice
+    {
+        public const string View = "Menu:FRONT_OFFICE:View";
+        public const string Add = "Menu:FRONT_OFFICE:Add";
+        public const string Edit = "Menu:FRONT_OFFICE:Edit";
+        public const string Delete = "Menu:FRONT_OFFICE:Delete";
+        public const string Export = "Menu:FRONT_OFFICE:Export";
+    }
+
+    public static class VisitorBook
+    {
+        public const string View = "Menu:VISITOR_BOOK:View";
+        public const string Add = "Menu:VISITOR_BOOK:Add";
+        public const string Edit = "Menu:VISITOR_BOOK:Edit";
+        public const string Delete = "Menu:VISITOR_BOOK:Delete";
+        public const string Export = "Menu:VISITOR_BOOK:Export";
+    }
+
+    public static class PhoneLogs
+    {
+        public const string View = "Menu:PHONE_LOGS:View";
+        public const string Add = "Menu:PHONE_LOGS:Add";
+        public const string Edit = "Menu:PHONE_LOGS:Edit";
+        public const string Delete = "Menu:PHONE_LOGS:Delete";
+        public const string Export = "Menu:PHONE_LOGS:Export";
+    }
+
+    public static class Complaints
+    {
+        public const string View = "Menu:COMPLAINTS:View";
+        public const string Add = "Menu:COMPLAINTS:Add";
+        public const string Edit = "Menu:COMPLAINTS:Edit";
+        public const string Delete = "Menu:COMPLAINTS:Delete";
+        public const string Export = "Menu:COMPLAINTS:Export";
+    }
+
+    public static class AdmissionInquiries
+    {
+        public const string View = "Menu:ADMISSION_INQUIRIES:View";
+        public const string Add = "Menu:ADMISSION_INQUIRIES:Add";
+        public const string Edit = "Menu:ADMISSION_INQUIRIES:Edit";
+        public const string Delete = "Menu:ADMISSION_INQUIRIES:Delete";
+        public const string Export = "Menu:ADMISSION_INQUIRIES:Export";
+    }
+
+    public static class FrontOfficeSetup
+    {
+        public const string View = "Menu:FRONT_OFFICE_SETUP:View";
+        public const string Add = "Menu:FRONT_OFFICE_SETUP:Add";
+        public const string Edit = "Menu:FRONT_OFFICE_SETUP:Edit";
+        public const string Delete = "Menu:FRONT_OFFICE_SETUP:Delete";
+        public const string Export = "Menu:FRONT_OFFICE_SETUP:Export";
+    }
+
+    /// <summary>
+    /// Complaints.View OR AdmissionInquiries.View OR VisitorBook.View OR PhoneLogs.View OR FrontOfficeSetup.View
+    /// — employee dropdown for front-office assign fields.
+    /// </summary>
+    public const string FrontOfficeEmployeeLookup = "Menu:FRONT_OFFICE:EmployeeLookup";
 }

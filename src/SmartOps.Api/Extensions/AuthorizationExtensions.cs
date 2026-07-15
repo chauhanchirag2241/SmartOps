@@ -35,6 +35,15 @@ public static class AuthorizationExtensions
                 (MenuCodes.Classes, MenuPermissionAction.View),
                 (MenuCodes.Attendance, MenuPermissionAction.View),
                 (MenuCodes.Homework, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.FrontOfficeEmployeeLookup,
+                (MenuCodes.Complaints, MenuPermissionAction.View),
+                (MenuCodes.AdmissionInquiries, MenuPermissionAction.View),
+                (MenuCodes.VisitorBook, MenuPermissionAction.View),
+                (MenuCodes.PhoneLogs, MenuPermissionAction.View),
+                (MenuCodes.FrontOfficeSetup, MenuPermissionAction.View));
         });
 
         return services;

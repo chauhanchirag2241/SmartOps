@@ -203,6 +203,10 @@ public sealed class SchoolUserDto
     public string? UserTypeName { get; set; }
 
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
+
+    public IReadOnlyList<Guid> BranchIds { get; set; } = Array.Empty<Guid>();
+
+    public Guid? DefaultBranchId { get; set; }
 }
 
 public sealed class CreateUserDto
@@ -220,6 +224,10 @@ public sealed class CreateUserDto
     public Guid? UserTypeId { get; set; }
 
     public IReadOnlyList<string> RoleNames { get; set; } = Array.Empty<string>();
+
+    public IReadOnlyList<Guid> BranchIds { get; set; } = Array.Empty<Guid>();
+
+    public Guid? DefaultBranchId { get; set; }
 }
 
 public sealed class UpdateUserDto
@@ -233,6 +241,10 @@ public sealed class UpdateUserDto
     public bool LockoutEnabled { get; set; } = true;
 
     public Guid? UserTypeId { get; set; }
+
+    public IReadOnlyList<Guid> BranchIds { get; set; } = Array.Empty<Guid>();
+
+    public Guid? DefaultBranchId { get; set; }
 }
 
 public sealed class UpdateUserRolesDto

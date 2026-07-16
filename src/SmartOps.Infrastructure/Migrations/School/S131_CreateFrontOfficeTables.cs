@@ -9,28 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S131_CreateFrontOfficeTables : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-
-    private static readonly (Guid Id, string Name, string Desc, int Order)[] ComplaintTypes =
-    [
-        (Guid.Parse("51000000-0000-0000-0000-000000000001"), "Infrastructure Issue", "Building, furniture, water, electricity problems", 1),
-        (Guid.Parse("51000000-0000-0000-0000-000000000002"), "Staff Behavior", "Complaints regarding teacher or staff conduct", 2),
-        (Guid.Parse("51000000-0000-0000-0000-000000000003"), "Academic Issue", "Curriculum, homework, exam-related complaints", 3),
-        (Guid.Parse("51000000-0000-0000-0000-000000000004"), "Fee Related", "Fee overcharge, receipt issues, payment disputes", 4),
-        (Guid.Parse("51000000-0000-0000-0000-000000000005"), "Transport Issue", "Bus timing, driver behavior, route problems", 5),
-        (Guid.Parse("51000000-0000-0000-0000-000000000006"), "Cleanliness / Hygiene", "Washroom, canteen, campus cleanliness", 6),
-    ];
-
-    private static readonly (Guid Id, string Name, string Desc, int Order)[] VisitorPurposes =
-    [
-        (Guid.Parse("52000000-0000-0000-0000-000000000001"), "Meeting with Teacher", "Parent meeting with class or subject teacher", 1),
-        (Guid.Parse("52000000-0000-0000-0000-000000000002"), "Fee Payment", "Paying school fees or getting receipt", 2),
-        (Guid.Parse("52000000-0000-0000-0000-000000000003"), "Document Submission", "Submitting required documents", 3),
-        (Guid.Parse("52000000-0000-0000-0000-000000000004"), "Admission Inquiry", "Inquiring about admission for new student", 4),
-        (Guid.Parse("52000000-0000-0000-0000-000000000005"), "Collect TC/Certificate", "Collecting transfer certificate or other docs", 5),
-        (Guid.Parse("52000000-0000-0000-0000-000000000006"), "Official Visit", "Government official, inspector or auditor", 6),
-        (Guid.Parse("52000000-0000-0000-0000-000000000007"), "Personal Visit", "Personal or unofficial visit", 7),
-    ];
+    private static string G => DatabaseConfig.Schema_Global;
 
     public override void Up()
     {
@@ -38,34 +17,47 @@ public sealed class S131_CreateFrontOfficeTables : Migration
         {
             Create.Table(DatabaseConfig.TableComplaintTypes).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("name").AsString(200).NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithColumn("displayorder").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithAuditColumns();
 
-            Create.Index("ix_complainttypes_displayorder")
-                .OnTable(DatabaseConfig.TableComplaintTypes).InSchema(S)
-                .OnColumn("displayorder").Ascending();
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableComplaintTypes}
+    ADD CONSTRAINT fk_complainttypes_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_complainttypes_branchid ON {S}.{DatabaseConfig.TableComplaintTypes} (branchid);
+CREATE INDEX ix_complainttypes_displayorder ON {S}.{DatabaseConfig.TableComplaintTypes} (displayorder);
+""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableVisitorPurposes).Exists())
         {
             Create.Table(DatabaseConfig.TableVisitorPurposes).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("name").AsString(200).NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithColumn("displayorder").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithAuditColumns();
 
-            Create.Index("ix_visitorpurposes_displayorder")
-                .OnTable(DatabaseConfig.TableVisitorPurposes).InSchema(S)
-                .OnColumn("displayorder").Ascending();
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableVisitorPurposes}
+    ADD CONSTRAINT fk_visitorpurposes_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_visitorpurposes_branchid ON {S}.{DatabaseConfig.TableVisitorPurposes} (branchid);
+CREATE INDEX ix_visitorpurposes_displayorder ON {S}.{DatabaseConfig.TableVisitorPurposes} (displayorder);
+""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableVisitors).Exists())
         {
             Create.Table(DatabaseConfig.TableVisitors).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("name").AsString(200).NotNullable()
                 .WithColumn("phone").AsString(50).Nullable()
                 .WithColumn("idcardtype").AsString(100).Nullable()
@@ -78,6 +70,14 @@ public sealed class S131_CreateFrontOfficeTables : Migration
                 .WithColumn("note").AsString(1000).Nullable()
                 .WithColumn("documentpath").AsString(1000).Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableVisitors}
+    ADD CONSTRAINT fk_visitors_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_visitors_branchid ON {S}.{DatabaseConfig.TableVisitors} (branchid);
+""");
 
             Create.Index("ix_visitors_intime")
                 .OnTable(DatabaseConfig.TableVisitors).InSchema(S)
@@ -92,6 +92,7 @@ public sealed class S131_CreateFrontOfficeTables : Migration
         {
             Create.Table(DatabaseConfig.TablePhoneLogs).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("callername").AsString(200).NotNullable()
                 .WithColumn("phone").AsString(50).Nullable()
                 .WithColumn("calltype").AsInt16().NotNullable()
@@ -102,6 +103,14 @@ public sealed class S131_CreateFrontOfficeTables : Migration
                 .WithColumn("note").AsString(1000).Nullable()
                 .WithAuditColumns();
 
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TablePhoneLogs}
+    ADD CONSTRAINT fk_phonelogs_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_phonelogs_branchid ON {S}.{DatabaseConfig.TablePhoneLogs} (branchid);
+""");
+
             Create.Index("ix_phonelogs_calldate")
                 .OnTable(DatabaseConfig.TablePhoneLogs).InSchema(S)
                 .OnColumn("calldate").Ascending();
@@ -111,6 +120,7 @@ public sealed class S131_CreateFrontOfficeTables : Migration
         {
             Create.Table(DatabaseConfig.TableComplaints).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("complainttypeid").AsGuid().NotNullable()
                     .ForeignKey("fk_complaints_complainttypeid", S, DatabaseConfig.TableComplaintTypes, "id")
                 .WithColumn("complaintdate").AsDate().NotNullable()
@@ -124,6 +134,14 @@ public sealed class S131_CreateFrontOfficeTables : Migration
                 .WithColumn("note").AsString(1000).Nullable()
                 .WithColumn("documentpath").AsString(1000).Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableComplaints}
+    ADD CONSTRAINT fk_complaints_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_complaints_branchid ON {S}.{DatabaseConfig.TableComplaints} (branchid);
+""");
 
             Create.Index("ix_complaints_complaintdate")
                 .OnTable(DatabaseConfig.TableComplaints).InSchema(S)
@@ -146,6 +164,7 @@ public sealed class S131_CreateFrontOfficeTables : Migration
         {
             Create.Table(DatabaseConfig.TableAdmissionInquiries).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("parentname").AsString(200).NotNullable()
                 .WithColumn("phone").AsString(50).Nullable()
                 .WithColumn("whatsapp").AsString(50).Nullable()
@@ -163,6 +182,14 @@ public sealed class S131_CreateFrontOfficeTables : Migration
                 .WithColumn("streamgroup").AsInt16().Nullable()
                 .WithAuditColumns();
 
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableAdmissionInquiries}
+    ADD CONSTRAINT fk_admissioninquiries_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_admissioninquiries_branchid ON {S}.{DatabaseConfig.TableAdmissionInquiries} (branchid);
+""");
+
             Create.Index("ix_admissioninquiries_inquirydate")
                 .OnTable(DatabaseConfig.TableAdmissionInquiries).InSchema(S)
                 .OnColumn("inquirydate").Ascending();
@@ -174,30 +201,6 @@ public sealed class S131_CreateFrontOfficeTables : Migration
             Create.Index("ix_admissioninquiries_assignedtoemployeeid")
                 .OnTable(DatabaseConfig.TableAdmissionInquiries).InSchema(S)
                 .OnColumn("assignedtoemployeeid").Ascending();
-        }
-
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-
-        foreach ((Guid id, string name, string desc, int order) in ComplaintTypes)
-        {
-            string escapedDesc = desc.Replace("'", "''");
-            Execute.Sql($"""
-INSERT INTO {S}.{DatabaseConfig.TableComplaintTypes}
-    (id, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name.Replace("'", "''")}', '{escapedDesc}', {order}, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-WHERE NOT EXISTS (SELECT 1 FROM {S}.{DatabaseConfig.TableComplaintTypes} WHERE id = '{id}');
-""");
-        }
-
-        foreach ((Guid id, string name, string desc, int order) in VisitorPurposes)
-        {
-            string escapedDesc = desc.Replace("'", "''");
-            Execute.Sql($"""
-INSERT INTO {S}.{DatabaseConfig.TableVisitorPurposes}
-    (id, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{name.Replace("'", "''")}', '{escapedDesc}', {order}, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-WHERE NOT EXISTS (SELECT 1 FROM {S}.{DatabaseConfig.TableVisitorPurposes} WHERE id = '{id}');
-""");
         }
     }
 

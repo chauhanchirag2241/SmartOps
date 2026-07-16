@@ -8,6 +8,7 @@ namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 public sealed class AdmissionInquiryEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public string ParentName { get; set; } = null!;
     public string? Phone { get; set; }
     public string? WhatsApp { get; set; }

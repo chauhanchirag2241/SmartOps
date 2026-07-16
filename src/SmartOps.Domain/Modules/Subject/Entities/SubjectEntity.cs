@@ -8,6 +8,7 @@ namespace SmartOps.Domain.Modules.Subject.Entities;
 public sealed class SubjectEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public string SubjectName { get; set; } = string.Empty;
     public string SubjectCode { get; set; } = string.Empty;
     public SubjectType? SubjectType { get; set; }

@@ -20,6 +20,7 @@ public sealed class S119_CreatePayrollRunsTable : Migration
 
         Create.Table(DatabaseConfig.TablePayrollRuns).InSchema(S)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+            .WithColumn("branchid").AsGuid().NotNullable()
             .WithColumn("payyear").AsInt32().NotNullable()
             .WithColumn("paymonth").AsInt32().NotNullable()
             .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
@@ -31,9 +32,17 @@ public sealed class S119_CreatePayrollRunsTable : Migration
             .WithColumn("processedon").AsDateTime().Nullable()
             .WithAuditColumns();
 
+        Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TablePayrollRuns}
+    ADD CONSTRAINT fk_payrollruns_branchid FOREIGN KEY (branchid)
+    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_payrollruns_branchid ON {S}.{DatabaseConfig.TablePayrollRuns} (branchid);
+""");
+
         Create.UniqueConstraint(PayrollYearMonthUnique)
             .OnTable(DatabaseConfig.TablePayrollRuns).WithSchema(S)
-            .Columns("payyear", "paymonth");
+            .Columns("branchid", "payyear", "paymonth");
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TablePayrollRuns).InSchema(S);

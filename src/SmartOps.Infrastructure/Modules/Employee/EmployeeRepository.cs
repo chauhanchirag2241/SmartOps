@@ -2,10 +2,12 @@ using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Employee.Entities;
 using SmartOps.Domain.Modules.Employee;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common.Configuration;
@@ -15,11 +17,20 @@ namespace SmartOps.Infrastructure.Modules.Employee;
 public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
 {
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
-    public EmployeeRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
+    public EmployeeRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        IUserScopeContext scope,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _scope = scope;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     public async Task<Guid> CreateEmployeeAsync(EmployeeEntity employee, CancellationToken cancellationToken = default)
@@ -31,6 +42,10 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
         }
 
         EnsureInsertAudit(employee, utcNow);
+
+        employee.BranchId = await _branchWrite
+            .ResolveWriteBranchIdAsync(employee.BranchId, cancellationToken)
+            .ConfigureAwait(false);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -80,6 +95,9 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
         }
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "e", ref whereClause);
+
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedEmployeeIds.Count > 0)
@@ -129,7 +147,8 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
             {
                 SearchTerm = searchTerm,
                 ScopeEmployeeIds = _scope.AllowedEmployeeIds.ToArray(),
-                ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray()
+                ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray(),
+                ActiveBranchId = _branchContext.ActiveBranchId
             },
             pageIndex,
             pageSize).ConfigureAwait(false);
@@ -138,32 +157,38 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
     public async Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "e", cancellationToken)
+            .ConfigureAwait(false);
 
         var sql = $@"
             SELECT
-                id AS Id,
-                TRIM(firstname || ' ' || lastname) AS Name
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees}
-            WHERE isactive = true AND usertypecode = 'TEACHER'
-            ORDER BY firstname ASC, lastname ASC;";
+                e.id AS Id,
+                TRIM(e.firstname || ' ' || e.lastname) AS Name
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+            WHERE e.isactive = true AND e.usertypecode = 'TEACHER'{branchFilter}
+            ORDER BY e.firstname ASC, e.lastname ASC;";
 
-        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        var items = await connection.QueryAsync<DropdownDto>(sql, new { ActiveBranchId = activeBranchId }).ConfigureAwait(false);
         return items.ToList();
     }
 
     public async Task<IReadOnlyList<DropdownDto>> GetReportingManagerDropdownAsync(CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "e", cancellationToken)
+            .ConfigureAwait(false);
 
         var sql = $@"
             SELECT
-                id AS Id,
-                TRIM(firstname || ' ' || lastname) AS Name
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees}
-            WHERE isactive = true
-            ORDER BY firstname ASC, lastname ASC;";
+                e.id AS Id,
+                TRIM(e.firstname || ' ' || e.lastname) AS Name
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+            WHERE e.isactive = true{branchFilter}
+            ORDER BY e.firstname ASC, e.lastname ASC;";
 
-        var items = await connection.QueryAsync<DropdownDto>(sql).ConfigureAwait(false);
+        var items = await connection.QueryAsync<DropdownDto>(sql, new { ActiveBranchId = activeBranchId }).ConfigureAwait(false);
         return items.ToList();
     }
 

@@ -1,9 +1,11 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Subject.Entities;
 using SmartOps.Domain.Modules.Subject;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common.Configuration;
@@ -13,11 +15,20 @@ namespace SmartOps.Infrastructure.Modules.Subject;
 public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 {
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
-    public SubjectRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
+    public SubjectRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        IUserScopeContext scope,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _scope = scope;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     public async Task<Guid> CreateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken)
@@ -29,6 +40,10 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         }
 
         EnsureInsertAudit(subject, utcNow);
+
+        subject.BranchId = await _branchWrite
+            .ResolveWriteBranchIdAsync(subject.BranchId, cancellationToken)
+            .ConfigureAwait(false);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -52,8 +67,10 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "s", ref whereClause);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedSubjectIds.Count > 0)
@@ -108,7 +125,13 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
                 connection,
                 querySql,
                 countSql,
-                new { SearchTerm = searchTerm, Filter = filter, ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() },
+                new
+                {
+                    SearchTerm = searchTerm,
+                    Filter = filter,
+                    ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray(),
+                    ActiveBranchId = _branchContext.ActiveBranchId
+                },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);
@@ -119,16 +142,22 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         string whereClause = "WHERE s.isactive = true";
-        object parameters = new { };
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "s", ref whereClause);
+        object parameters = new { ActiveBranchId = _branchContext.ActiveBranchId };
 
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedSubjectIds.Count > 0)
             {
                 whereClause += " AND s.id = ANY(@ScopeSubjectIds)";
-                parameters = new { ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray() };
+                parameters = new
+                {
+                    ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray(),
+                    ActiveBranchId = _branchContext.ActiveBranchId
+                };
             }
             else
             {

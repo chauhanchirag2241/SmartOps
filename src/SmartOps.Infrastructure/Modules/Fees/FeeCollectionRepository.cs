@@ -1,9 +1,11 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Fees;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -12,6 +14,7 @@ namespace SmartOps.Infrastructure.Modules.Fees;
 public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IBranchContext _branchContext;
 
     private const string ClassDisplayNameSql =
         "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
@@ -19,10 +22,12 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
     public FeeCollectionRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        ITenantSchemaProvider tenantSchema)
+        ITenantSchemaProvider tenantSchema,
+        IBranchContext branchContext)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
+        _branchContext = branchContext;
     }
 
     private string Schema =>
@@ -59,6 +64,9 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "s", ct)
+            .ConfigureAwait(false);
         string feeTypeIncluded = StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(
             Schema, "fee_row.feetypeid", "sa.studentid", "sa.feestructureversionid");
         string sql = $"""
@@ -105,7 +113,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
                   AND fp.feestructureversionid = sa.feestructureversionid
                   AND fp.isactive = true
             ) paid_totals ON true
-            WHERE s.isactive = true
+            WHERE s.isactive = true{branchFilter}
             {(classId.HasValue ? "AND sa.classid = @ClassId" : string.Empty)}
             {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (LOWER(s.firstname || ' ' || s.lastname) LIKE @Search OR LOWER(sa.rollnumber) LIKE @Search)")}
             ORDER BY sa.rollnumber, s.firstname;
@@ -115,7 +123,13 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
         IEnumerable<FeeCollectionStudentRow> rows = await connection
             .QueryAsync<FeeCollectionStudentRow>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, ClassId = classId, Search = searchParam },
+                new
+                {
+                    AcademicYearId = academicYearId,
+                    ClassId = classId,
+                    Search = searchParam,
+                    ActiveBranchId = activeBranchId
+                },
                 cancellationToken: ct))
             .ConfigureAwait(false);
 

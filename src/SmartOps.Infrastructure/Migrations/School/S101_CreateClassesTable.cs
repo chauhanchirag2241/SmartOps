@@ -9,6 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S101_CreateClassesTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
+    private static string G => DatabaseConfig.Schema_Global;
 
     public override void Up()
     {
@@ -16,6 +17,7 @@ public sealed class S101_CreateClassesTable : Migration
         {
             Create.Table(DatabaseConfig.TableClasses).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("classname").AsString(50).NotNullable()
                 .WithColumn("section").AsInt32().NotNullable().WithDefaultValue(1)
                 .WithColumn("streamgroup").AsInt32().Nullable()
@@ -28,9 +30,24 @@ public sealed class S101_CreateClassesTable : Migration
                 .WithColumn("description").AsString(1000).Nullable()
                 .WithAuditColumns();
 
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableClasses}
+    ADD CONSTRAINT fk_classes_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+""");
+
             Create.UniqueConstraint("uq_classes_identity")
                 .OnTable(DatabaseConfig.TableClasses).WithSchema(S)
-                .Columns("classname", "section", "streamgroup", "academicyearid");
+                .Columns("branchid", "classname", "section", "streamgroup", "academicyearid");
+
+            Create.Index("ix_classes_branchid")
+                .OnTable(DatabaseConfig.TableClasses).InSchema(S)
+                .OnColumn("branchid").Ascending();
+
+            Create.Index("ix_classes_branchid_academicyearid")
+                .OnTable(DatabaseConfig.TableClasses).InSchema(S)
+                .OnColumn("branchid").Ascending()
+                .OnColumn("academicyearid").Ascending();
         }
     }
 

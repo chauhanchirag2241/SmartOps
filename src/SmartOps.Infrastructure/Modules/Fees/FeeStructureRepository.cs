@@ -1,9 +1,11 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Fees;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -12,14 +14,20 @@ namespace SmartOps.Infrastructure.Modules.Fees;
 public sealed class FeeStructureRepository : BaseRepository, IFeeStructureRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
     public FeeStructureRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        ITenantSchemaProvider tenantSchema)
+        ITenantSchemaProvider tenantSchema,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     private string Schema =>
@@ -33,6 +41,9 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
             SELECT v.id AS Id,
                    v.academicyearid AS AcademicYearId,
@@ -50,7 +61,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                    ) AS HasStudentPayments
             FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions} v
             LEFT JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay ON ay.id = v.academicyearid
-            WHERE v.isactive = true
+            WHERE v.isactive = true{branchFilter}
             {(academicYearId.HasValue ? "AND v.academicyearid = @AcademicYearId" : string.Empty)}
             {(status.HasValue ? "AND v.status = @Status" : string.Empty)}
             ORDER BY ay.title, v.versionnumber DESC;
@@ -59,7 +70,12 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         IEnumerable<FeeStructureVersionListRow> rows = await connection
             .QueryAsync<FeeStructureVersionListRow>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, Status = status.HasValue ? (short)status.Value : (short?)null },
+                new
+                {
+                    AcademicYearId = academicYearId,
+                    Status = status.HasValue ? (short)status.Value : (short?)null,
+                    ActiveBranchId = activeBranchId
+                },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
@@ -153,14 +169,15 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableFeeStructureVersions}
-                (id, academicyearid, versionnumber, status, effectivedate, publishedon, activatedon,
+                (id, branchid, academicyearid, versionnumber, status, effectivedate, publishedon, activatedon,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @AcademicYearId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
+                (@Id, @BranchId, @AcademicYearId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);

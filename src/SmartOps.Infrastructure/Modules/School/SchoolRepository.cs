@@ -25,6 +25,7 @@ using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Infrastructure.Modules.Branch;
 
 
 
@@ -50,6 +51,10 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
     private readonly ISchoolDefaultAdminProvisioner _defaultAdminProvisioner;
 
+    private readonly BranchOperationalSeedService _branchOperationalSeedService;
+
+    private readonly SchoolBranchSyncService _schoolBranchSyncService;
+
     private readonly PerSchoolDatabaseOptions _perSchoolDbOptions;
 
 
@@ -70,6 +75,10 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         ISchoolDefaultAdminProvisioner defaultAdminProvisioner,
 
+        BranchOperationalSeedService branchOperationalSeedService,
+
+        SchoolBranchSyncService schoolBranchSyncService,
+
         IOptions<PerSchoolDatabaseOptions> perSchoolDbOptions)
 
         : base(context, currentUser)
@@ -85,6 +94,10 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
         _schoolSettings = schoolSettings;
 
         _defaultAdminProvisioner = defaultAdminProvisioner;
+
+        _branchOperationalSeedService = branchOperationalSeedService;
+
+        _schoolBranchSyncService = schoolBranchSyncService;
 
         _perSchoolDbOptions = perSchoolDbOptions.Value;
 
@@ -194,7 +207,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         await _defaultAdminProvisioner.ProvisionAsync(school, cancellationToken).ConfigureAwait(false);
 
-
+        await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
 
         return schoolId;
 
@@ -416,6 +429,56 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         {
 
+            // Config UI does not send infrastructure fields; never wipe them on edit.
+
+            var existingInfra = await conn.QuerySingleOrDefaultAsync<(string? ConnectionString, string? DatabaseName, string? SchemaName)>(
+
+                $"""
+
+                SELECT connectionstring AS ConnectionString, databasename AS DatabaseName, schemaname AS SchemaName
+
+                FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+
+                WHERE id = @Id;
+
+                """,
+
+                new { school.Id },
+
+                tx).ConfigureAwait(false);
+
+
+
+            if (string.IsNullOrWhiteSpace(school.ConnectionString))
+
+            {
+
+                school.ConnectionString = existingInfra.ConnectionString;
+
+            }
+
+
+
+            if (string.IsNullOrWhiteSpace(school.DatabaseName))
+
+            {
+
+                school.DatabaseName = existingInfra.DatabaseName;
+
+            }
+
+
+
+            if (string.IsNullOrWhiteSpace(school.SchemaName))
+
+            {
+
+                school.SchemaName = existingInfra.SchemaName;
+
+            }
+
+
+
             await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSchools, school, tx, "Id")
 
                 .ConfigureAwait(false);
@@ -434,7 +497,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
             {
 
-                school.Id,
+                SchoolId = school.Id,
 
                 UpdatedOn = utcNow,
 
@@ -477,6 +540,28 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
             }
 
         }).ConfigureAwait(false);
+
+
+
+        if (string.IsNullOrWhiteSpace(school.ConnectionString))
+
+        {
+
+            return;
+
+        }
+
+
+
+        await _schoolBranchSyncService
+
+            .EnsureSyncedAsync(school.Id, school.ConnectionString, cancellationToken)
+
+            .ConfigureAwait(false);
+
+
+
+        await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
 
     }
 

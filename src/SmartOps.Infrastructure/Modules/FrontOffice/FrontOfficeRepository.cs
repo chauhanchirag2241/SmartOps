@@ -2,12 +2,14 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Audit;
 using SmartOps.Application.Modules.FrontOffice.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.FrontOffice;
 using SmartOps.Domain.Modules.FrontOffice.Entities;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -16,14 +18,20 @@ namespace SmartOps.Infrastructure.Modules.FrontOffice;
 public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
     public FrontOfficeRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        ITenantSchemaProvider tenantSchema)
+        ITenantSchemaProvider tenantSchema,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     private string Schema =>
@@ -38,15 +46,19 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "t", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, name AS Name, description AS Description, displayorder AS DisplayOrder,
-                   isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableComplaintTypes}
-            WHERE 1 = 1{BuildIsActiveClause(activeFilter)}
-            ORDER BY displayorder ASC, name ASC;
+            SELECT t.id AS Id, t.name AS Name, t.description AS Description, t.displayorder AS DisplayOrder,
+                   t.isactive AS IsActive, t.versionno AS VersionNo,
+                   t.createdby AS CreatedBy, t.createdon AS CreatedOn, t.updatedby AS UpdatedBy, t.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableComplaintTypes} t
+            WHERE 1 = 1{BuildIsActiveClause(activeFilter, "t")}{branchFilter}
+            ORDER BY t.displayorder ASC, t.name ASC;
             """;
-        var rows = await connection.QueryAsync<ComplaintTypeEntity>(new CommandDefinition(sql, cancellationToken: ct))
+        var rows = await connection.QueryAsync<ComplaintTypeEntity>(
+            new CommandDefinition(sql, new { ActiveBranchId = activeBranchId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
@@ -71,13 +83,14 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableComplaintTypes}
-                (id, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
+                (id, branchid, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @Name, @Description, @DisplayOrder, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+                (@Id, @BranchId, @Name, @Description, @DisplayOrder, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
         return entity.Id;
@@ -109,15 +122,19 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "t", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, name AS Name, description AS Description, displayorder AS DisplayOrder,
-                   isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableVisitorPurposes}
-            WHERE 1 = 1{BuildIsActiveClause(activeFilter)}
-            ORDER BY displayorder ASC, name ASC;
+            SELECT t.id AS Id, t.name AS Name, t.description AS Description, t.displayorder AS DisplayOrder,
+                   t.isactive AS IsActive, t.versionno AS VersionNo,
+                   t.createdby AS CreatedBy, t.createdon AS CreatedOn, t.updatedby AS UpdatedBy, t.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableVisitorPurposes} t
+            WHERE 1 = 1{BuildIsActiveClause(activeFilter, "t")}{branchFilter}
+            ORDER BY t.displayorder ASC, t.name ASC;
             """;
-        var rows = await connection.QueryAsync<VisitorPurposeEntity>(new CommandDefinition(sql, cancellationToken: ct))
+        var rows = await connection.QueryAsync<VisitorPurposeEntity>(
+            new CommandDefinition(sql, new { ActiveBranchId = activeBranchId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
@@ -142,13 +159,14 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableVisitorPurposes}
-                (id, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
+                (id, branchid, name, description, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @Name, @Description, @DisplayOrder, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+                (@Id, @BranchId, @Name, @Description, @DisplayOrder, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
         return entity.Id;
@@ -192,6 +210,8 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
             WHERE 1 = 1{BuildIsActiveClause(activeFilter, "v")}
             """);
         var parameters = new DynamicParameters();
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, sql, parameters, "v", ct)
+            .ConfigureAwait(false);
         AppendDateRangeFilter(sql, parameters, "v.intime::date", fromDate, toDate);
         sql.Append(" ORDER BY v.intime DESC;");
         var rows = await connection.QueryAsync<VisitorListRow>(
@@ -222,6 +242,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
         await InsertAsync(connection, Schema, DatabaseConfig.TableVisitors, entity)
             .ConfigureAwait(false);
@@ -282,17 +303,19 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         var sql = new StringBuilder($"""
-            SELECT id AS Id, callername AS CallerName, phone AS Phone, calltype AS CallType,
-                   calldate AS CallDate, duration AS Duration, description AS Description,
-                   nextfollowupdate AS NextFollowUpDate, note AS Note,
-                   isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TablePhoneLogs}
-            WHERE 1 = 1{BuildIsActiveClause(activeFilter)}
+            SELECT pl.id AS Id, pl.callername AS CallerName, pl.phone AS Phone, pl.calltype AS CallType,
+                   pl.calldate AS CallDate, pl.duration AS Duration, pl.description AS Description,
+                   pl.nextfollowupdate AS NextFollowUpDate, pl.note AS Note,
+                   pl.isactive AS IsActive, pl.versionno AS VersionNo,
+                   pl.createdby AS CreatedBy, pl.createdon AS CreatedOn, pl.updatedby AS UpdatedBy, pl.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TablePhoneLogs} pl
+            WHERE 1 = 1{BuildIsActiveClause(activeFilter, "pl")}
             """);
         var parameters = new DynamicParameters();
-        AppendDateRangeFilter(sql, parameters, "calldate", fromDate, toDate);
-        sql.Append(" ORDER BY calldate DESC, createdon DESC;");
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, sql, parameters, "pl", ct)
+            .ConfigureAwait(false);
+        AppendDateRangeFilter(sql, parameters, "pl.calldate", fromDate, toDate);
+        sql.Append(" ORDER BY pl.calldate DESC, pl.createdon DESC;");
         var rows = await connection.QueryAsync<PhoneLogEntity>(
             new CommandDefinition(sql.ToString(), parameters, cancellationToken: ct))
             .ConfigureAwait(false);
@@ -321,6 +344,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
         await InsertAsync(connection, Schema, DatabaseConfig.TablePhoneLogs, entity)
             .ConfigureAwait(false);
@@ -365,6 +389,8 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
             WHERE 1 = 1{BuildIsActiveClause(activeFilter, "c")}
             """);
         var parameters = new DynamicParameters();
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, sql, parameters, "c", ct)
+            .ConfigureAwait(false);
         AppendDateRangeFilter(sql, parameters, "c.complaintdate", fromDate, toDate);
         AppendStatusFilter(sql, parameters, "c.status", status);
         sql.Append(" ORDER BY c.complaintdate DESC, c.createdon DESC;");
@@ -400,6 +426,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
         await InsertAsync(connection, Schema, DatabaseConfig.TableComplaints, entity)
             .ConfigureAwait(false);
@@ -460,6 +487,8 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
             WHERE 1 = 1{BuildIsActiveClause(activeFilter, "a")}
             """);
         var parameters = new DynamicParameters();
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, sql, parameters, "a", ct)
+            .ConfigureAwait(false);
         AppendDateRangeFilter(sql, parameters, "a.inquirydate", fromDate, toDate);
         AppendStatusFilter(sql, parameters, "a.status", status);
         sql.Append(" ORDER BY a.inquirydate DESC, a.createdon DESC;");
@@ -494,6 +523,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
         await InsertAsync(connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity)
             .ConfigureAwait(false);
@@ -559,13 +589,17 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<IReadOnlyList<DropdownDto>> GetActiveEmployeesAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "e", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, TRIM(firstname || ' ' || lastname) AS Name
-            FROM {Schema}.{DatabaseConfig.TableEmployees}
-            WHERE isactive = true
-            ORDER BY firstname ASC, lastname ASC;
+            SELECT e.id AS Id, TRIM(e.firstname || ' ' || e.lastname) AS Name
+            FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            WHERE e.isactive = true{branchFilter}
+            ORDER BY e.firstname ASC, e.lastname ASC;
             """;
-        var items = await connection.QueryAsync<DropdownDto>(new CommandDefinition(sql, cancellationToken: ct))
+        var items = await connection.QueryAsync<DropdownDto>(
+            new CommandDefinition(sql, new { ActiveBranchId = activeBranchId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return items.ToList();
     }

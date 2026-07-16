@@ -1,6 +1,8 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Class.Entities;
@@ -19,11 +21,20 @@ namespace SmartOps.Infrastructure.Modules.Class;
 public sealed class ClassRepository : BaseRepository, IClassRepository
 {
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
-    public ClassRepository(DapperContext context, ICurrentUserService currentUser, IUserScopeContext scope)
+    public ClassRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        IUserScopeContext scope,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _scope = scope;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     /// <inheritdoc />
@@ -37,11 +48,16 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         EnsureInsertAudit(classEntity, utcNow);
 
+        classEntity.BranchId = await _branchWrite
+            .ResolveWriteBranchIdAsync(classEntity.BranchId, cancellationToken)
+            .ConfigureAwait(false);
+
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var existingSql = $@"
             SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            WHERE classname = @ClassName 
+            WHERE branchid = @BranchId
+            AND classname = @ClassName 
             AND section = @Section 
             AND streamgroup = @StreamGroup 
             AND academicyearid = @AcademicYearId 
@@ -49,6 +65,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         var exists = await connection.ExecuteScalarAsync<int?>(existingSql, new 
         { 
+            classEntity.BranchId,
             classEntity.ClassName, 
             classEntity.Section, 
             classEntity.StreamGroup, 
@@ -94,9 +111,11 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
         whereClause = AcademicYearScopeSql.AppendAcademicYearFilter(_scope, "c.academicyearid", ref whereClause);
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "c", ref whereClause);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedClassIds.Count > 0)
@@ -159,7 +178,8 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 {
                     SearchTerm = searchTerm,
                     ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-                    ScopeAcademicYearId = _scope.ActiveAcademicYearId
+                    ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                    ActiveBranchId = _branchContext.ActiveBranchId
                 },
                 pageIndex,
                 pageSize)
@@ -176,6 +196,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         Guid? yearFilter = academicYearId ?? _scope.ActiveAcademicYearId;
 
@@ -185,7 +206,9 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
             whereClause += " AND c.academicyearid = @ScopeAcademicYearId";
         }
 
-        object parameters = new { ScopeAcademicYearId = yearFilter };
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "c", ref whereClause);
+
+        object parameters = new { ScopeAcademicYearId = yearFilter, ActiveBranchId = _branchContext.ActiveBranchId };
 
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
@@ -195,7 +218,8 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 parameters = new
                 {
                     ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-                    ScopeAcademicYearId = yearFilter
+                    ScopeAcademicYearId = yearFilter,
+                    ActiveBranchId = _branchContext.ActiveBranchId
                 };
             }
             else

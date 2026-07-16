@@ -12,6 +12,7 @@ using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
@@ -33,7 +34,8 @@ public sealed class StudentsController(
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider,
     SmartOps.Infrastructure.Persistence.Context.DapperContext dapperContext,
-    IAuditLogRepository auditLogRepository) : ControllerBase
+    IAuditLogRepository auditLogRepository,
+    IBranchContext branchContext) : ControllerBase
 {
     private static readonly Regex AdmissionNoPattern = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
 
@@ -358,9 +360,20 @@ public sealed class StudentsController(
         }
 
         bool duplicate = await studentRepository
-            .AdmissionNoExistsAsync(normalized, excludingStudentId, cancellationToken)
+            .AdmissionNoExistsAsync(
+                normalized,
+                await ResolveValidationBranchIdAsync(cancellationToken).ConfigureAwait(false),
+                excludingStudentId,
+                cancellationToken)
             .ConfigureAwait(false);
-        return duplicate ? Conflict(new { message = "Admission number already exists." }) : null;
+        return duplicate ? Conflict(new { message = "Admission number already exists for this branch." }) : null;
+    }
+
+    private async Task<Guid> ResolveValidationBranchIdAsync(CancellationToken cancellationToken)
+    {
+        await branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+        return branchContext.ActiveBranchId
+            ?? throw new InvalidOperationException("Select a branch from the header before saving.");
     }
 
     /// <summary>

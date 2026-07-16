@@ -20,6 +20,7 @@ public sealed class S115_CreateSalaryStructureVersionsTable : Migration
 
         Create.Table(DatabaseConfig.TableSalaryStructureVersions).InSchema(S)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+            .WithColumn("branchid").AsGuid().NotNullable()
             .WithColumn("academicyearid").AsGuid().NotNullable()
             .WithColumn("versionnumber").AsInt32().NotNullable()
             .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
@@ -28,9 +29,17 @@ public sealed class S115_CreateSalaryStructureVersionsTable : Migration
             .WithColumn("activatedon").AsDateTime().Nullable()
             .WithAuditColumns();
 
+        Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableSalaryStructureVersions}
+    ADD CONSTRAINT fk_salarystructureversions_branchid FOREIGN KEY (branchid)
+    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_salarystructureversions_branchid ON {S}.{DatabaseConfig.TableSalaryStructureVersions} (branchid);
+""");
+
         Create.UniqueConstraint(VersionYearUnique)
             .OnTable(DatabaseConfig.TableSalaryStructureVersions).WithSchema(S)
-            .Columns("academicyearid", "versionnumber");
+            .Columns("branchid", "academicyearid", "versionnumber");
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TableSalaryStructureVersions).InSchema(S);

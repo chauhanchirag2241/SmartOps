@@ -5,6 +5,7 @@ namespace SmartOps.Domain.Modules.Fees;
 public class FeeStructureVersionEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public Guid AcademicYearId { get; set; }
     public int VersionNumber { get; set; }
     public FeeStructureVersionStatus Status { get; set; } = FeeStructureVersionStatus.Draft;

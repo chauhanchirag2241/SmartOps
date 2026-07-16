@@ -1,9 +1,11 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Fees;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -12,6 +14,7 @@ namespace SmartOps.Infrastructure.Modules.Fees;
 public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IBranchContext _branchContext;
 
     private const string ClassDisplayNameSql =
         "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
@@ -35,10 +38,12 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
     public ClassFeeAmountRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        ITenantSchemaProvider tenantSchema)
+        ITenantSchemaProvider tenantSchema,
+        IBranchContext branchContext)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
+        _branchContext = branchContext;
     }
 
     private string Schema =>
@@ -52,6 +57,9 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .ConfigureAwait(false);
         string sql = $"""
             SELECT c.id AS ClassId,
                    {ClassDisplayNameSql} AS ClassName,
@@ -67,13 +75,18 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                          AND cfa.isactive = true
                    ), 0) AS TotalAmount
             FROM {Schema}.{DatabaseConfig.TableClasses} c
-            WHERE c.academicyearid = @AcademicYearId AND c.isactive = true
+            WHERE c.academicyearid = @AcademicYearId AND c.isactive = true{branchFilter}
             ORDER BY c.classname, c.section;
             """;
         IEnumerable<ClassFeeSummaryRow> rows = await connection
             .QueryAsync<ClassFeeSummaryRow>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, FeeStructureVersionId = feeStructureVersionId },
+                new
+                {
+                    AcademicYearId = academicYearId,
+                    FeeStructureVersionId = feeStructureVersionId,
+                    ActiveBranchId = activeBranchId
+                },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();

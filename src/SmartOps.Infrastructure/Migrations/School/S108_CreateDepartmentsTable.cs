@@ -9,16 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S108_CreateDepartmentsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-
-    private static readonly (Guid Id, string Code, string Name)[] DefaultDepartments =
-    [
-        (Guid.Parse("40000000-0000-0000-0000-000000000001"), "ACADEMICS", "Academics"),
-        (Guid.Parse("40000000-0000-0000-0000-000000000002"), "ACCOUNTS", "Accounts"),
-        (Guid.Parse("40000000-0000-0000-0000-000000000003"), "ADMIN", "Administration"),
-        (Guid.Parse("40000000-0000-0000-0000-000000000004"), "HR", "Human Resources"),
-        (Guid.Parse("40000000-0000-0000-0000-000000000005"), "NON_ACADEMIC_STAFF", "Non Academic Staff"),
-    ];
+    private static string G => DatabaseConfig.Schema_Global;
 
     public override void Up()
     {
@@ -26,26 +17,21 @@ public sealed class S108_CreateDepartmentsTable : Migration
         {
             Create.Table(DatabaseConfig.TableDepartments).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("code").AsString(50).NotNullable().Unique()
+                .WithColumn("branchid").AsGuid().NotNullable()
+                .WithColumn("code").AsString(50).NotNullable()
                 .WithColumn("name").AsString(200).NotNullable()
                 .WithAuditColumns();
-        }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-
-        Execute.Sql($"""
-UPDATE {S}.{DatabaseConfig.TableDepartments}
-SET code = 'NON_ACADEMIC_STAFF', name = 'Non Academic Staff', updatedon = '{now:O}', updatedby = '{SeedActor}'
-WHERE code = 'IT';
-""");
-
-        foreach ((Guid id, string code, string name) in DefaultDepartments)
-        {
             Execute.Sql($"""
-INSERT INTO {S}.{DatabaseConfig.TableDepartments}
-    (id, code, name, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{id}', '{code}', '{name}', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-WHERE NOT EXISTS (SELECT 1 FROM {S}.{DatabaseConfig.TableDepartments} WHERE code = '{code}');
+ALTER TABLE {S}.{DatabaseConfig.TableDepartments}
+    ADD CONSTRAINT fk_departments_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE UNIQUE INDEX uq_departments_branch_code
+    ON {S}.{DatabaseConfig.TableDepartments} (branchid, lower(code))
+    WHERE isactive = true;
+
+CREATE INDEX ix_departments_branchid ON {S}.{DatabaseConfig.TableDepartments} (branchid);
 """);
         }
 

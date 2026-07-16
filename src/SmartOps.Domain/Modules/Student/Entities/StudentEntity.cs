@@ -8,6 +8,7 @@ namespace SmartOps.Domain.Modules.Student.Entities;
 public class StudentEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public string? AdmissionNo { get; set; }
     public string FirstName { get; set; } = null!;
     public string? MiddleName { get; set; }

@@ -11,6 +11,7 @@ public class ClassEntity : AuditableEntity
     public int Section { get; set; }
     public int? StreamGroup { get; set; }
     public Guid AcademicYearId { get; set; }
+    public Guid BranchId { get; set; }
     public int Capacity { get; set; }
     public string? RoomNumber { get; set; }
     public int? Shift { get; set; }

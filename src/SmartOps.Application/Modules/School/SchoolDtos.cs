@@ -73,9 +73,6 @@ public sealed class CreateSchoolDto
     public int? LoginAttemptsBeforeLock { get; set; }
     public bool TwoFactorEnabled { get; set; }
     public bool IpWhitelistEnabled { get; set; }
-    public bool BranchDataIsolation { get; set; } = true;
-    public bool SharedFeeStructure { get; set; }
-    public bool CentralAdminViewAllBranches { get; set; } = true;
     public List<SchoolBranchDto> Branches { get; set; } = new();
 
     public SchoolEntity ToEntity()
@@ -150,9 +147,6 @@ public sealed class CreateSchoolDto
             LoginAttemptsBeforeLock = LoginAttemptsBeforeLock,
             TwoFactorEnabled = TwoFactorEnabled,
             IpWhitelistEnabled = IpWhitelistEnabled,
-            BranchDataIsolation = BranchDataIsolation,
-            SharedFeeStructure = SharedFeeStructure,
-            CentralAdminViewAllBranches = CentralAdminViewAllBranches,
             IsActive = true,
             Branches = Branches.Select(b => new SchoolBranchEntity
             {

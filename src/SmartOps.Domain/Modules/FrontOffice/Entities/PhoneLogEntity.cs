@@ -8,6 +8,7 @@ namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 public sealed class PhoneLogEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public string CallerName { get; set; } = null!;
     public string? Phone { get; set; }
     public CallType CallType { get; set; }

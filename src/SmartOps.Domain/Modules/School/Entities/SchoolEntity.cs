@@ -151,12 +151,6 @@ public sealed class SchoolEntity : AuditableEntity
 
     public bool IpWhitelistEnabled { get; set; }
 
-    public bool BranchDataIsolation { get; set; } = true;
-
-    public bool SharedFeeStructure { get; set; }
-
-    public bool CentralAdminViewAllBranches { get; set; } = true;
-
     [DbIgnore]
     public List<SchoolBranchEntity> Branches { get; set; } = new();
 }

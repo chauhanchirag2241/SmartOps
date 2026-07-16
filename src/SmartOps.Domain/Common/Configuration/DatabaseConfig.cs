@@ -15,6 +15,7 @@ public static class DatabaseConfig
     public const string TableRoleDashboardWidgetPermissions = "roledashboardwidgetpermissions";
     public const string TableSchools = "schools";
     public const string TableSchoolBranches = "schoolbranches";
+    public const string TableUserBranchMappings = "userbranchmappings";
     public const string TableUserSchoolMappings = "userschoolmappings";
     public const string TableUserTypes = "usertypes";
     public const string TableSchoolSettings = "schoolsettings";

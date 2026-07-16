@@ -27,7 +27,11 @@ public interface IStudentRepository
 
     Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default);
 
-    Task<bool> AdmissionNoExistsAsync(string admissionNo, Guid? excludingStudentId = null, CancellationToken cancellationToken = default);
+    Task<bool> AdmissionNoExistsAsync(
+        string admissionNo,
+        Guid branchId,
+        Guid? excludingStudentId = null,
+        CancellationToken cancellationToken = default);
 
     Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default);
 

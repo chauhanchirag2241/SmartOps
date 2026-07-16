@@ -2,10 +2,12 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Homework;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -15,16 +17,19 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
 
     public HomeworkRepository(
         DapperContext context,
         ICurrentUserService currentUser,
         ITenantSchemaProvider tenantSchema,
-        IUserScopeContext scope)
+        IUserScopeContext scope,
+        IBranchContext branchContext)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
         _scope = scope;
+        _branchContext = branchContext;
     }
 
     private string Schema =>
@@ -111,6 +116,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<HomeworkEntity?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
@@ -120,13 +128,18 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             FROM {Schema}.{DatabaseConfig.TableHomework} h
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
             WHERE h.id = @Id AND h.isactive = true
-              {HomeworkAcademicYearSql.FilterOnClass("c")};
+              {HomeworkAcademicYearSql.FilterOnClass("c")}{branchFilter};
             """;
 
         return await connection.QuerySingleOrDefaultAsync<HomeworkEntity>(
                 new CommandDefinition(
                     sql,
-                    new { Id = id, ScopeAcademicYearId = _scope.ActiveAcademicYearId },
+                    new
+                    {
+                        Id = id,
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                        ActiveBranchId = activeBranchId
+                    },
                     cancellationToken: ct))
             .ConfigureAwait(false);
     }
@@ -145,6 +158,8 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         var where = new StringBuilder($"h.isactive = true{HomeworkAcademicYearSql.FilterOnClass("c")}");
         var parameters = new DynamicParameters();
         parameters.Add("ScopeAcademicYearId", _scope.ActiveAcademicYearId);
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "c", ct)
+            .ConfigureAwait(false);
 
         if (classId.HasValue && classId.Value != Guid.Empty)
         {
@@ -211,6 +226,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<HomeworkStatsRow> GetStatsAsync(CancellationToken ct = default)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
         string yearFilter = HomeworkAcademicYearSql.FilterOnClass("c");
@@ -219,17 +237,17 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             SELECT
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
                     INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
-                    WHERE h.isactive = true{yearFilter}) AS TotalAssigned,
+                    WHERE h.isactive = true{yearFilter}{branchFilter}) AS TotalAssigned,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
                     INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
-                    WHERE h.isactive = true AND h.duedate = @Today{yearFilter}) AS DueToday,
+                    WHERE h.isactive = true AND h.duedate = @Today{yearFilter}{branchFilter}) AS DueToday,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomeworkDetails} d
                     INNER JOIN {Schema}.{DatabaseConfig.TableHomework} h ON h.id = d.homeworkid AND h.isactive = true
                     INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
-                    WHERE d.isactive = true AND d.status IN (1, 2){yearFilter}) AS TotalSubmissions,
+                    WHERE d.isactive = true AND d.status IN (1, 2){yearFilter}{branchFilter}) AS TotalSubmissions,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
                     INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
-                    WHERE h.isactive = true AND h.duedate < @Today{yearFilter}
+                    WHERE h.isactive = true AND h.duedate < @Today{yearFilter}{branchFilter}
                       AND EXISTS (
                           SELECT 1 FROM {Schema}.{DatabaseConfig.TableHomeworkDetails} d
                           WHERE d.homeworkid = h.id AND d.isactive = true AND d.status = 0
@@ -239,7 +257,12 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         HomeworkStatsRow? row = await connection.QuerySingleOrDefaultAsync<HomeworkStatsRow>(
                 new CommandDefinition(
                     sql,
-                    new { Today = today, ScopeAcademicYearId = _scope.ActiveAcademicYearId },
+                    new
+                    {
+                        Today = today,
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                        ActiveBranchId = activeBranchId
+                    },
                     cancellationToken: ct))
             .ConfigureAwait(false);
 
@@ -385,6 +408,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<HomeworkMetaRow?> GetMetaByHomeworkIdAsync(Guid homeworkId, CancellationToken ct = default)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
@@ -395,13 +421,18 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = h.subjectid AND s.isactive = true
             WHERE h.id = @HomeworkId AND h.isactive = true
-              {HomeworkAcademicYearSql.FilterOnClass("c")};
+              {HomeworkAcademicYearSql.FilterOnClass("c")}{branchFilter};
             """;
 
         return await connection.QuerySingleOrDefaultAsync<HomeworkMetaRow>(
                 new CommandDefinition(
                     sql,
-                    new { HomeworkId = homeworkId, ScopeAcademicYearId = _scope.ActiveAcademicYearId },
+                    new
+                    {
+                        HomeworkId = homeworkId,
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                        ActiveBranchId = activeBranchId
+                    },
                     cancellationToken: ct))
             .ConfigureAwait(false);
     }
@@ -409,6 +440,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<IList<HomeworkStudentRow>> GetClassStudentsForHomeworkAsync(Guid classId, CancellationToken ct = default)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "cl", ct)
+            .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
@@ -416,7 +450,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                    TRIM(COALESCE(st.firstname, '') || ' ' || COALESCE(st.lastname, '')) AS StudentName,
                    COALESCE(sa.rollnumber, '') AS RollNo
             FROM {Schema}.{DatabaseConfig.TableStudents} st
-            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = @ClassId AND cl.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = @ClassId AND cl.isactive = true{branchFilter}
             INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
                 ON sa.studentid = st.id
                AND sa.classid = @ClassId
@@ -427,7 +461,10 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             """;
 
         IEnumerable<HomeworkStudentRow> rows = await connection.QueryAsync<HomeworkStudentRow>(
-                new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct))
+                new CommandDefinition(
+                    sql,
+                    new { ClassId = classId, ActiveBranchId = activeBranchId },
+                    cancellationToken: ct))
             .ConfigureAwait(false);
 
         return rows.ToList();

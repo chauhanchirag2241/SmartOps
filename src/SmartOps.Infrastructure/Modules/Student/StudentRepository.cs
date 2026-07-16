@@ -1,6 +1,7 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Domain.Common.Enums;
@@ -23,10 +24,12 @@ namespace SmartOps.Infrastructure.Modules.Student;
 public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
     private readonly IFeeStructureRepository _feeStructureRepo;
     private readonly IClassFeeAmountRepository _classFeeAmountRepo;
     private readonly IStudentFeeInstallmentRepository _studentFeeInstallmentRepo;
     private readonly IFeeCollectionRepository _feeCollectionRepo;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
     private static readonly string[] RelatedTablesForSoftDelete =
     {
@@ -41,17 +44,21 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DapperContext context,
         ICurrentUserService currentUser,
         IUserScopeContext scope,
+        IBranchContext branchContext,
         IFeeStructureRepository feeStructureRepo,
         IClassFeeAmountRepository classFeeAmountRepo,
         IStudentFeeInstallmentRepository studentFeeInstallmentRepo,
-        IFeeCollectionRepository feeCollectionRepo)
+        IFeeCollectionRepository feeCollectionRepo,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _feeStructureRepo = feeStructureRepo;
         _classFeeAmountRepo = classFeeAmountRepo;
         _studentFeeInstallmentRepo = studentFeeInstallmentRepo;
         _feeCollectionRepo = feeCollectionRepo;
+        _branchWrite = branchWrite;
         _scope = scope;
+        _branchContext = branchContext;
     }
 
     /// <inheritdoc />
@@ -66,6 +73,10 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             }
 
             EnsureInsertAudit(student, utcNow);
+
+            student.BranchId = await _branchWrite
+                .ResolveWriteBranchIdAsync(student.BranchId, cancellationToken)
+                .ConfigureAwait(false);
 
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -131,6 +142,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         try
         {
             await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
             var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -157,6 +169,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 _scope, "s", Context.OperationalSchema, ref whereClause);
             whereClause = ScopeSqlBuilder.AppendStudentScopeFilter(
                 _scope, "s", Context.OperationalSchema, ref whereClause);
+            whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "s", ref whereClause);
             var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
             string enrollmentJoin = _scope.ActiveAcademicYearId.HasValue ? "INNER JOIN" : "LEFT JOIN";
 
@@ -253,7 +266,8 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                         ClassIds = effectiveClassIds?.ToArray(),
                         ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
                         ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-                        ScopeAcademicYearId = _scope.ActiveAcademicYearId
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                        ActiveBranchId = _branchContext.ActiveBranchId
                     },
                     pageIndex,
                     pageSize)
@@ -290,6 +304,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
     public async Task<bool> AdmissionNoExistsAsync(
         string admissionNo,
+        Guid branchId,
         Guid? excludingStudentId = null,
         CancellationToken cancellationToken = default)
     {
@@ -299,6 +314,7 @@ SELECT EXISTS (
     SELECT 1
     FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
     WHERE lower(admissionno) = lower(@AdmissionNo)
+      AND branchid = @BranchId
       AND isactive = true
       AND (@ExcludingStudentId IS NULL OR id <> @ExcludingStudentId)
 );
@@ -306,7 +322,7 @@ SELECT EXISTS (
 
         return await connection.QuerySingleAsync<bool>(
                 sql,
-                new { AdmissionNo = admissionNo.Trim(), ExcludingStudentId = excludingStudentId })
+                new { AdmissionNo = admissionNo.Trim(), BranchId = branchId, ExcludingStudentId = excludingStudentId })
             .ConfigureAwait(false);
     }
 

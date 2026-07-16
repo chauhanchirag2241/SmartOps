@@ -8,6 +8,7 @@ namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 public sealed class ComplaintEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public Guid ComplaintTypeId { get; set; }
     public DateOnly ComplaintDate { get; set; }
     public bool IsAnonymous { get; set; }

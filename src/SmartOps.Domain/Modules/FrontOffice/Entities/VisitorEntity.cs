@@ -7,6 +7,7 @@ namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 public sealed class VisitorEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public string Name { get; set; } = null!;
     public string? Phone { get; set; }
     public string? IdCardType { get; set; }

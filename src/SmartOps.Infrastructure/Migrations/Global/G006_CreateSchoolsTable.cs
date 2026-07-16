@@ -85,9 +85,6 @@ public sealed class G006_CreateSchoolsTable : Migration
             .WithColumn("loginattemptsbeforelock").AsInt32().Nullable()
             .WithColumn("twofactorenabled").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithColumn("ipwhitelistenabled").AsBoolean().NotNullable().WithDefaultValue(false)
-            .WithColumn("branchdataisolation").AsBoolean().NotNullable().WithDefaultValue(true)
-            .WithColumn("sharedfeestructure").AsBoolean().NotNullable().WithDefaultValue(false)
-            .WithColumn("centraladminviewallbranches").AsBoolean().NotNullable().WithDefaultValue(true)
             .WithAuditColumns();
     }
 

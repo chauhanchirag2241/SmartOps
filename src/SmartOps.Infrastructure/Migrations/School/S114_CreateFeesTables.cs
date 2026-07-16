@@ -23,6 +23,7 @@ public sealed class S114_CreateFeesTables : Migration
         {
             Create.Table(DatabaseConfig.TableFeeStructureVersions).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                 .WithColumn("versionnumber").AsInt32().NotNullable()
                 .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
@@ -35,9 +36,17 @@ public sealed class S114_CreateFeesTables : Migration
         if (Schema.Schema(S).Table(DatabaseConfig.TableFeeStructureVersions).Exists()
             && !Schema.Schema(S).Table(DatabaseConfig.TableFeeStructureVersions).Constraint(VersionYearUnique).Exists())
         {
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableFeeStructureVersions}
+    ADD CONSTRAINT fk_feestructureversions_branchid FOREIGN KEY (branchid)
+    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE INDEX ix_feestructureversions_branchid ON {S}.{DatabaseConfig.TableFeeStructureVersions} (branchid);
+""");
+
             Create.UniqueConstraint(VersionYearUnique)
                 .OnTable(DatabaseConfig.TableFeeStructureVersions).WithSchema(S)
-                .Columns("academicyearid", "versionnumber");
+                .Columns("branchid", "academicyearid", "versionnumber");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Exists())

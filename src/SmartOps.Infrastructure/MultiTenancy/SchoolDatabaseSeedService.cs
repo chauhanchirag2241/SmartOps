@@ -71,6 +71,16 @@ menuid IN (
             DatabaseConfig.TableRoleDashboardWidgetPermissions,
             cancellationToken).ConfigureAwait(false);
 
+        await copier.CopyTableDataAsync(
+            platform,
+            g,
+            schoolDb,
+            g,
+            DatabaseConfig.TableSchoolBranches,
+            "schoolid = @SchoolId",
+            new { SchoolId = schoolId },
+            cancellationToken).ConfigureAwait(false);
+
         await SeedLeaveSettingsAsync(schoolDb, schoolId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Seeded default identity data for school {SchoolId}.", schoolId);

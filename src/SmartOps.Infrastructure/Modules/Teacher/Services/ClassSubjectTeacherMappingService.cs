@@ -3,9 +3,11 @@ using Dapper;
 using Npgsql;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Entities;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Enums;
@@ -18,6 +20,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
     private readonly IScopeMappingRepository _scopeMapping;
     private readonly IUserScopeService _userScopeService;
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
     private readonly ICurrentUserService _currentUser;
     private readonly ITenantProvider _tenantProvider;
     private readonly DapperContext _context;
@@ -27,6 +30,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
         IScopeMappingRepository scopeMapping,
         IUserScopeService userScopeService,
         IUserScopeContext scope,
+        IBranchContext branchContext,
         ICurrentUserService currentUser,
         ITenantProvider tenantProvider,
         DapperContext context)
@@ -35,6 +39,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
         _scopeMapping = scopeMapping;
         _userScopeService = userScopeService;
         _scope = scope;
+        _branchContext = branchContext;
         _currentUser = currentUser;
         _tenantProvider = tenantProvider;
         _context = context;
@@ -46,6 +51,15 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
     {
         Guid yearId = await ResolveAcademicYearIdAsync(academicYearId, cancellationToken).ConfigureAwait(false);
         string schema = _context.OperationalSchema;
+        (string classBranchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", cancellationToken)
+            .ConfigureAwait(false);
+        (string subjectBranchFilter, _) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "s", cancellationToken)
+            .ConfigureAwait(false);
+        (string employeeBranchFilter, _) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "e", cancellationToken)
+            .ConfigureAwait(false);
 
         IDbConnection connection = await _context
             .GetGlobalConnectionAsync(cancellationToken)
@@ -73,10 +87,10 @@ SELECT id AS Id,
        ), ''), '')) AS Name,
        CASE c.section WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE '' END AS SubLabel
 FROM {schema}.{DatabaseConfig.TableClasses} c
-WHERE isactive = true AND academicyearid = @AcademicYearId
+WHERE isactive = true AND academicyearid = @AcademicYearId{classBranchFilter}
 ORDER BY classname, section
 """,
-                    new { AcademicYearId = yearId },
+                    new { AcademicYearId = yearId, ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
@@ -84,11 +98,12 @@ ORDER BY classname, section
             .QueryAsync<MappingLookupOptionDto>(
                 new CommandDefinition(
                     $"""
-SELECT id AS Id, subjectname AS Name, subjectcode AS Code
-FROM {schema}.{DatabaseConfig.TableSubjects}
-WHERE isactive = true
-ORDER BY subjectname
+SELECT s.id AS Id, s.subjectname AS Name, s.subjectcode AS Code
+FROM {schema}.{DatabaseConfig.TableSubjects} s
+WHERE s.isactive = true{subjectBranchFilter}
+ORDER BY s.subjectname
 """,
+                    new { ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
@@ -96,11 +111,12 @@ ORDER BY subjectname
             .QueryAsync<MappingLookupOptionDto>(
                 new CommandDefinition(
                     $"""
-SELECT id AS Id, trim(firstname || ' ' || lastname) AS Name
-FROM {schema}.{DatabaseConfig.TableEmployees}
-WHERE isactive = true
-ORDER BY firstname, lastname
+SELECT e.id AS Id, trim(e.firstname || ' ' || e.lastname) AS Name
+FROM {schema}.{DatabaseConfig.TableEmployees} e
+WHERE e.isactive = true{employeeBranchFilter}
+ORDER BY e.firstname, e.lastname
 """,
+                    new { ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 

@@ -2,9 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Branch.Interfaces;
 using SmartOps.Infrastructure.Modules.Authorization.Context;
 using SmartOps.Application.Modules.AcademicYear;
 using SmartOps.Infrastructure.Modules.AcademicYear;
+using SmartOps.Infrastructure.Modules.Branch;
 using SmartOps.Infrastructure.Modules.Authorization;
 using SmartOps.Infrastructure.Modules.Authorization.Services;
 
@@ -20,6 +23,11 @@ public static class AuthorizationServiceCollectionExtensions
         services.AddMemoryCache();
 
         services.AddScoped<IAcademicYearContext, AcademicYearContext>();
+        services.AddScoped<IBranchContext, BranchContext>();
+        services.AddScoped<IBranchRepository, BranchRepository>();
+        services.AddScoped<IBranchScopedWriteHelper, BranchScopedWriteHelper>();
+        services.AddScoped<SchoolBranchSyncService>();
+        services.AddScoped<BranchOperationalSeedService>();
         services.AddScoped<IScopeMappingRepository, ScopeMappingRepository>();
         services.AddScoped<IUserScopeService, UserScopeService>();
         services.AddScoped<IUserScopeContext, UserScopeContext>();

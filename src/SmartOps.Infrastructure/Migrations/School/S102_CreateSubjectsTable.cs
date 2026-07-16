@@ -9,6 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S102_CreateSubjectsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
+    private static string G => DatabaseConfig.Schema_Global;
 
     public override void Up()
     {
@@ -16,6 +17,7 @@ public sealed class S102_CreateSubjectsTable : Migration
         {
             Create.Table(DatabaseConfig.TableSubjects).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("subjectname").AsString(100).NotNullable()
                 .WithColumn("subjectcode").AsString(50).NotNullable()
                 .WithColumn("subjecttype").AsInt32().Nullable()
@@ -33,6 +35,18 @@ public sealed class S102_CreateSubjectsTable : Migration
                 .WithColumn("curriculum").AsInt32().NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+ALTER TABLE {S}.{DatabaseConfig.TableSubjects}
+    ADD CONSTRAINT fk_subjects_branchid FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE UNIQUE INDEX uq_subjects_branch_code
+    ON {S}.{DatabaseConfig.TableSubjects} (branchid, lower(subjectcode))
+    WHERE isactive = true;
+
+CREATE INDEX ix_subjects_branchid ON {S}.{DatabaseConfig.TableSubjects} (branchid);
+""");
         }
     }
 

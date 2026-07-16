@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Identity;
+using SmartOps.Application.Modules.Branch.Interfaces;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Common.Constants;
@@ -16,6 +17,7 @@ public sealed class UsersController(
     IUserRepository userRepository,
     IUserTypeRepository userTypeRepository,
     IRoleRepository roleRepository,
+    IBranchRepository branchRepository,
     ITenantProvider tenantProvider,
     IPasswordHasher<ApplicationUser> passwordHasher) : ControllerBase
 {
@@ -53,7 +55,10 @@ public sealed class UsersController(
             .GetUserTypesForSchoolUsersAsync(schoolId, cancellationToken)
             .ConfigureAwait(false);
         types.TryGetValue(user.Id, out UserTypeSummary? type);
-        return Ok(ToDto(user, roles, type));
+        IReadOnlyList<SmartOps.Application.Modules.Branch.BranchDropdownItemDto> branches = await branchRepository
+            .GetUserBranchesAsync(user.Id, schoolId, cancellationToken)
+            .ConfigureAwait(false);
+        return Ok(ToDto(user, roles, type, branches));
     }
 
     [HttpPost]
@@ -106,6 +111,13 @@ public sealed class UsersController(
             return BadRequest(ex.Message);
         }
 
+        if (request.BranchIds.Count > 0)
+        {
+            await branchRepository
+                .SetUserBranchesAsync(user.Id, schoolId, request.BranchIds, request.DefaultBranchId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
         UserTypeSummary? type = null;
         if (request.UserTypeId.HasValue)
@@ -146,6 +158,14 @@ public sealed class UsersController(
         await userRepository
             .SetUserTypeForSchoolAsync(id, schoolId, request.UserTypeId, cancellationToken)
             .ConfigureAwait(false);
+
+        if (request.BranchIds.Count > 0)
+        {
+            await branchRepository
+                .SetUserBranchesAsync(id, schoolId, request.BranchIds, request.DefaultBranchId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return NoContent();
     }
 
@@ -225,7 +245,10 @@ public sealed class UsersController(
         {
             IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
             types.TryGetValue(user.Id, out UserTypeSummary? type);
-            result.Add(ToDto(user, roles, type));
+            IReadOnlyList<SmartOps.Application.Modules.Branch.BranchDropdownItemDto> branches = await branchRepository
+                .GetUserBranchesAsync(user.Id, schoolId, cancellationToken)
+                .ConfigureAwait(false);
+            result.Add(ToDto(user, roles, type, branches));
         }
 
         return result;
@@ -269,7 +292,11 @@ public sealed class UsersController(
         }
     }
 
-    private static SchoolUserDto ToDto(ApplicationUser user, IList<string> roles, UserTypeSummary? userType = null) =>
+    private static SchoolUserDto ToDto(
+        ApplicationUser user,
+        IList<string> roles,
+        UserTypeSummary? userType = null,
+        IReadOnlyList<SmartOps.Application.Modules.Branch.BranchDropdownItemDto>? branches = null) =>
         new()
         {
             Id = user.Id,
@@ -281,6 +308,8 @@ public sealed class UsersController(
             UserTypeCode = userType?.Code,
             UserTypeName = userType?.Name,
             Roles = roles.ToList(),
+            BranchIds = branches?.Select(b => b.Id).ToList() ?? [],
+            DefaultBranchId = branches?.FirstOrDefault(b => b.IsDefault)?.Id ?? branches?.FirstOrDefault()?.Id,
         };
 
     private bool TryGetSchoolId(out Guid schoolId)

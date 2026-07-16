@@ -1,8 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Http;
 using SmartOps.Application.Abstractions;
-using SmartOps.Domain.Modules.School.Entities;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Modules.School.Entities;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
 
@@ -80,7 +81,7 @@ public sealed class TenantResolverMiddleware
 
                 if (!string.IsNullOrWhiteSpace(school.ConnectionString))
                 {
-                    tenantContext.SchemaName = SmartOps.Domain.Common.Configuration.DatabaseConfig.Schema_School;
+                    tenantContext.SchemaName = DatabaseConfig.Schema_School;
                 }
                 else
                 {

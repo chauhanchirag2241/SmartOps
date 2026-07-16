@@ -1,9 +1,11 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Entities;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common.Configuration;
@@ -23,11 +25,16 @@ END
 """;
 
     private readonly DapperContext _context;
+    private readonly IBranchContext _branchContext;
 
-    public ClassSubjectTeacherMappingRepository(DapperContext context, ICurrentUserService currentUser)
+    public ClassSubjectTeacherMappingRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        IBranchContext branchContext)
         : base(context, currentUser)
     {
         _context = context;
+        _branchContext = branchContext;
     }
 
     private string Schema => _context.OperationalSchema;
@@ -375,6 +382,10 @@ WHERE m.classid = ANY(@ClassIds)
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "c", cancellationToken)
+            .ConfigureAwait(false);
+
         string sql = $"""
 SELECT
     c.id AS ClassId,
@@ -389,14 +400,17 @@ LEFT JOIN {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
     AND m.isactive = true
     AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 WHERE c.isactive = true
-  AND (@AcademicYearId IS NULL OR c.academicyearid = @AcademicYearId)
+  AND (@AcademicYearId IS NULL OR c.academicyearid = @AcademicYearId){branchFilter}
 GROUP BY c.id, c.classname, c.section
 ORDER BY c.classname, c.section
 """;
 
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<ClassMappingSummaryDto> rows = await connection.QueryAsync<ClassMappingSummaryDto>(
-            new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: cancellationToken))
+            new CommandDefinition(
+                sql,
+                new { AcademicYearId = academicYearId, ActiveBranchId = activeBranchId },
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
         return rows.ToList();

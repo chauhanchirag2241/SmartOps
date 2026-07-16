@@ -32,10 +32,14 @@ public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
         EnsureDashboardWidgetsTables();
         EnsureUserTypesTable();
         EnsureSchoolSettingsTable();
+        EnsureSchoolBranchesTable();
+        EnsureUserBranchMappingsTable();
     }
 
     public override void Down()
     {
+        Delete.Table(DatabaseConfig.TableUserBranchMappings).InSchema(G);
+        Delete.Table(DatabaseConfig.TableSchoolBranches).InSchema(G);
         Delete.Table(DatabaseConfig.TableSchoolSettings).InSchema(G);
         Delete.Table(DatabaseConfig.TableUserTypes).InSchema(G);
         Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} DROP CONSTRAINT IF EXISTS fk_role_dashboard_widget_permissions_role;");
@@ -337,5 +341,60 @@ ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
         Create.UniqueConstraint("uq_schoolsettings_school_key")
             .OnTable(DatabaseConfig.TableSchoolSettings).WithSchema(G)
             .Columns("schoolid", "settingkey");
+    }
+
+    private void EnsureSchoolBranchesTable()
+    {
+        if (Schema.Schema(G).Table(DatabaseConfig.TableSchoolBranches).Exists())
+        {
+            return;
+        }
+
+        Create.Table(DatabaseConfig.TableSchoolBranches).InSchema(G)
+            .WithColumn("id").AsGuid().PrimaryKey().NotNullable()
+            .WithColumn("schoolid").AsGuid().NotNullable()
+            .WithColumn("name").AsString(200).NotNullable()
+            .WithColumn("email").AsString(256).Nullable()
+            .WithColumn("address").AsString(500).Nullable()
+            .WithColumn("isheadoffice").AsBoolean().NotNullable().WithDefaultValue(false)
+            .WithAuditColumns();
+
+        Create.Index("ix_schoolbranches_schoolid")
+            .OnTable(DatabaseConfig.TableSchoolBranches).InSchema(G)
+            .OnColumn("schoolid").Ascending();
+    }
+
+    private void EnsureUserBranchMappingsTable()
+    {
+        if (Schema.Schema(G).Table(DatabaseConfig.TableUserBranchMappings).Exists())
+        {
+            return;
+        }
+
+        Create.Table(DatabaseConfig.TableUserBranchMappings).InSchema(G)
+            .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+            .WithColumn("userid").AsGuid().NotNullable()
+            .WithColumn("branchid").AsGuid().NotNullable()
+            .WithColumn("schoolid").AsGuid().NotNullable()
+            .WithColumn("isdefault").AsBoolean().NotNullable().WithDefaultValue(false)
+            .WithAuditColumns();
+
+        Execute.Sql($"""
+ALTER TABLE {G}.{DatabaseConfig.TableUserBranchMappings}
+    ADD CONSTRAINT fk_userbranchmappings_user FOREIGN KEY (userid)
+    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
+
+ALTER TABLE {G}.{DatabaseConfig.TableUserBranchMappings}
+    ADD CONSTRAINT fk_userbranchmappings_branch FOREIGN KEY (branchid)
+    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id) ON DELETE CASCADE;
+""");
+
+        Create.UniqueConstraint("uq_userbranchmappings_user_branch")
+            .OnTable(DatabaseConfig.TableUserBranchMappings).WithSchema(G)
+            .Columns("userid", "branchid");
+
+        Create.Index("ix_userbranchmappings_userid")
+            .OnTable(DatabaseConfig.TableUserBranchMappings).InSchema(G)
+            .OnColumn("userid").Ascending();
     }
 }

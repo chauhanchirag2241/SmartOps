@@ -194,6 +194,8 @@ SELECT
     m.id AS MenuId,
     m.code AS MenuCode,
     m.name AS MenuName,
+    m.parentmenuid AS ParentMenuId,
+    m.displayorder AS DisplayOrder,
     false AS CanView,
     false AS CanAdd,
     false AS CanEdit,

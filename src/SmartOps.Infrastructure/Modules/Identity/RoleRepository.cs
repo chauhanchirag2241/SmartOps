@@ -188,6 +188,8 @@ SELECT
     m.id AS MenuId,
     m.code AS MenuCode,
     m.name AS MenuName,
+    m.parentmenuid AS ParentMenuId,
+    m.displayorder AS DisplayOrder,
     COALESCE(rmp.canview, false) AS CanView,
     COALESCE(rmp.canadd, false) AS CanAdd,
     COALESCE(rmp.canedit, false) AS CanEdit,

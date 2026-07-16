@@ -93,6 +93,10 @@ public sealed class RoleMenuPermissionDto
 
     public string MenuName { get; set; } = string.Empty;
 
+    public Guid? ParentMenuId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
     public bool CanView { get; set; }
 
     public bool CanAdd { get; set; }

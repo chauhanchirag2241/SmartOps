@@ -1,8 +1,10 @@
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Attributes;
 using SmartOps.Domain.Modules.FrontOffice;
 
 namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 
+[TrackHistory]
 public sealed class ComplaintEntity : AuditableEntity
 {
     public Guid Id { get; set; }

@@ -15,8 +15,6 @@ namespace SmartOps.Infrastructure.Modules.FrontOffice;
 
 public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeRepository
 {
-    private static readonly FieldChangeDto[] EmptyFieldChanges = [];
-
     private readonly ITenantSchemaProvider _tenantSchema;
 
     public FrontOfficeRepository(
@@ -225,40 +223,33 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
-
-        string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableVisitors}
-                (id, name, phone, idcardtype, idcardnumber, purposeid, meetingwith, intime, outtime, note, documentpath,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
-            VALUES
-                (@Id, @Name, @Phone, @IdCardType, @IdCardNumber, @PurposeId, @MeetingWith, @InTime, @OutTime, @Note, @DocumentPath,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableVisitors, entity.Id,
-            "Created", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
+        await InsertAsync(connection, Schema, DatabaseConfig.TableVisitors, entity)
+            .ConfigureAwait(false);
         return entity.Id;
     }
 
-    public async Task UpdateVisitorAsync(VisitorEntity entity, CancellationToken ct = default)
+    public async Task UpdateVisitorAsync(VisitorEntity patch, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
-        Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
-        string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableVisitors}
-            SET name = @Name, phone = @Phone, idcardtype = @IdCardType, idcardnumber = @IdCardNumber,
-                purposeid = @PurposeId, meetingwith = @MeetingWith, intime = @InTime, outtime = @OutTime,
-                note = @Note, documentpath = @DocumentPath,
-                updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-            WHERE id = @Id AND isactive = true;
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableVisitors, entity.Id,
-            "Updated", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
+        VisitorEntity? entity = await GetVisitorEntityByIdAsync(patch.Id, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.Name = patch.Name;
+        entity.Phone = patch.Phone;
+        entity.IdCardType = patch.IdCardType;
+        entity.IdCardNumber = patch.IdCardNumber;
+        entity.PurposeId = patch.PurposeId;
+        entity.MeetingWith = patch.MeetingWith;
+        entity.InTime = patch.InTime;
+        entity.OutTime = patch.OutTime;
+        entity.Note = patch.Note;
+        entity.DocumentPath = patch.DocumentPath;
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        await UpdateAsync(connection, Schema, DatabaseConfig.TableVisitors, entity, null, "Id")
+            .ConfigureAwait(false);
     }
 
     public async Task SoftDeleteVisitorAsync(Guid id, CancellationToken ct = default)
@@ -331,41 +322,17 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
-
-        string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TablePhoneLogs}
-                (id, callername, phone, calltype, calldate, duration, description, nextfollowupdate, note,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
-            VALUES
-                (@Id, @CallerName, @Phone, @CallType, @CallDate, @Duration, @Description, @NextFollowUpDate, @Note,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapPhoneLog(entity), cancellationToken: ct))
+        await InsertAsync(connection, Schema, DatabaseConfig.TablePhoneLogs, entity)
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TablePhoneLogs, entity.Id,
-            "Created", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
         return entity.Id;
     }
 
     public async Task UpdatePhoneLogAsync(PhoneLogEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
-        Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
-        string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TablePhoneLogs}
-            SET callername = @CallerName, phone = @Phone, calltype = @CallType, calldate = @CallDate,
-                duration = @Duration, description = @Description, nextfollowupdate = @NextFollowUpDate, note = @Note,
-                updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-            WHERE id = @Id AND isactive = true;
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapPhoneLog(entity), cancellationToken: ct))
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        await UpdateAsync(connection, Schema, DatabaseConfig.TablePhoneLogs, entity, null, "Id")
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TablePhoneLogs, entity.Id,
-            "Updated", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
     }
 
     public async Task SoftDeletePhoneLogAsync(Guid id, CancellationToken ct = default)
@@ -434,45 +401,34 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
-
-        string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableComplaints}
-                (id, complainttypeid, complaintdate, isanonymous, complainantname, phone, description,
-                 assignedtoemployeeid, status, actiontaken, note, documentpath,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
-            VALUES
-                (@Id, @ComplaintTypeId, @ComplaintDate, @IsAnonymous, @ComplainantName, @Phone, @Description,
-                 @AssignedToEmployeeId, @Status, @ActionTaken, @Note, @DocumentPath,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapComplaint(entity), cancellationToken: ct))
+        await InsertAsync(connection, Schema, DatabaseConfig.TableComplaints, entity)
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableComplaints, entity.Id,
-            "Created", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
         return entity.Id;
     }
 
-    public async Task UpdateComplaintAsync(ComplaintEntity entity, CancellationToken ct = default)
+    public async Task UpdateComplaintAsync(ComplaintEntity patch, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
-        Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
-        string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableComplaints}
-            SET complainttypeid = @ComplaintTypeId, complaintdate = @ComplaintDate, isanonymous = @IsAnonymous,
-                complainantname = @ComplainantName, phone = @Phone, description = @Description,
-                assignedtoemployeeid = @AssignedToEmployeeId, status = @Status, actiontaken = @ActionTaken,
-                note = @Note, documentpath = @DocumentPath,
-                updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-            WHERE id = @Id AND isactive = true;
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapComplaint(entity), cancellationToken: ct))
+        ComplaintEntity? entity = await GetComplaintEntityByIdAsync(patch.Id, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.ComplaintTypeId = patch.ComplaintTypeId;
+        entity.ComplaintDate = patch.ComplaintDate;
+        entity.IsAnonymous = patch.IsAnonymous;
+        entity.ComplainantName = patch.ComplainantName;
+        entity.Phone = patch.Phone;
+        entity.Description = patch.Description;
+        entity.AssignedToEmployeeId = patch.AssignedToEmployeeId;
+        entity.Status = patch.Status;
+        entity.ActionTaken = patch.ActionTaken;
+        entity.Note = patch.Note;
+        entity.DocumentPath = patch.DocumentPath;
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        await UpdateAsync(connection, Schema, DatabaseConfig.TableComplaints, entity, null, "Id")
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableComplaints, entity.Id,
-            "Updated", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
     }
 
     public async Task SoftDeleteComplaintAsync(Guid id, CancellationToken ct = default)
@@ -539,46 +495,38 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
-
-        string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableAdmissionInquiries}
-                (id, parentname, phone, whatsapp, email, address, studentname, classlabel, inquirydate,
-                 nextfollowupdate, assignedtoemployeeid, reference, status, description, autofollowup, streamgroup,
-                 isactive, versionno, createdby, createdon, updatedby, updatedon)
-            VALUES
-                (@Id, @ParentName, @Phone, @WhatsApp, @Email, @Address, @StudentName, @ClassLabel, @InquiryDate,
-                 @NextFollowUpDate, @AssignedToEmployeeId, @Reference, @Status, @Description, @AutoFollowUp, @StreamGroup,
-                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapInquiry(entity), cancellationToken: ct))
+        await InsertAsync(connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity)
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity.Id,
-            "Created", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
         return entity.Id;
     }
 
-    public async Task UpdateAdmissionInquiryAsync(AdmissionInquiryEntity entity, CancellationToken ct = default)
+    public async Task UpdateAdmissionInquiryAsync(AdmissionInquiryEntity patch, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
-        Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
-        string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableAdmissionInquiries}
-            SET parentname = @ParentName, phone = @Phone, whatsapp = @WhatsApp, email = @Email,
-                address = @Address, studentname = @StudentName, classlabel = @ClassLabel,
-                inquirydate = @InquiryDate, nextfollowupdate = @NextFollowUpDate,
-                assignedtoemployeeid = @AssignedToEmployeeId, reference = @Reference, status = @Status,
-                description = @Description, autofollowup = @AutoFollowUp, streamgroup = @StreamGroup,
-                updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-            WHERE id = @Id AND isactive = true;
-            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, MapInquiry(entity), cancellationToken: ct))
+        AdmissionInquiryEntity? entity = await GetAdmissionInquiryEntityByIdAsync(patch.Id, ct).ConfigureAwait(false);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.ParentName = patch.ParentName;
+        entity.Phone = patch.Phone;
+        entity.WhatsApp = patch.WhatsApp;
+        entity.Email = patch.Email;
+        entity.Address = patch.Address;
+        entity.StudentName = patch.StudentName;
+        entity.ClassLabel = patch.ClassLabel;
+        entity.InquiryDate = patch.InquiryDate;
+        entity.NextFollowUpDate = patch.NextFollowUpDate;
+        entity.AssignedToEmployeeId = patch.AssignedToEmployeeId;
+        entity.Reference = patch.Reference;
+        entity.Status = patch.Status;
+        entity.Description = patch.Description;
+        entity.AutoFollowUp = patch.AutoFollowUp;
+        entity.StreamGroup = patch.StreamGroup;
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        await UpdateAsync(connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity, null, "Id")
             .ConfigureAwait(false);
-        await WriteAuditLogInternalAsync(
-            connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity.Id,
-            "Updated", actorId, utcNow, EmptyFieldChanges).ConfigureAwait(false);
     }
 
     public async Task SoftDeleteAdmissionInquiryAsync(Guid id, CancellationToken ct = default)
@@ -673,70 +621,54 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         parameters.Add("Status", (short)status.Value);
     }
 
-    private static object MapPhoneLog(PhoneLogEntity entity) => new
+    private async Task<VisitorEntity?> GetVisitorEntityByIdAsync(Guid id, CancellationToken ct)
     {
-        entity.Id,
-        entity.CallerName,
-        entity.Phone,
-        CallType = (short)entity.CallType,
-        entity.CallDate,
-        entity.Duration,
-        entity.Description,
-        entity.NextFollowUpDate,
-        entity.Note,
-        entity.IsActive,
-        entity.VersionNo,
-        entity.CreatedBy,
-        entity.CreatedOn,
-        entity.UpdatedBy,
-        entity.UpdatedOn
-    };
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id, name AS Name, phone AS Phone, idcardtype AS IdCardType,
+                   idcardnumber AS IdCardNumber, purposeid AS PurposeId, meetingwith AS MeetingWith,
+                   intime AS InTime, outtime AS OutTime, note AS Note, documentpath AS DocumentPath,
+                   isactive AS IsActive, versionno AS VersionNo,
+                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableVisitors}
+            WHERE id = @Id;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<VisitorEntity>(
+            new CommandDefinition(sql, new { Id = id }, cancellationToken: ct)).ConfigureAwait(false);
+    }
 
-    private static object MapComplaint(ComplaintEntity entity) => new
+    private async Task<ComplaintEntity?> GetComplaintEntityByIdAsync(Guid id, CancellationToken ct)
     {
-        entity.Id,
-        entity.ComplaintTypeId,
-        entity.ComplaintDate,
-        entity.IsAnonymous,
-        entity.ComplainantName,
-        entity.Phone,
-        entity.Description,
-        entity.AssignedToEmployeeId,
-        Status = (short)entity.Status,
-        entity.ActionTaken,
-        entity.Note,
-        entity.DocumentPath,
-        entity.IsActive,
-        entity.VersionNo,
-        entity.CreatedBy,
-        entity.CreatedOn,
-        entity.UpdatedBy,
-        entity.UpdatedOn
-    };
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id, complainttypeid AS ComplaintTypeId, complaintdate AS ComplaintDate,
+                   isanonymous AS IsAnonymous, complainantname AS ComplainantName, phone AS Phone,
+                   description AS Description, assignedtoemployeeid AS AssignedToEmployeeId,
+                   status AS Status, actiontaken AS ActionTaken, note AS Note, documentpath AS DocumentPath,
+                   isactive AS IsActive, versionno AS VersionNo,
+                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableComplaints}
+            WHERE id = @Id;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<ComplaintEntity>(
+            new CommandDefinition(sql, new { Id = id }, cancellationToken: ct)).ConfigureAwait(false);
+    }
 
-    private static object MapInquiry(AdmissionInquiryEntity entity) => new
+    private async Task<AdmissionInquiryEntity?> GetAdmissionInquiryEntityByIdAsync(Guid id, CancellationToken ct)
     {
-        entity.Id,
-        entity.ParentName,
-        entity.Phone,
-        entity.WhatsApp,
-        entity.Email,
-        entity.Address,
-        entity.StudentName,
-        entity.ClassLabel,
-        entity.InquiryDate,
-        entity.NextFollowUpDate,
-        entity.AssignedToEmployeeId,
-        entity.Reference,
-        Status = (short)entity.Status,
-        entity.Description,
-        entity.AutoFollowUp,
-        entity.StreamGroup,
-        entity.IsActive,
-        entity.VersionNo,
-        entity.CreatedBy,
-        entity.CreatedOn,
-        entity.UpdatedBy,
-        entity.UpdatedOn
-    };
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id, parentname AS ParentName, phone AS Phone, whatsapp AS WhatsApp,
+                   email AS Email, address AS Address, studentname AS StudentName, classlabel AS ClassLabel,
+                   inquirydate AS InquiryDate, nextfollowupdate AS NextFollowUpDate,
+                   assignedtoemployeeid AS AssignedToEmployeeId, reference AS Reference, status AS Status,
+                   description AS Description, autofollowup AS AutoFollowUp, streamgroup AS StreamGroup,
+                   isactive AS IsActive, versionno AS VersionNo,
+                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableAdmissionInquiries}
+            WHERE id = @Id;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<AdmissionInquiryEntity>(
+            new CommandDefinition(sql, new { Id = id }, cancellationToken: ct)).ConfigureAwait(false);
+    }
 }

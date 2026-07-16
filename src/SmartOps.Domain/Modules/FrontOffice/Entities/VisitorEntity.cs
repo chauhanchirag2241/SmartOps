@@ -1,7 +1,9 @@
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Attributes;
 
 namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 
+[TrackHistory]
 public sealed class VisitorEntity : AuditableEntity
 {
     public Guid Id { get; set; }

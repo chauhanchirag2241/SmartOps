@@ -411,67 +411,6 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         }).ConfigureAwait(false);
     }
 
-    public async Task<IList<AcademicYearSemesterEntity>> GetSemestersAsync(
-        Guid academicYearId,
-        CancellationToken cancellationToken = default)
-    {
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var sql = $@"
-            SELECT id AS Id,
-                   academicyearid AS AcademicYearId,
-                   semesterindex AS SemesterIndex,
-                   name AS Name,
-                   startdate AS StartDate,
-                   enddate AS EndDate
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYearSemesters}
-            WHERE academicyearid = @AcademicYearId AND isactive = true
-            ORDER BY semesterindex;";
-
-        var rows = await connection
-            .QueryAsync<AcademicYearSemesterEntity>(sql, new { AcademicYearId = academicYearId })
-            .ConfigureAwait(false);
-        return rows.ToList();
-    }
-
-    public async Task SaveSemestersAsync(
-        Guid academicYearId,
-        IList<AcademicYearSemesterInput> semesters,
-        CancellationToken cancellationToken = default)
-    {
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var utcNow = DateTime.UtcNow;
-        var actorId = ResolveInsertActor();
-        var schema = Context.OperationalSchema;
-        var table = DatabaseConfig.TableAcademicYearSemesters;
-
-        await WithTransactionAsync(connection, async (conn, tx) =>
-        {
-            await conn.ExecuteAsync(
-                $"""
-                UPDATE {schema}.{table}
-                SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-                WHERE academicyearid = @AcademicYearId AND isactive = true;
-                """,
-                new { AcademicYearId = academicYearId, UpdatedBy = actorId, UpdatedOn = utcNow },
-                tx).ConfigureAwait(false);
-
-            foreach (var semester in semesters.OrderBy(s => s.SemesterIndex))
-            {
-                var entity = new AcademicYearSemesterEntity
-                {
-                    Id = Guid.NewGuid(),
-                    AcademicYearId = academicYearId,
-                    SemesterIndex = semester.SemesterIndex,
-                    Name = semester.Name.Trim(),
-                    StartDate = semester.StartDate,
-                    EndDate = semester.EndDate
-                };
-                EnsureInsertAudit(entity, utcNow, actorId);
-                await InsertAsync(conn, schema, table, entity, tx).ConfigureAwait(false);
-            }
-        }).ConfigureAwait(false);
-    }
-
     private static async Task<Guid?> GetCurrentAcademicYearIdInternalAsync(
         System.Data.IDbConnection connection,
         string schema,

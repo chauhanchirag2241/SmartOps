@@ -10,8 +10,8 @@ internal static class SchoolSchemaCatalog
     internal static readonly string[] TemplateTables =
     [
         DatabaseConfig.TableAcademicYears,
-        DatabaseConfig.TableAcademicYearSemesters,
         DatabaseConfig.TableClasses,
+        DatabaseConfig.TableClassAcademicPeriods,
         DatabaseConfig.TableSubjects,
         DatabaseConfig.TableEmployees,
         DatabaseConfig.TableStudents,
@@ -28,6 +28,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableFeeTypes,
         DatabaseConfig.TableFeeSettings,
         DatabaseConfig.TableClassFeeAmounts,
+        DatabaseConfig.TableClassFeePeriodAmounts,
         DatabaseConfig.TableClassFeeInstallments,
         DatabaseConfig.TableFeePayments,
         DatabaseConfig.TableFeePaymentAllocations,

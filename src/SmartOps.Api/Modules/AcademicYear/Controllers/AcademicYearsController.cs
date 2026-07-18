@@ -43,19 +43,6 @@ public sealed class AcademicYearsController(
             return BadRequest(dateError);
         }
 
-        IList<UpsertAcademicYearSemesterDto> semesters = request.Semesters ?? [];
-        if (semesters.Count == 0)
-        {
-            return BadRequest("At least one semester is required.");
-        }
-
-        string? semesterError = AcademicYearValidation.ValidateSemesters(
-            request.StartDate, request.EndDate, semesters);
-        if (semesterError is not null)
-        {
-            return BadRequest(semesterError);
-        }
-
         if (await academicYearRepository.TitleExistsAsync(request.Title, null, cancellationToken).ConfigureAwait(false))
         {
             return BadRequest("An academic year with this title already exists.");
@@ -63,11 +50,6 @@ public sealed class AcademicYearsController(
 
         var entity = request.ToEntity();
         Guid id = await academicYearRepository.CreateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
-
-        await academicYearRepository.SaveSemestersAsync(
-            id,
-            semesters.Select(s => s.ToInput()).ToList(),
-            cancellationToken).ConfigureAwait(false);
 
         return Ok(new CreateAcademicYearResponse("Academic year created successfully", id));
     }
@@ -184,19 +166,6 @@ public sealed class AcademicYearsController(
             return BadRequest(dateError);
         }
 
-        IList<UpsertAcademicYearSemesterDto> semesters = request.Semesters ?? [];
-        if (semesters.Count == 0)
-        {
-            return BadRequest("At least one semester is required.");
-        }
-
-        string? semesterError = AcademicYearValidation.ValidateSemesters(
-            request.StartDate, request.EndDate, semesters);
-        if (semesterError is not null)
-        {
-            return BadRequest(semesterError);
-        }
-
         if (await academicYearRepository.TitleExistsAsync(request.Title, id, cancellationToken).ConfigureAwait(false))
         {
             return BadRequest("An academic year with this title already exists.");
@@ -212,11 +181,6 @@ public sealed class AcademicYearsController(
                     StartDate = request.StartDate,
                     EndDate = request.EndDate,
                 },
-                cancellationToken).ConfigureAwait(false);
-
-            await academicYearRepository.SaveSemestersAsync(
-                id,
-                semesters.Select(s => s.ToInput()).ToList(),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
@@ -241,47 +205,5 @@ public sealed class AcademicYearsController(
         {
             return BadRequest(ex.Message);
         }
-    }
-
-    [HttpGet("{id:guid}/semesters")]
-    [Authorize(Policy = MenuPolicies.AcademicYears.View)]
-    [ProducesResponseType(typeof(IList<AcademicYearSemesterDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetSemesters(Guid id, CancellationToken cancellationToken)
-    {
-        var semesters = await academicYearRepository.GetSemestersAsync(id, cancellationToken).ConfigureAwait(false);
-        return Ok(semesters.Select(s => s.ToDto()).ToList());
-    }
-
-    [HttpPut("{id:guid}/semesters")]
-    [Authorize(Policy = MenuPolicies.AcademicYears.Edit)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> SaveSemesters(
-        Guid id,
-        [FromBody] SaveAcademicYearSemestersRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request?.Semesters is null || request.Semesters.Count == 0)
-        {
-            return BadRequest("At least one semester is required.");
-        }
-
-        var year = await academicYearRepository.GetAcademicYearByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (year is null)
-        {
-            return NotFound();
-        }
-
-        string? semesterError = AcademicYearValidation.ValidateSemesters(
-            year.StartDate, year.EndDate, request.Semesters);
-        if (semesterError is not null)
-        {
-            return BadRequest(semesterError);
-        }
-
-        await academicYearRepository.SaveSemestersAsync(
-            id,
-            request.Semesters.Select(s => s.ToInput()).ToList(),
-            cancellationToken).ConfigureAwait(false);
-        return NoContent();
     }
 }

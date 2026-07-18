@@ -11,14 +11,14 @@ public static class FeeInstallmentGenerator
         DateOnly PeriodEnd,
         decimal Amount);
 
-    public sealed record SemesterWindow(string Label, DateOnly Start, DateOnly End);
+    public sealed record PeriodWindow(int PeriodIndex, string Label, DateOnly Start, DateOnly End);
+    public sealed record PeriodAmount(int PeriodIndex, decimal Amount);
 
     public static IList<InstallmentPeriod> Generate(
         FeeCollectionType collectionType,
         decimal oneTimeAmount,
-        decimal semester1Amount,
-        decimal semester2Amount,
-        IList<SemesterWindow> semesters,
+        IList<PeriodAmount> periodAmounts,
+        IList<PeriodWindow> periods,
         DateOnly yearStart,
         DateOnly yearEnd)
     {
@@ -28,50 +28,28 @@ public static class FeeInstallmentGenerator
             {
                 new(1, $"One-time {FormatYearRange(yearStart, yearEnd)}", yearStart, yearEnd, oneTimeAmount)
             },
-            FeeCollectionType.SemesterWise => GenerateSemesterWise(semester1Amount, semester2Amount, semesters, yearStart, yearEnd),
+            FeeCollectionType.PeriodWise => GeneratePeriodWise(periodAmounts, periods),
             _ => Array.Empty<InstallmentPeriod>()
         };
     }
 
-    private static IList<InstallmentPeriod> GenerateSemesterWise(
-        decimal semester1Amount,
-        decimal semester2Amount,
-        IList<SemesterWindow> semesters,
-        DateOnly yearStart,
-        DateOnly yearEnd)
+    private static IList<InstallmentPeriod> GeneratePeriodWise(
+        IList<PeriodAmount> periodAmounts,
+        IList<PeriodWindow> periods)
     {
-        var periods = new List<InstallmentPeriod>();
-        if (semesters.Count >= 2)
-        {
-            if (semester1Amount > 0)
-            {
-                SemesterWindow s1 = semesters[0];
-                periods.Add(new InstallmentPeriod(1, s1.Label, s1.Start, s1.End, semester1Amount));
-            }
-
-            if (semester2Amount > 0)
-            {
-                SemesterWindow s2 = semesters[1];
-                periods.Add(new InstallmentPeriod(2, s2.Label, s2.Start, s2.End, semester2Amount));
-            }
-
-            return periods;
-        }
-
-        // Fallback when semesters are not configured: split academic year in half.
-        int totalDays = Math.Max(1, yearEnd.DayNumber - yearStart.DayNumber);
-        DateOnly mid = yearStart.AddDays(totalDays / 2);
-        if (semester1Amount > 0)
-        {
-            periods.Add(new InstallmentPeriod(1, "Semester 1", yearStart, mid, semester1Amount));
-        }
-
-        if (semester2Amount > 0)
-        {
-            periods.Add(new InstallmentPeriod(2, "Semester 2", mid.AddDays(1), yearEnd, semester2Amount));
-        }
-
-        return periods;
+        Dictionary<int, decimal> amountByPeriod = periodAmounts
+            .GroupBy(x => x.PeriodIndex)
+            .ToDictionary(group => group.Key, group => group.Sum(x => x.Amount));
+        return periods
+            .OrderBy(period => period.PeriodIndex)
+            .Where(period => amountByPeriod.GetValueOrDefault(period.PeriodIndex) > 0)
+            .Select(period => new InstallmentPeriod(
+                period.PeriodIndex,
+                period.Label,
+                period.Start,
+                period.End,
+                amountByPeriod[period.PeriodIndex]))
+            .ToList();
     }
 
     private static string FormatYearRange(DateOnly start, DateOnly end) =>

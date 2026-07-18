@@ -41,8 +41,9 @@ public sealed class G010_SeedMenus : Migration
 
         // Academic Setup children
         (Guid.Parse("10000000-0000-0000-0000-000000000015"), "Academic Years", MenuCodes.AcademicYears, MenuApplications.School, AcademicSetupId, "/academic-years", "calendar_month", 16),
-        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, AcademicSetupId, "/classes", "class", 17),
-        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, AcademicSetupId, "/subjects", "subject", 18),
+        (Guid.Parse("10000000-0000-0000-0000-000000000046"), "Academic Periods", MenuCodes.AcademicPeriods, MenuApplications.School, AcademicSetupId, "/academic-periods", "date_range", 17),
+        (Guid.Parse("10000000-0000-0000-0000-000000000013"), "Classes", MenuCodes.Classes, MenuApplications.School, AcademicSetupId, "/classes", "class", 18),
+        (Guid.Parse("10000000-0000-0000-0000-000000000014"), "Subjects", MenuCodes.Subjects, MenuApplications.School, AcademicSetupId, "/subjects", "subject", 19),
 
         // Administration children (Users/Roles/Notices seeded in later migrations)
         (Guid.Parse("10000000-0000-0000-0000-000000000012"), "Employees", MenuCodes.Employees, MenuApplications.School, AdministrationId, "/employees", "co_present", 50),

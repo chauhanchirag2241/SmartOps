@@ -41,10 +41,16 @@ public class ClassFeeAmountEntity : AuditableEntity
     public Guid ClassId { get; set; }
     public Guid FeeTypeId { get; set; }
     public Guid AcademicYearId { get; set; }
-    /// <summary>One-time fee amount, or annual total for semester-wise (sem1 + sem2).</summary>
+    /// <summary>One-time fee amount, or annual total for period-wise fees.</summary>
     public decimal Amount { get; set; }
-    public decimal Semester1Amount { get; set; }
-    public decimal Semester2Amount { get; set; }
+}
+
+public class ClassFeePeriodAmountEntity : AuditableEntity
+{
+    public Guid Id { get; set; }
+    public Guid ClassFeeAmountId { get; set; }
+    public int PeriodIndex { get; set; }
+    public decimal Amount { get; set; }
 }
 
 public class FeePaymentEntity : AuditableEntity

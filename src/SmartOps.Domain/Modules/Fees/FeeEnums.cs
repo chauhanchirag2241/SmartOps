@@ -9,10 +9,10 @@ public enum FeeCategory
     Discount = 4
 }
 
-/// <summary>How a fee head is collected: per semester or once per academic year.</summary>
+/// <summary>How a fee head is collected: by configured academic period or once per academic year.</summary>
 public enum FeeCollectionType
 {
-    SemesterWise = 0,
+    PeriodWise = 0,
     OneTime = 1
 }
 

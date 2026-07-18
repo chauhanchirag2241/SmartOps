@@ -78,8 +78,7 @@ public sealed class ClassFeeAmountForInstallmentRow
     public int Category { get; init; }
     public int CollectionType { get; init; }
     public decimal Amount { get; init; }
-    public decimal Semester1Amount { get; init; }
-    public decimal Semester2Amount { get; init; }
+    public IList<ClassFeePeriodAmountRow> PeriodAmounts { get; set; } = [];
 }
 
 public sealed class InstallmentPaidRow

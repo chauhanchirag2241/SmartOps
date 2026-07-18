@@ -138,6 +138,15 @@ public static class MenuPolicies
         public const string Export = "Menu:ACADEMIC_YEARS:Export";
     }
 
+    public static class AcademicPeriods
+    {
+        public const string View = "Menu:ACADEMIC_PERIODS:View";
+        public const string Add = "Menu:ACADEMIC_PERIODS:Add";
+        public const string Edit = "Menu:ACADEMIC_PERIODS:Edit";
+        public const string Delete = "Menu:ACADEMIC_PERIODS:Delete";
+        public const string Export = "Menu:ACADEMIC_PERIODS:Export";
+    }
+
     public static class Attendance
     {
         public const string View = "Menu:ATTENDANCE:View";

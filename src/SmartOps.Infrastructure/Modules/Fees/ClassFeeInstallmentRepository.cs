@@ -40,10 +40,9 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             )
             AND EXISTS (
                 SELECT 1
-                FROM information_schema.columns
+                FROM information_schema.tables
                 WHERE table_schema = @Schema
-                  AND table_name = @ClassAmountsTable
-                  AND column_name = 'semester1amount'
+                  AND table_name = @PeriodAmountsTable
             )
             AND EXISTS (
                 SELECT 1
@@ -60,7 +59,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 {
                     Schema,
                     InstallmentsTable = DatabaseConfig.TableClassFeeInstallments,
-                    ClassAmountsTable = DatabaseConfig.TableClassFeeAmounts,
+                    PeriodAmountsTable = DatabaseConfig.TableClassFeePeriodAmounts,
                     AllocationsTable = DatabaseConfig.TableFeePaymentAllocations
                 },
                 cancellationToken: ct))
@@ -116,9 +115,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                    ft.name AS FeeTypeName,
                    ft.category AS Category,
                    ft.frequency AS CollectionType,
-                   cfa.amount AS Amount,
-                   COALESCE(cfa.semester1amount, 0) AS Semester1Amount,
-                   COALESCE(cfa.semester2amount, 0) AS Semester2Amount
+                   cfa.amount AS Amount
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
             INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
             WHERE cfa.classid = @ClassId
@@ -127,17 +124,43 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
               AND (
                   ft.category = {(int)FeeCategory.Discount}
                   OR cfa.amount > 0
-                  OR cfa.semester1amount > 0
-                  OR cfa.semester2amount > 0
+                  OR EXISTS (
+                      SELECT 1
+                      FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+                      WHERE cfpa.classfeeamountid = cfa.id
+                        AND cfpa.isactive = true
+                        AND cfpa.amount > 0)
               );
             """;
-        IEnumerable<ClassFeeAmountForInstallmentRow> rows = await connection
+        List<ClassFeeAmountForInstallmentRow> rows = (await connection
             .QueryAsync<ClassFeeAmountForInstallmentRow>(new CommandDefinition(
                 sql,
                 new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
                 cancellationToken: ct))
-            .ConfigureAwait(false);
-        return rows.ToList();
+            .ConfigureAwait(false)).ToList();
+
+        string periodSql = $"""
+            SELECT cfa.feetypeid AS FeeTypeId,
+                   cfpa.periodindex AS PeriodIndex,
+                   cfpa.amount AS Amount
+            FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+              ON cfpa.classfeeamountid = cfa.id AND cfpa.isactive = true
+            WHERE cfa.classid = @ClassId
+              AND cfa.feestructureversionid = @FeeStructureVersionId
+              AND cfa.isactive = true;
+            """;
+        List<ClassFeePeriodAmountRow> periodAmounts = (await connection
+            .QueryAsync<ClassFeePeriodAmountRow>(new CommandDefinition(
+                periodSql,
+                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                cancellationToken: ct))
+            .ConfigureAwait(false)).ToList();
+        foreach (ClassFeeAmountForInstallmentRow row in rows)
+        {
+            row.PeriodAmounts = periodAmounts.Where(p => p.FeeTypeId == row.FeeTypeId).ToList();
+        }
+        return rows;
     }
 
     public async Task<IList<Guid>> GetClassIdsWithAmountsForVersionAsync(
@@ -146,9 +169,18 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT classid
-            FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-            WHERE feestructureversionid = @FeeStructureVersionId AND isactive = true AND amount > 0;
+            SELECT DISTINCT cfa.classid
+            FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+            WHERE cfa.feestructureversionid = @FeeStructureVersionId
+              AND cfa.isactive = true
+              AND (
+                  cfa.amount > 0
+                  OR EXISTS (
+                      SELECT 1
+                      FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+                      WHERE cfpa.classfeeamountid = cfa.id
+                        AND cfpa.isactive = true
+                        AND cfpa.amount > 0));
             """;
         IEnumerable<Guid> rows = await connection
             .QueryAsync<Guid>(new CommandDefinition(sql, new { FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
@@ -187,11 +219,6 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods,
         CancellationToken ct = default)
     {
-        if (periods.Count == 0)
-        {
-            return;
-        }
-
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
@@ -372,13 +399,14 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
         IList<ClassFeeInstallmentRow> existing = await GetByClassVersionAsync(classId, feeStructureVersionId, ct)
             .ConfigureAwait(false);
-        var activeCountByFeeType = existing
+        var existingByFeeType = existing
             .GroupBy(e => e.FeeTypeId)
-            .ToDictionary(g => g.Key, g => g.Count());
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.PeriodIndex).ToList());
 
         foreach (ClassFeeAmountForInstallmentRow row in amounts)
         {
             IList<FeeInstallmentGenerator.InstallmentPeriod> periods = await BuildPeriodsForRowAsync(
+                classId,
                 academicYearId,
                 row,
                 ct).ConfigureAwait(false);
@@ -387,8 +415,16 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 continue;
             }
 
-            int activeCount = activeCountByFeeType.GetValueOrDefault(row.FeeTypeId, 0);
-            if (activeCount == periods.Count)
+            List<ClassFeeInstallmentRow> current =
+                existingByFeeType.GetValueOrDefault(row.FeeTypeId) ?? [];
+            bool matches = current.Count == periods.Count
+                && current.Zip(periods.OrderBy(p => p.PeriodIndex)).All(pair =>
+                    pair.First.PeriodIndex == pair.Second.PeriodIndex
+                    && pair.First.PeriodLabel == pair.Second.PeriodLabel
+                    && pair.First.PeriodStart == pair.Second.PeriodStart
+                    && pair.First.PeriodEnd == pair.Second.PeriodEnd
+                    && pair.First.Amount == pair.Second.Amount);
+            if (matches)
             {
                 continue;
             }
@@ -419,6 +455,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         foreach (ClassFeeAmountForInstallmentRow row in amounts)
         {
             IList<FeeInstallmentGenerator.InstallmentPeriod> periods = await BuildPeriodsForRowAsync(
+                classId,
                 academicYearId,
                 row,
                 ct).ConfigureAwait(false);
@@ -433,19 +470,21 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
     }
 
     private async Task<IList<FeeInstallmentGenerator.InstallmentPeriod>> BuildPeriodsForRowAsync(
+        Guid classId,
         Guid academicYearId,
         ClassFeeAmountForInstallmentRow row,
         CancellationToken ct)
     {
         (DateOnly start, DateOnly end) = await GetAcademicYearDatesAsync(academicYearId, ct).ConfigureAwait(false);
-        IList<FeeInstallmentGenerator.SemesterWindow> semesters = await GetSemesterWindowsAsync(academicYearId, ct)
+        IList<FeeInstallmentGenerator.PeriodWindow> periodWindows = await GetPeriodWindowsAsync(classId, ct)
             .ConfigureAwait(false);
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
             (FeeCollectionType)row.CollectionType,
             row.Amount,
-            row.Semester1Amount,
-            row.Semester2Amount,
-            semesters,
+            row.PeriodAmounts
+                .Select(p => new FeeInstallmentGenerator.PeriodAmount(p.PeriodIndex, p.Amount))
+                .ToList(),
+            periodWindows,
             start,
             end);
         if (!FeeCategoryHelper.IsDiscount(row.Category))
@@ -463,22 +502,32 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             .ToList();
     }
 
-    private async Task<IList<FeeInstallmentGenerator.SemesterWindow>> GetSemesterWindowsAsync(
-        Guid academicYearId,
+    private async Task<IList<FeeInstallmentGenerator.PeriodWindow>> GetPeriodWindowsAsync(
+        Guid classId,
         CancellationToken ct)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT name AS Label, startdate AS Start, enddate AS End
-            FROM {Schema}.{DatabaseConfig.TableAcademicYearSemesters}
-            WHERE academicyearid = @AcademicYearId AND isactive = true
-            ORDER BY semesterindex;
+            SELECT p.periodindex AS PeriodIndex,
+                   p.name AS Label,
+                   p.startdate AS Start,
+                   p.enddate AS End
+            FROM {Schema}.{DatabaseConfig.TableClassAcademicPeriods} p
+            WHERE p.classid = @ClassId
+              AND p.isactive = true
+            ORDER BY p.periodindex;
             """;
-        IEnumerable<(string Label, DateOnly Start, DateOnly End)> rows = await connection
-            .QueryAsync<(string Label, DateOnly Start, DateOnly End)>(
-                new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: ct))
+        IEnumerable<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)> rows = await connection
+            .QueryAsync<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)>(
+                new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct))
             .ConfigureAwait(false);
-        return rows.Select(r => new FeeInstallmentGenerator.SemesterWindow(r.Label, r.Start, r.End)).ToList();
+        return rows
+            .Select(r => new FeeInstallmentGenerator.PeriodWindow(
+                r.PeriodIndex,
+                r.Label,
+                r.Start,
+                r.End))
+            .ToList();
     }
 
     private async Task<(DateOnly Start, DateOnly End)> GetAcademicYearDatesAsync(Guid academicYearId, CancellationToken ct)

@@ -366,9 +366,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             IList<ClassFeeAmountEntity> sourceAmounts = (await connection.QueryAsync<ClassFeeAmountEntity>(new CommandDefinition(
                 $"""
                 SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, classid AS ClassId,
-                       feetypeid AS FeeTypeId, academicyearid AS AcademicYearId, amount AS Amount,
-                       COALESCE(semester1amount, 0) AS Semester1Amount,
-                       COALESCE(semester2amount, 0) AS Semester2Amount
+                       feetypeid AS FeeTypeId, academicyearid AS AcademicYearId, amount AS Amount
                 FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
                 WHERE feestructureversionid = @SourceVersionId AND isactive = true;
                 """,
@@ -391,24 +389,52 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                     FeeTypeId = newFeeTypeId,
                     AcademicYearId = sourceAmount.AcademicYearId,
                     Amount = sourceAmount.Amount,
-                    Semester1Amount = sourceAmount.Semester1Amount,
-                    Semester2Amount = sourceAmount.Semester2Amount
                 };
                 EnsureInsertAudit(cloneAmount, utcNow, actorId);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableClassFeeAmounts}
                         (id, feestructureversionid, classid, feetypeid, academicyearid, amount,
-                         semester1amount, semester2amount,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
                         (@Id, @FeeStructureVersionId, @ClassId, @FeeTypeId, @AcademicYearId, @Amount,
-                         @Semester1Amount, @Semester2Amount,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneAmount,
                     transaction,
                     cancellationToken: ct)).ConfigureAwait(false);
+
+                List<ClassFeePeriodAmountEntity> sourcePeriodAmounts = (await connection
+                    .QueryAsync<ClassFeePeriodAmountEntity>(new CommandDefinition(
+                        $"""
+                        SELECT id AS Id,
+                               classfeeamountid AS ClassFeeAmountId,
+                               periodindex AS PeriodIndex,
+                               amount AS Amount
+                        FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts}
+                        WHERE classfeeamountid = @ClassFeeAmountId AND isactive = true;
+                        """,
+                        new { ClassFeeAmountId = sourceAmount.Id },
+                        transaction,
+                        cancellationToken: ct))
+                    .ConfigureAwait(false)).ToList();
+                foreach (ClassFeePeriodAmountEntity sourcePeriodAmount in sourcePeriodAmounts)
+                {
+                    var clonePeriodAmount = new ClassFeePeriodAmountEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        ClassFeeAmountId = cloneAmount.Id,
+                        PeriodIndex = sourcePeriodAmount.PeriodIndex,
+                        Amount = sourcePeriodAmount.Amount,
+                    };
+                    EnsureInsertAudit(clonePeriodAmount, utcNow, actorId);
+                    await InsertAsync(
+                        connection,
+                        Schema,
+                        DatabaseConfig.TableClassFeePeriodAmounts,
+                        clonePeriodAmount,
+                        transaction).ConfigureAwait(false);
+                }
             }
 
             transaction.Commit();

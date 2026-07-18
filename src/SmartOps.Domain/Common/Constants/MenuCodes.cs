@@ -43,6 +43,7 @@ public static class MenuCodes
     public const string Subjects = "SUBJECTS";
 
     public const string AcademicYears = "ACADEMIC_YEARS";
+    public const string AcademicPeriods = "ACADEMIC_PERIODS";
 
     public const string Attendance = "ATTENDANCE";
 
@@ -105,6 +106,7 @@ public static class MenuCodes
         ClassMappings,
         Subjects,
         AcademicYears,
+        AcademicPeriods,
         Attendance,
         AttendanceReport,
         Homework,

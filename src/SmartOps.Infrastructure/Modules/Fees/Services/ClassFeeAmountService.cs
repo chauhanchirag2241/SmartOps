@@ -2,6 +2,7 @@ using SmartOps.Application.Modules.Fees;
 using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.Fees;
+using SmartOps.Domain.Modules.AcademicPeriod;
 
 namespace SmartOps.Infrastructure.Modules.Fees.Services;
 
@@ -11,17 +12,20 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
     private readonly IFeeStructureRepository _feeStructureRepo;
     private readonly IClassFeeInstallmentService _installmentService;
     private readonly IClassFeeInstallmentRepository _installmentRepo;
+    private readonly IAcademicPeriodRepository _periodRepo;
 
     public ClassFeeAmountService(
         IClassFeeAmountRepository repo,
         IFeeStructureRepository feeStructureRepo,
         IClassFeeInstallmentService installmentService,
-        IClassFeeInstallmentRepository installmentRepo)
+        IClassFeeInstallmentRepository installmentRepo,
+        IAcademicPeriodRepository periodRepo)
     {
         _repo = repo;
         _feeStructureRepo = feeStructureRepo;
         _installmentService = installmentService;
         _installmentRepo = installmentRepo;
+        _periodRepo = periodRepo;
     }
 
     public async Task<Result<IList<ClassFeeSummaryDto>>> GetClassSummariesAsync(
@@ -79,6 +83,9 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         IList<ClassFeeSummaryRow> summaries = await _repo.GetClassSummariesAsync(academicYearId, versionId, ct).ConfigureAwait(false);
         ClassFeeSummaryRow? summary = summaries.FirstOrDefault(s => s.ClassId == classId);
         IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classId, versionId, ct).ConfigureAwait(false);
+        IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
+            .GetByClassAsync(classId, ct)
+            .ConfigureAwait(false);
 
         IList<ClassFeeAmountItemDto> items = rows
             .Select(MapAmountItem)
@@ -97,6 +104,11 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             FeeLabelHelper.VersionStatusLabel(version.Status),
             IsClassAmountsEditable(version.Status, classHasConfiguredAmounts),
             items.Sum(i => FeeCategoryHelper.SignedAnnualTotal(i.Category, i.AnnualTotal)),
+            periods.Select(p => new ClassFeePeriodDto(
+                p.PeriodIndex,
+                p.Name,
+                p.StartDate,
+                p.EndDate)).ToList(),
             items));
     }
 
@@ -108,6 +120,10 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         if (classId == Guid.Empty || request.AcademicYearId == Guid.Empty || request.FeeStructureVersionId == Guid.Empty)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure("Class, academic year and fee structure version are required.");
+        }
+        if (request.Amounts is null)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure("Fee amounts are required.");
         }
 
         FeeStructureVersionEntity? version = await _feeStructureRepo.GetVersionByIdAsync(request.FeeStructureVersionId, ct).ConfigureAwait(false);
@@ -127,13 +143,63 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                     : "This fee structure version cannot be edited.");
         }
 
+        IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
+            .GetByClassAsync(classId, ct)
+            .ConfigureAwait(false);
+        IList<ClassFeeAmountRow> feeTypes = await _repo
+            .GetAmountsByClassAsync(classId, request.FeeStructureVersionId, ct)
+            .ConfigureAwait(false);
+        Dictionary<Guid, ClassFeeAmountRow> feeTypeById = feeTypes.ToDictionary(x => x.FeeTypeId);
+
+        HashSet<int> validPeriodIndexes = periods.Select(p => p.PeriodIndex).ToHashSet();
+        foreach (SaveClassFeeAmountItemDto item in request.Amounts)
+        {
+            if (item.Amount < 0 || (item.PeriodAmounts?.Any(p => p.Amount < 0) ?? false))
+            {
+                return Result<ClassFeeAmountsResponseDto>.Failure("Fee amounts cannot be negative.");
+            }
+            if ((item.PeriodAmounts ?? []).Any(p => !validPeriodIndexes.Contains(p.PeriodIndex)))
+            {
+                return Result<ClassFeeAmountsResponseDto>.Failure("A fee amount references an invalid academic period.");
+            }
+            if (feeTypeById.TryGetValue(item.FeeTypeId, out ClassFeeAmountRow? feeType)
+                && (FeeCollectionType)feeType.CollectionType == FeeCollectionType.PeriodWise)
+            {
+                if (periods.Count == 0)
+                {
+                    return Result<ClassFeeAmountsResponseDto>.Failure(
+                        "Configure academic periods for this class before setting period-wise fee amounts.");
+                }
+                HashSet<int> submittedIndexes = (item.PeriodAmounts ?? [])
+                    .Select(p => p.PeriodIndex)
+                    .ToHashSet();
+                if (!submittedIndexes.SetEquals(validPeriodIndexes))
+                {
+                    return Result<ClassFeeAmountsResponseDto>.Failure(
+                        $"Enter an amount for every academic period for fee head '{feeType.FeeTypeName}'.");
+                }
+            }
+        }
+
         IList<ClassFeeAmountUpsertRow> amounts = request.Amounts
             .Select(a => new ClassFeeAmountUpsertRow
             {
                 FeeTypeId = a.FeeTypeId,
-                Amount = a.Amount,
-                Semester1Amount = a.Semester1Amount,
-                Semester2Amount = a.Semester2Amount
+                Amount = feeTypeById.TryGetValue(a.FeeTypeId, out ClassFeeAmountRow? amountFeeType)
+                    && (FeeCollectionType)amountFeeType.CollectionType == FeeCollectionType.PeriodWise
+                    ? (a.PeriodAmounts ?? []).Sum(p => p.Amount)
+                    : a.Amount,
+                PeriodAmounts = feeTypeById.TryGetValue(a.FeeTypeId, out ClassFeeAmountRow? feeType)
+                    && (FeeCollectionType)feeType.CollectionType == FeeCollectionType.PeriodWise
+                    ? (a.PeriodAmounts ?? [])
+                    .Select(p => new ClassFeePeriodAmountRow
+                    {
+                        FeeTypeId = a.FeeTypeId,
+                        PeriodIndex = p.PeriodIndex,
+                        Amount = p.Amount,
+                    })
+                    .ToList()
+                    : [],
             })
             .ToList();
 
@@ -275,8 +341,8 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
     private static ClassFeeAmountItemDto MapAmountItem(ClassFeeAmountRow r)
     {
         var collectionType = (FeeCollectionType)r.CollectionType;
-        decimal annualTotal = collectionType == FeeCollectionType.SemesterWise
-            ? r.Semester1Amount + r.Semester2Amount
+        decimal annualTotal = collectionType == FeeCollectionType.PeriodWise
+            ? r.PeriodAmounts.Sum(p => p.Amount)
             : r.Amount;
         var category = (FeeCategory)r.Category;
         return new ClassFeeAmountItemDto(
@@ -287,8 +353,10 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             collectionType,
             FeeLabelHelper.CollectionTypeLabel(collectionType),
             r.Amount,
-            r.Semester1Amount,
-            r.Semester2Amount,
+            r.PeriodAmounts
+                .OrderBy(p => p.PeriodIndex)
+                .Select(p => new ClassFeePeriodAmountDto(p.PeriodIndex, p.Amount))
+                .ToList(),
             annualTotal,
             r.IsMandatory,
             r.StudentWiseDifferentAmount);

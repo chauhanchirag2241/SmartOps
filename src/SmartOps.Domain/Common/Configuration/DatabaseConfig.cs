@@ -36,7 +36,7 @@ public static class DatabaseConfig
 
     // Class Module
     public const string TableAcademicYears = "academicyears";
-    public const string TableAcademicYearSemesters = "academicyearsemesters";
+    public const string TableClassAcademicPeriods = "classacademicperiods";
     public const string TableClasses = "classes";
 
     // Subject Module
@@ -64,6 +64,7 @@ public static class DatabaseConfig
     public const string TableFeeTypes = "feetypes";
     public const string TableFeeSettings = "feesettings";
     public const string TableClassFeeAmounts = "classfeeamounts";
+    public const string TableClassFeePeriodAmounts = "classfeeperiodamounts";
     public const string TableClassFeeInstallments = "classfeeinstallments";
     public const string TableFeePayments = "feepayments";
     public const string TableFeePaymentAllocations = "feepaymentallocations";

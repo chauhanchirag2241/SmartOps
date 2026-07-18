@@ -386,7 +386,7 @@ public sealed class FeeCollectionService : IFeeCollectionService
             p.FeeHeadsSummary,
             p.ReceiptNo)).ToList();
 
-        IList<FeeCollectionSemesterStatusDto> semesterStatuses = BuildSemesterStatuses(heads);
+        IList<FeeCollectionPeriodStatusDto> periodStatuses = BuildPeriodStatuses(heads);
 
         return new FeeCollectionStudentDetailDto(
             row.StudentId,
@@ -399,13 +399,13 @@ public sealed class FeeCollectionService : IFeeCollectionService
             pct,
             FeeLabelHelper.PaymentStatus(total, paid),
             heads,
-            semesterStatuses,
+            periodStatuses,
             history);
     }
 
-    private static IList<FeeCollectionSemesterStatusDto> BuildSemesterStatuses(IList<FeeCollectionHeadDto> heads)
+    private static IList<FeeCollectionPeriodStatusDto> BuildPeriodStatuses(IList<FeeCollectionHeadDto> heads)
     {
-        var bySemester = new Dictionary<int, (string Name, DateOnly Start, DateOnly End, decimal Total, decimal Paid)>();
+        var byPeriod = new Dictionary<int, (string Name, DateOnly Start, DateOnly End, decimal Total, decimal Paid)>();
 
         foreach (FeeCollectionHeadDto head in heads)
         {
@@ -416,12 +416,12 @@ public sealed class FeeCollectionService : IFeeCollectionService
                     continue;
                 }
 
-                if (!bySemester.TryGetValue(inst.PeriodIndex, out var agg))
+                if (!byPeriod.TryGetValue(inst.PeriodIndex, out var agg))
                 {
                     agg = (inst.PeriodLabel, inst.PeriodStart, inst.PeriodEnd, 0m, 0m);
                 }
 
-                bySemester[inst.PeriodIndex] = (
+                byPeriod[inst.PeriodIndex] = (
                     agg.Name,
                     agg.Start == default ? inst.PeriodStart : agg.Start,
                     inst.PeriodEnd,
@@ -430,12 +430,12 @@ public sealed class FeeCollectionService : IFeeCollectionService
             }
         }
 
-        return bySemester
+        return byPeriod
             .OrderBy(kv => kv.Key)
             .Select(kv =>
             {
                 decimal due = Math.Max(0, kv.Value.Total - kv.Value.Paid);
-                return new FeeCollectionSemesterStatusDto(
+                return new FeeCollectionPeriodStatusDto(
                     kv.Key,
                     kv.Value.Name,
                     kv.Value.Start,

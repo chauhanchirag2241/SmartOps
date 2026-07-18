@@ -226,8 +226,8 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
 
                 var feeCategory = (FeeCategory)classAmount.Category;
                 bool isDiscount = FeeCategoryHelper.IsDiscount(feeCategory);
-                decimal classAnnual = (FeeCollectionType)classAmount.CollectionType == FeeCollectionType.SemesterWise
-                    ? classAmount.Semester1Amount + classAmount.Semester2Amount
+                decimal classAnnual = (FeeCollectionType)classAmount.CollectionType == FeeCollectionType.PeriodWise
+                    ? classAmount.PeriodAmounts.Sum(p => p.Amount)
                     : classAmount.Amount;
                 decimal studentAnnual = assignment.CustomAnnualAmount is > 0
                     ? assignment.CustomAnnualAmount.Value
@@ -253,8 +253,8 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                 }
                 else
                 {
-                    IList<FeeInstallmentGenerator.SemesterWindow> semesters = await GetSemesterWindowsAsync(
-                            academicYearId,
+                    IList<FeeInstallmentGenerator.PeriodWindow> periodWindows = await GetPeriodWindowsAsync(
+                            classId,
                             conn,
                             tx,
                             ct)
@@ -262,9 +262,10 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                     IList<FeeInstallmentGenerator.InstallmentPeriod> generated = FeeInstallmentGenerator.Generate(
                         (FeeCollectionType)classAmount.CollectionType,
                         classAmount.Amount,
-                        classAmount.Semester1Amount,
-                        classAmount.Semester2Amount,
-                        semesters,
+                        classAmount.PeriodAmounts
+                            .Select(p => new FeeInstallmentGenerator.PeriodAmount(p.PeriodIndex, p.Amount))
+                            .ToList(),
+                        periodWindows,
                         yearStart,
                         yearEnd);
                     if (studentAnnual != classAnnual && classAnnual > 0)
@@ -645,7 +646,9 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
             .GetClassAmountsForVersionAsync(classId, feeStructureVersionId, ct)
             .ConfigureAwait(false);
         ClassFeeAmountForInstallmentRow? feeType = classAmounts
-            .FirstOrDefault(a => a.Amount > 0 && !FeeCategoryHelper.IsDiscount((FeeCategory)a.Category));
+            .FirstOrDefault(a =>
+                (a.Amount > 0 || a.PeriodAmounts.Any(p => p.Amount > 0))
+                && !FeeCategoryHelper.IsDiscount((FeeCategory)a.Category));
         if (feeType is null)
         {
             return;
@@ -810,22 +813,27 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
         return (row.StartDate, row.EndDate);
     }
 
-    private async Task<IList<FeeInstallmentGenerator.SemesterWindow>> GetSemesterWindowsAsync(
-        Guid academicYearId,
+    private async Task<IList<FeeInstallmentGenerator.PeriodWindow>> GetPeriodWindowsAsync(
+        Guid classId,
         IDbConnection conn,
         IDbTransaction tx,
         CancellationToken ct)
     {
         string sql = $"""
-            SELECT name AS Label, startdate AS Start, enddate AS End
-            FROM {Schema}.{DatabaseConfig.TableAcademicYearSemesters}
-            WHERE academicyearid = @AcademicYearId AND isactive = true
-            ORDER BY semesterindex;
+            SELECT periodindex AS PeriodIndex,
+                   name AS Label,
+                   startdate AS Start,
+                   enddate AS End
+            FROM {Schema}.{DatabaseConfig.TableClassAcademicPeriods}
+            WHERE classid = @ClassId AND isactive = true
+            ORDER BY periodindex;
             """;
-        IEnumerable<(string Label, DateOnly Start, DateOnly End)> rows = await conn
-            .QueryAsync<(string Label, DateOnly Start, DateOnly End)>(
-                new CommandDefinition(sql, new { AcademicYearId = academicYearId }, transaction: tx, cancellationToken: ct))
+        IEnumerable<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)> rows = await conn
+            .QueryAsync<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)>(
+                new CommandDefinition(sql, new { ClassId = classId }, transaction: tx, cancellationToken: ct))
             .ConfigureAwait(false);
-        return rows.Select(r => new FeeInstallmentGenerator.SemesterWindow(r.Label, r.Start, r.End)).ToList();
+        return rows
+            .Select(r => new FeeInstallmentGenerator.PeriodWindow(r.PeriodIndex, r.Label, r.Start, r.End))
+            .ToList();
     }
 }

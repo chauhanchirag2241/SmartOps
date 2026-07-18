@@ -15,7 +15,7 @@ public static class FeeLabelHelper
 
     public static string CollectionTypeLabel(FeeCollectionType t) => t switch
     {
-        FeeCollectionType.SemesterWise => "Semester wise",
+        FeeCollectionType.PeriodWise => "Period wise",
         FeeCollectionType.OneTime => "One time",
         _ => t.ToString()
     };

@@ -30,8 +30,7 @@ public sealed class ClassFeeAmountRow
     public int Category { get; init; }
     public int CollectionType { get; init; }
     public decimal Amount { get; init; }
-    public decimal Semester1Amount { get; init; }
-    public decimal Semester2Amount { get; init; }
+    public IList<ClassFeePeriodAmountRow> PeriodAmounts { get; set; } = [];
     public bool IsMandatory { get; init; }
     public bool StudentWiseDifferentAmount { get; init; }
 }
@@ -40,6 +39,12 @@ public sealed class ClassFeeAmountUpsertRow
 {
     public Guid FeeTypeId { get; init; }
     public decimal Amount { get; init; }
-    public decimal Semester1Amount { get; init; }
-    public decimal Semester2Amount { get; init; }
+    public IList<ClassFeePeriodAmountRow> PeriodAmounts { get; init; } = [];
+}
+
+public sealed class ClassFeePeriodAmountRow
+{
+    public Guid FeeTypeId { get; init; }
+    public int PeriodIndex { get; init; }
+    public decimal Amount { get; init; }
 }

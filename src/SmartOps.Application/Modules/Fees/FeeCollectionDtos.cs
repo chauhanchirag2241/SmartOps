@@ -51,9 +51,9 @@ public record FeeCollectionHeadStatusDto(
     decimal DueAmount,
     string Status);
 
-public record FeeCollectionSemesterStatusDto(
-    int SemesterIndex,
-    string SemesterName,
+public record FeeCollectionPeriodStatusDto(
+    int PeriodIndex,
+    string PeriodName,
     DateOnly StartDate,
     DateOnly EndDate,
     decimal TotalAmount,
@@ -72,7 +72,7 @@ public record FeeCollectionStudentDetailDto(
     int PaymentProgressPercent,
     string PaymentStatus,
     IList<FeeCollectionHeadDto> FeeHeads,
-    IList<FeeCollectionSemesterStatusDto> SemesterStatuses,
+    IList<FeeCollectionPeriodStatusDto> PeriodStatuses,
     IList<FeeCollectionPaymentHistoryDto> Payments);
 
 public record CollectFeeRequestDto(

@@ -16,8 +16,7 @@ public record ClassFeeAmountItemDto(
     FeeCollectionType CollectionType,
     string CollectionTypeLabel,
     decimal Amount,
-    decimal Semester1Amount,
-    decimal Semester2Amount,
+    IList<ClassFeePeriodAmountDto> PeriodAmounts,
     decimal AnnualTotal,
     bool IsMandatory,
     bool StudentWiseDifferentAmount);
@@ -42,7 +41,16 @@ public record ClassFeeAmountsResponseDto(
     string VersionStatusLabel,
     bool IsEditable,
     decimal TotalAmount,
+    IList<ClassFeePeriodDto> Periods,
     IList<ClassFeeAmountItemDto> Items);
+
+public record ClassFeePeriodDto(
+    int PeriodIndex,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDate);
+
+public record ClassFeePeriodAmountDto(int PeriodIndex, decimal Amount);
 
 public record SaveClassFeeAmountsRequestDto(
     Guid AcademicYearId,
@@ -52,5 +60,4 @@ public record SaveClassFeeAmountsRequestDto(
 public record SaveClassFeeAmountItemDto(
     Guid FeeTypeId,
     decimal Amount,
-    decimal Semester1Amount,
-    decimal Semester2Amount);
+    IList<ClassFeePeriodAmountDto> PeriodAmounts);

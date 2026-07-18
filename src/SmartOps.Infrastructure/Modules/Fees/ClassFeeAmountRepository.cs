@@ -19,17 +19,25 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
     private const string ClassDisplayNameSql =
         "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
 
-    private const string EffectiveAmountSql =
-        """
+    private string EffectiveAmountSql =>
+        $"""
         CASE
             WHEN ft.category = 4 THEN -ABS(
                 CASE WHEN ft.frequency = 0
-                    THEN COALESCE(NULLIF(cfa.semester1amount + cfa.semester2amount, 0), cfa.amount)
+                    THEN COALESCE(NULLIF((
+                        SELECT SUM(cfpa.amount)
+                        FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+                        WHERE cfpa.classfeeamountid = cfa.id AND cfpa.isactive = true
+                    ), 0), cfa.amount)
                     ELSE cfa.amount
                 END
             )
             ELSE CASE WHEN ft.frequency = 0
-                THEN COALESCE(NULLIF(cfa.semester1amount + cfa.semester2amount, 0), cfa.amount)
+                THEN COALESCE(NULLIF((
+                    SELECT SUM(cfpa.amount)
+                    FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+                    WHERE cfpa.classfeeamountid = cfa.id AND cfpa.isactive = true
+                ), 0), cfa.amount)
                 ELSE cfa.amount
             END
         END
@@ -104,8 +112,6 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                    ft.category AS Category,
                    ft.frequency AS CollectionType,
                    COALESCE(cfa.amount, 0) AS Amount,
-                   COALESCE(cfa.semester1amount, 0) AS Semester1Amount,
-                   COALESCE(cfa.semester2amount, 0) AS Semester2Amount,
                    ft.ismandatory AS IsMandatory,
                    COALESCE(ft.studentwisedifferentamount, false) AS StudentWiseDifferentAmount
             FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
@@ -117,13 +123,36 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
             WHERE ft.feestructureversionid = @FeeStructureVersionId AND ft.isactive = true
             ORDER BY ft.name;
             """;
-        IEnumerable<ClassFeeAmountRow> rows = await connection
+        List<ClassFeeAmountRow> rows = (await connection
             .QueryAsync<ClassFeeAmountRow>(new CommandDefinition(
                 sql,
                 new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
                 cancellationToken: ct))
-            .ConfigureAwait(false);
-        return rows.ToList();
+            .ConfigureAwait(false)).ToList();
+
+        string periodsSql = $"""
+            SELECT cfa.feetypeid AS FeeTypeId,
+                   cfpa.periodindex AS PeriodIndex,
+                   cfpa.amount AS Amount
+            FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+              ON cfpa.classfeeamountid = cfa.id AND cfpa.isactive = true
+            WHERE cfa.classid = @ClassId
+              AND cfa.feestructureversionid = @FeeStructureVersionId
+              AND cfa.isactive = true
+            ORDER BY cfpa.periodindex;
+            """;
+        List<ClassFeePeriodAmountRow> periodRows = (await connection
+            .QueryAsync<ClassFeePeriodAmountRow>(new CommandDefinition(
+                periodsSql,
+                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                cancellationToken: ct))
+            .ConfigureAwait(false)).ToList();
+        foreach (ClassFeeAmountRow row in rows)
+        {
+            row.PeriodAmounts = periodRows.Where(p => p.FeeTypeId == row.FeeTypeId).ToList();
+        }
+        return rows;
     }
 
     public async Task UpsertAmountsAsync(
@@ -137,71 +166,95 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
 
-        foreach (ClassFeeAmountUpsertRow row in amounts)
+        await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            string existsSql = $"""
-                SELECT id FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                WHERE classid = @ClassId AND feetypeid = @FeeTypeId AND feestructureversionid = @FeeStructureVersionId;
-                """;
-            Guid? existingId = await connection.ExecuteScalarAsync<Guid?>(
-                new CommandDefinition(
-                    existsSql,
-                    new { ClassId = classId, FeeTypeId = row.FeeTypeId, FeeStructureVersionId = feeStructureVersionId },
-                    cancellationToken: ct))
-                .ConfigureAwait(false);
-
-            if (existingId.HasValue)
+            foreach (ClassFeeAmountUpsertRow row in amounts)
             {
-                string updateSql = $"""
-                    UPDATE {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                    SET amount = @Amount,
-                        semester1amount = @Semester1Amount,
-                        semester2amount = @Semester2Amount,
-                        isactive = true,
-                        updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-                    WHERE id = @Id;
+                string existsSql = $"""
+                    SELECT id FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
+                    WHERE classid = @ClassId AND feetypeid = @FeeTypeId AND feestructureversionid = @FeeStructureVersionId;
                     """;
-                await connection.ExecuteAsync(new CommandDefinition(
-                    updateSql,
-                    new
-                    {
-                        Id = existingId.Value,
-                        row.Amount,
-                        row.Semester1Amount,
-                        row.Semester2Amount,
-                        UpdatedBy = actorId,
-                        UpdatedOn = utcNow
-                    },
-                    cancellationToken: ct)).ConfigureAwait(false);
-            }
-            else if (row.Amount > 0 || row.Semester1Amount > 0 || row.Semester2Amount > 0)
-            {
-                var entity = new ClassFeeAmountEntity
-                {
-                    Id = Guid.NewGuid(),
-                    FeeStructureVersionId = feeStructureVersionId,
-                    ClassId = classId,
-                    FeeTypeId = row.FeeTypeId,
-                    AcademicYearId = academicYearId,
-                    Amount = row.Amount,
-                    Semester1Amount = row.Semester1Amount,
-                    Semester2Amount = row.Semester2Amount
-                };
-                EnsureInsertAudit(entity, utcNow, actorId);
-                string insertSql = $"""
-                    INSERT INTO {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                        (id, feestructureversionid, classid, feetypeid, academicyearid, amount,
-                         semester1amount, semester2amount,
-                         isactive, versionno, createdby, createdon, updatedby, updatedon)
-                    VALUES
-                        (@Id, @FeeStructureVersionId, @ClassId, @FeeTypeId, @AcademicYearId, @Amount,
-                         @Semester1Amount, @Semester2Amount,
-                         @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-                    """;
-                await connection.ExecuteAsync(new CommandDefinition(insertSql, entity, cancellationToken: ct))
+                Guid? existingId = await conn.ExecuteScalarAsync<Guid?>(
+                    new CommandDefinition(
+                        existsSql,
+                        new { ClassId = classId, FeeTypeId = row.FeeTypeId, FeeStructureVersionId = feeStructureVersionId },
+                        tx,
+                        cancellationToken: ct))
                     .ConfigureAwait(false);
+
+                Guid classFeeAmountId;
+                if (existingId.HasValue)
+                {
+                    classFeeAmountId = existingId.Value;
+                    await conn.ExecuteAsync(
+                        $"""
+                        UPDATE {Schema}.{DatabaseConfig.TableClassFeeAmounts}
+                        SET amount = @Amount,
+                            isactive = true,
+                            updatedby = @ActorId,
+                            updatedon = @UtcNow,
+                            versionno = versionno + 1
+                        WHERE id = @Id;
+                        """,
+                        new { Id = classFeeAmountId, row.Amount, ActorId = actorId, UtcNow = utcNow },
+                        tx).ConfigureAwait(false);
+                }
+                else
+                {
+                    if (row.Amount <= 0 && row.PeriodAmounts.All(p => p.Amount <= 0))
+                    {
+                        continue;
+                    }
+
+                    var entity = new ClassFeeAmountEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        FeeStructureVersionId = feeStructureVersionId,
+                        ClassId = classId,
+                        FeeTypeId = row.FeeTypeId,
+                        AcademicYearId = academicYearId,
+                        Amount = row.Amount,
+                    };
+                    EnsureInsertAudit(entity, utcNow, actorId);
+                    classFeeAmountId = await InsertAsync(
+                        conn,
+                        Schema,
+                        DatabaseConfig.TableClassFeeAmounts,
+                        entity,
+                        tx).ConfigureAwait(false);
+                }
+
+                await conn.ExecuteAsync(
+                    $"""
+                    UPDATE {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts}
+                    SET isactive = false,
+                        updatedby = @ActorId,
+                        updatedon = @UtcNow,
+                        versionno = versionno + 1
+                    WHERE classfeeamountid = @ClassFeeAmountId AND isactive = true;
+                    """,
+                    new { ClassFeeAmountId = classFeeAmountId, ActorId = actorId, UtcNow = utcNow },
+                    tx).ConfigureAwait(false);
+
+                foreach (ClassFeePeriodAmountRow periodAmount in row.PeriodAmounts.OrderBy(p => p.PeriodIndex))
+                {
+                    var entity = new ClassFeePeriodAmountEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        ClassFeeAmountId = classFeeAmountId,
+                        PeriodIndex = periodAmount.PeriodIndex,
+                        Amount = periodAmount.Amount,
+                    };
+                    EnsureInsertAudit(entity, utcNow, actorId);
+                    await InsertAsync(
+                        conn,
+                        Schema,
+                        DatabaseConfig.TableClassFeePeriodAmounts,
+                        entity,
+                        tx).ConfigureAwait(false);
+                }
             }
-        }
+        }).ConfigureAwait(false);
     }
 
     public async Task<bool> ClassHasConfiguredAmountsAsync(
@@ -221,8 +274,12 @@ public sealed class ClassFeeAmountRepository : BaseRepository, IClassFeeAmountRe
                       AND cfa.isactive = true
                       AND (
                           cfa.amount > 0
-                          OR cfa.semester1amount > 0
-                          OR cfa.semester2amount > 0
+                          OR EXISTS (
+                              SELECT 1
+                              FROM {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
+                              WHERE cfpa.classfeeamountid = cfa.id
+                                AND cfpa.isactive = true
+                                AND cfpa.amount > 0)
                       )
                 )
             );

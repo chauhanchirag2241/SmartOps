@@ -56,7 +56,7 @@ WHERE NOT EXISTS (
             menus: MenuCodes.All.Where(m => m != MenuCodes.Schools && m != MenuCodes.Users && m != MenuCodes.Roles).ToArray());
 
         SeedRoleMenuPermissions(RoleCodes.Hod,
-            menus: [MenuCodes.Dashboard, MenuCodes.Students, MenuCodes.Employees, MenuCodes.Classes, MenuCodes.Subjects, MenuCodes.Attendance, MenuCodes.AcademicYears],
+            menus: [MenuCodes.Dashboard, MenuCodes.Students, MenuCodes.Employees, MenuCodes.Classes, MenuCodes.Subjects, MenuCodes.Attendance, MenuCodes.AcademicYears, MenuCodes.AcademicPeriods],
             view: true, add: false, edit: false, delete: false, export: true);
 
         SeedRoleMenuPermissions(RoleCodes.Teacher,

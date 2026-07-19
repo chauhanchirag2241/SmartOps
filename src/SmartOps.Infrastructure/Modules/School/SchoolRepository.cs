@@ -479,89 +479,12 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
 
 
+            // School update never touches schoolbranches — branches are managed via dedicated APIs.
             await UpdateAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSchools, school, tx, "Id")
 
                 .ConfigureAwait(false);
 
-
-
-            var deactivateSql = $@"
-
-                UPDATE {DatabaseConfig.Schema_Global}.{BranchesTable}
-
-                SET isactive = false, updatedon = @UpdatedOn, updatedby = @UpdatedBy
-
-                WHERE schoolid = @SchoolId";
-
-            await conn.ExecuteAsync(deactivateSql, new
-
-            {
-
-                SchoolId = school.Id,
-
-                UpdatedOn = utcNow,
-
-                UpdatedBy = actorId
-
-            }, tx).ConfigureAwait(false);
-
-
-
-            foreach (var branch in school.Branches)
-
-            {
-
-                branch.SchoolId = school.Id;
-
-                if (branch.Id == Guid.Empty)
-
-                {
-
-                    branch.Id = Guid.NewGuid();
-
-                    EnsureInsertAudit(branch, utcNow);
-
-                    await InsertAsync(conn, DatabaseConfig.Schema_Global, BranchesTable, branch, tx).ConfigureAwait(false);
-
-                }
-
-                else
-
-                {
-
-                    branch.IsActive = true;
-
-                    ApplyUpdateAudit(branch, actorId, utcNow);
-
-                    await UpdateAsync(conn, DatabaseConfig.Schema_Global, BranchesTable, branch, tx, "Id").ConfigureAwait(false);
-
-                }
-
-            }
-
         }).ConfigureAwait(false);
-
-
-
-        if (string.IsNullOrWhiteSpace(school.ConnectionString))
-
-        {
-
-            return;
-
-        }
-
-
-
-        await _schoolBranchSyncService
-
-            .EnsureSyncedAsync(school.Id, school.ConnectionString, cancellationToken)
-
-            .ConfigureAwait(false);
-
-
-
-        await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
 
     }
 
@@ -640,6 +563,135 @@ WHERE id = @Id;
     }
 
 
+
+    public async Task<IReadOnlyList<SchoolBranchEntity>> GetBranchesAsync(
+        Guid schoolId,
+        CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await Context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<SchoolBranchEntity>(
+            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
+               WHERE schoolid = @SchoolId AND isactive = true
+               ORDER BY isheadoffice DESC, name ASC",
+            new { SchoolId = schoolId }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<SchoolBranchEntity> AddBranchAsync(
+        Guid schoolId,
+        string name,
+        string? email,
+        string? address,
+        CancellationToken cancellationToken = default)
+    {
+        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("School not found.");
+
+        var utcNow = DateTime.UtcNow;
+        var branch = new SchoolBranchEntity
+        {
+            Id = Guid.NewGuid(),
+            SchoolId = schoolId,
+            Name = name.Trim(),
+            Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
+            Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim(),
+            IsHeadOffice = false,
+            IsActive = true,
+        };
+        EnsureInsertAudit(branch, utcNow);
+
+        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await InsertAsync(connection, DatabaseConfig.Schema_Global, BranchesTable, branch).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            school.Branches = [branch];
+            await _schoolBranchSyncService
+                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
+                .ConfigureAwait(false);
+            await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
+        }
+
+        return branch;
+    }
+
+    public async Task<SchoolBranchEntity?> UpdateBranchAsync(
+        Guid schoolId,
+        Guid branchId,
+        string name,
+        string? email,
+        string? address,
+        CancellationToken cancellationToken = default)
+    {
+        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
+            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
+               WHERE id = @BranchId AND schoolid = @SchoolId AND isactive = true",
+            new { BranchId = branchId, SchoolId = schoolId }).ConfigureAwait(false);
+
+        if (branch is null)
+        {
+            return null;
+        }
+
+        branch.Name = name.Trim();
+        branch.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+        branch.Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+        ApplyUpdateAudit(branch, ResolveUpdateActor(), DateTime.UtcNow);
+        await UpdateAsync(connection, DatabaseConfig.Schema_Global, BranchesTable, branch, null, "Id")
+            .ConfigureAwait(false);
+
+        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (school is not null && !string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            await _schoolBranchSyncService
+                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return branch;
+    }
+
+    public async Task<bool> DeactivateBranchAsync(
+        Guid schoolId,
+        Guid branchId,
+        CancellationToken cancellationToken = default)
+    {
+        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
+            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
+               WHERE id = @BranchId AND schoolid = @SchoolId AND isactive = true",
+            new { BranchId = branchId, SchoolId = schoolId }).ConfigureAwait(false);
+
+        if (branch is null)
+        {
+            return false;
+        }
+
+        if (branch.IsHeadOffice)
+        {
+            throw new InvalidOperationException("Head office (Main Campus) cannot be deleted.");
+        }
+
+        var actorId = ResolveUpdateActor();
+        var utcNow = DateTime.UtcNow;
+        await connection.ExecuteAsync(
+            $@"UPDATE {DatabaseConfig.Schema_Global}.{BranchesTable}
+               SET isactive = false, updatedon = @UpdatedOn, updatedby = @UpdatedBy, versionno = versionno + 1
+               WHERE id = @BranchId AND schoolid = @SchoolId",
+            new { BranchId = branchId, SchoolId = schoolId, UpdatedOn = utcNow, UpdatedBy = actorId })
+            .ConfigureAwait(false);
+
+        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (school is not null && !string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            await _schoolBranchSyncService
+                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return true;
+    }
 
     private async Task<NpgsqlConnection> OpenPlatformConnectionAsync(CancellationToken cancellationToken) =>
 

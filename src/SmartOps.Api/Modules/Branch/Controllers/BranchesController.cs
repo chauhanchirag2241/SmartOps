@@ -8,7 +8,7 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Branch.Controllers;
 
-[ApiController]
+[ApiController] 
 [Route("api/[controller]")]
 [Authorize]
 public sealed class BranchesController(

@@ -57,7 +57,7 @@ SELECT id AS Id, schoolid AS SchoolId, name AS Name, email AS Email, address AS 
        isheadoffice AS IsHeadOffice, isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
 FROM {g}.{DatabaseConfig.TableSchoolBranches}
-WHERE schoolid = @SchoolId AND isactive = true;
+WHERE schoolid = @SchoolId;
 """,
             new { SchoolId = schoolId }).ConfigureAwait(false);
 

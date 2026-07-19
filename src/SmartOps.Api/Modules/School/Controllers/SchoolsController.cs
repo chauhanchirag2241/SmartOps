@@ -27,6 +27,12 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
             return BadRequest("School data is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Subdomain)
+            || string.IsNullOrWhiteSpace(request.SchoolCode))
+        {
+            return BadRequest("Name, subdomain and school code are required.");
+        }
+
         var entity = request.ToEntity();
         var schoolId = await schoolRepository.CreateSchoolAsync(entity, cancellationToken).ConfigureAwait(false);
         return Ok(new CreateSchoolResponse("School created successfully", schoolId));
@@ -75,13 +81,21 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     [Authorize(Policy = MenuPolicies.Schools.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateSchool(Guid id, [FromBody] SchoolEntity school, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateSchool(Guid id, [FromBody] UpdateSchoolDto request, CancellationToken cancellationToken)
     {
-        if (id != school.Id)
+        if (request is null || id != request.Id)
         {
             return BadRequest("Route id and payload id must match.");
         }
 
+        var school = await schoolRepository.GetSchoolByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (school is null)
+        {
+            return NotFound();
+        }
+
+        request.ApplyTo(school);
         await schoolRepository.UpdateSchoolAsync(school, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
@@ -93,5 +107,87 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
     {
         await schoolRepository.DeleteSchoolAsync(id, cancellationToken).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpGet("{schoolId:guid}/branches")]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
+    [ProducesResponseType(typeof(IReadOnlyList<SchoolBranchDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SchoolBranchDto>>> GetBranches(
+        Guid schoolId,
+        CancellationToken cancellationToken)
+    {
+        var branches = await schoolRepository.GetBranchesAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        return Ok(branches.Select(b => b.ToDto()).ToList());
+    }
+
+    [HttpPost("{schoolId:guid}/branches")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(typeof(SchoolBranchDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<SchoolBranchDto>> AddBranch(
+        Guid schoolId,
+        [FromBody] SaveSchoolBranchDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Branch name is required.");
+        }
+
+        try
+        {
+            var branch = await schoolRepository
+                .AddBranchAsync(schoolId, request.Name, request.Email, request.Address, cancellationToken)
+                .ConfigureAwait(false);
+            return Ok(branch.ToDto());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("{schoolId:guid}/branches/{branchId:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(typeof(SchoolBranchDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SchoolBranchDto>> UpdateBranch(
+        Guid schoolId,
+        Guid branchId,
+        [FromBody] SaveSchoolBranchDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Branch name is required.");
+        }
+
+        var branch = await schoolRepository
+            .UpdateBranchAsync(schoolId, branchId, request.Name, request.Email, request.Address, cancellationToken)
+            .ConfigureAwait(false);
+        return branch is null ? NotFound() : Ok(branch.ToDto());
+    }
+
+    [HttpDelete("{schoolId:guid}/branches/{branchId:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteBranch(
+        Guid schoolId,
+        Guid branchId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var ok = await schoolRepository.DeactivateBranchAsync(schoolId, branchId, cancellationToken)
+                .ConfigureAwait(false);
+            return ok ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }

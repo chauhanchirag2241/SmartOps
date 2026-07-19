@@ -309,6 +309,69 @@ public static class MenuPolicies
         public const string Export = "Menu:FRONT_OFFICE_SETUP:Export";
     }
 
+    public static class ExamGroups
+    {
+        public const string View = "Menu:EXAM_GROUPS:View";
+        public const string Add = "Menu:EXAM_GROUPS:Add";
+        public const string Edit = "Menu:EXAM_GROUPS:Edit";
+        public const string Delete = "Menu:EXAM_GROUPS:Delete";
+        public const string Export = "Menu:EXAM_GROUPS:Export";
+    }
+
+    public static class Exams
+    {
+        public const string View = "Menu:EXAMS:View";
+        public const string Add = "Menu:EXAMS:Add";
+        public const string Edit = "Menu:EXAMS:Edit";
+        public const string Delete = "Menu:EXAMS:Delete";
+        public const string Export = "Menu:EXAMS:Export";
+    }
+
+    public static class ExamSchedule
+    {
+        public const string View = "Menu:EXAM_SCHEDULE:View";
+        public const string Add = "Menu:EXAM_SCHEDULE:Add";
+        public const string Edit = "Menu:EXAM_SCHEDULE:Edit";
+        public const string Delete = "Menu:EXAM_SCHEDULE:Delete";
+        public const string Export = "Menu:EXAM_SCHEDULE:Export";
+    }
+
+    public static class ExamMarksEntry
+    {
+        public const string View = "Menu:EXAM_MARKS_ENTRY:View";
+        public const string Add = "Menu:EXAM_MARKS_ENTRY:Add";
+        public const string Edit = "Menu:EXAM_MARKS_ENTRY:Edit";
+        public const string Delete = "Menu:EXAM_MARKS_ENTRY:Delete";
+        public const string Export = "Menu:EXAM_MARKS_ENTRY:Export";
+    }
+
+    public static class ExamResults
+    {
+        public const string View = "Menu:EXAM_RESULTS:View";
+        public const string Add = "Menu:EXAM_RESULTS:Add";
+        public const string Edit = "Menu:EXAM_RESULTS:Edit";
+        public const string Delete = "Menu:EXAM_RESULTS:Delete";
+        public const string Export = "Menu:EXAM_RESULTS:Export";
+    }
+
+    public static class ExamHallTickets
+    {
+        public const string View = "Menu:EXAM_HALL_TICKETS:View";
+        public const string Add = "Menu:EXAM_HALL_TICKETS:Add";
+        public const string Edit = "Menu:EXAM_HALL_TICKETS:Edit";
+        public const string Delete = "Menu:EXAM_HALL_TICKETS:Delete";
+        public const string Export = "Menu:EXAM_HALL_TICKETS:Export";
+    }
+
+    public static class ExamGradeSetup
+    {
+        public const string View = "Menu:EXAM_GRADE_SETUP:View";
+        public const string Add = "Menu:EXAM_GRADE_SETUP:Add";
+        public const string Edit = "Menu:EXAM_GRADE_SETUP:Edit";
+        public const string Delete = "Menu:EXAM_GRADE_SETUP:Delete";
+        public const string Export = "Menu:EXAM_GRADE_SETUP:Export";
+    }
+
     /// <summary>
     /// Complaints.View OR AdmissionInquiries.View OR VisitorBook.View OR PhoneLogs.View OR FrontOfficeSetup.View
     /// — employee dropdown for front-office assign fields.

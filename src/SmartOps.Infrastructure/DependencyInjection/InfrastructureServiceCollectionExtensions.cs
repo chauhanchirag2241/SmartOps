@@ -48,6 +48,9 @@ using SmartOps.Infrastructure.Modules.Notice;
 using SmartOps.Infrastructure.Modules.Notice.Services;
 using SmartOps.Infrastructure.Modules.FrontOffice;
 using SmartOps.Infrastructure.Modules.FrontOffice.Services;
+using SmartOps.Application.Modules.Exam.Interfaces;
+using SmartOps.Infrastructure.Modules.Exam;
+using SmartOps.Infrastructure.Modules.Exam.Services;
 using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Infrastructure.Modules.Fees.Services;
 using SmartOps.Infrastructure.Modules.Salary;
@@ -128,6 +131,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFrontOfficeRepository, FrontOfficeRepository>();
         services.AddScoped<IFrontOfficeService, FrontOfficeService>();
+        services.AddScoped<IExamRepository, ExamRepository>();
+        services.AddScoped<IExamMarksRepository, ExamMarksRepository>();
+        services.AddScoped<IExamResultRepository, ExamResultRepository>();
+        services.AddScoped<IExamService, ExamService>();
+        services.AddScoped<IExamMarksService, ExamMarksService>();
+        services.AddScoped<IExamResultService, ExamResultService>();
 
         if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
             && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PlatformDb")))

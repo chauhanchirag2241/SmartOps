@@ -86,6 +86,22 @@ public static class MenuCodes
 
     public const string FrontOfficeSetup = "FRONT_OFFICE_SETUP";
 
+    public const string ExamManagement = "EXAM_MANAGEMENT";
+
+    public const string ExamGroups = "EXAM_GROUPS";
+
+    public const string Exams = "EXAMS";
+
+    public const string ExamSchedule = "EXAM_SCHEDULE";
+
+    public const string ExamMarksEntry = "EXAM_MARKS_ENTRY";
+
+    public const string ExamResults = "EXAM_RESULTS";
+
+    public const string ExamHallTickets = "EXAM_HALL_TICKETS";
+
+    public const string ExamGradeSetup = "EXAM_GRADE_SETUP";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -125,6 +141,14 @@ public static class MenuCodes
         PhoneLogs,
         Complaints,
         AdmissionInquiries,
-        FrontOfficeSetup
+        FrontOfficeSetup,
+        ExamManagement,
+        ExamGroups,
+        Exams,
+        ExamSchedule,
+        ExamMarksEntry,
+        ExamResults,
+        ExamHallTickets,
+        ExamGradeSetup
     ];
 }

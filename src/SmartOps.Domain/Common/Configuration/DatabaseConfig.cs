@@ -85,6 +85,18 @@ public static class DatabaseConfig
     public const string TableNotices = "notices";
     public const string TableNoticeResponses = "noticeresponses";
 
+    // Exam Module
+    public const string TableExamGradeScales = "examgradescales";
+    public const string TableExamGradeScaleDetails = "examgradescaledetails";
+    public const string TableExamGroups = "examgroups";
+    public const string TableExams = "exams";
+    public const string TableExamClasses = "examclasses";
+    public const string TableExamMarkComponents = "exammarkcomponents";
+    public const string TableExamSchedules = "examschedules";
+    public const string TableExamStudentMarks = "examstudentmarks";
+    public const string TableExamResults = "examresults";
+    public const string TableExamHallTickets = "examhalltickets";
+
     // Front Office Module
     public const string TableComplaintTypes = "complainttypes";
     public const string TableVisitorPurposes = "visitorpurposes";

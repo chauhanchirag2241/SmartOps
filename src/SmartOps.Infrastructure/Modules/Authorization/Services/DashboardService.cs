@@ -2,6 +2,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
@@ -17,6 +18,7 @@ public sealed class DashboardService : IDashboardService
 {
     private readonly DapperContext _context;
     private readonly IUserScopeContext _scope;
+    private readonly IBranchContext _branchContext;
     private readonly ICurrentUserService _currentUser;
     private readonly IDashboardWidgetPermissionService _widgetPermissions;
     private readonly ITenantProvider _tenantProvider;
@@ -24,12 +26,14 @@ public sealed class DashboardService : IDashboardService
     public DashboardService(
         DapperContext context,
         IUserScopeContext scope,
+        IBranchContext branchContext,
         ICurrentUserService currentUser,
         IDashboardWidgetPermissionService widgetPermissions,
         ITenantProvider tenantProvider)
     {
         _context = context;
         _scope = scope;
+        _branchContext = branchContext;
         _currentUser = currentUser;
         _widgetPermissions = widgetPermissions;
         _tenantProvider = tenantProvider;
@@ -54,6 +58,7 @@ public sealed class DashboardService : IDashboardService
     public async Task<DashboardLayoutDto> GetLayoutAsync(CancellationToken cancellationToken = default)
     {
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<DashboardWidgetLayoutItemDto> widgets = await _widgetPermissions
             .GetVisibleWidgetsAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -72,6 +77,7 @@ public sealed class DashboardService : IDashboardService
     public async Task<DashboardResponseDto> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<DashboardWidgetLayoutItemDto> widgets = await _widgetPermissions
             .GetVisibleWidgetsAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -309,19 +315,23 @@ WHERE a.attendancedate >= @AttendanceFromDate
         CancellationToken cancellationToken)
     {
         DateTime now = DateTime.UtcNow;
+        string branchFilter = BuildBranchColumnFilter("pr");
         string sql = $"""
 SELECT
     pr.totalnet AS TotalNet,
     pr.status AS RunStatus,
     pr.employeecount AS EmployeeCount
 FROM {schema}.{DatabaseConfig.TablePayrollRuns} pr
-WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pr.isactive = true
+WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pr.isactive = true {branchFilter}
 ORDER BY pr.processedon DESC NULLS LAST
 LIMIT 1
 """;
 
         PayrollRunRow? run = await connection.QuerySingleOrDefaultAsync<PayrollRunRow>(
-            new CommandDefinition(sql, new { Year = now.Year, Month = now.Month }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(
+                sql,
+                BuildParameters(extra: new { Year = now.Year, Month = now.Month }),
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         string entriesSql = $"""
 SELECT
@@ -331,11 +341,14 @@ SELECT
     COALESCE(SUM(pe.netsalary) FILTER (WHERE pe.status < 1), 0) AS PendingAmount
 FROM {schema}.{DatabaseConfig.TablePayrollEntries} pe
 INNER JOIN {schema}.{DatabaseConfig.TablePayrollRuns} pr ON pr.id = pe.payrollrunid AND pr.isactive = true
-WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pe.isactive = true
+WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pe.isactive = true {branchFilter}
 """;
 
         PayrollStatsRow stats = await connection.QuerySingleOrDefaultAsync<PayrollStatsRow>(
-            new CommandDefinition(entriesSql, new { Year = now.Year, Month = now.Month }, cancellationToken: cancellationToken))
+            new CommandDefinition(
+                entriesSql,
+                BuildParameters(extra: new { Year = now.Year, Month = now.Month }),
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false)
             ?? new PayrollStatsRow();
 
@@ -436,6 +449,7 @@ LIMIT 5
             : _scope.AllowedClassIds.Count == 0
                 ? " AND 1 = 0"
                 : " AND h.classid = ANY(@ScopeClassIds)";
+        string branchFilter = BuildBranchColumnFilter("c");
         string sql = $"""
 SELECT
     h.title AS Title,
@@ -449,6 +463,7 @@ WHERE h.isactive = true
   AND h.duedate <= CURRENT_DATE + 3
   AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
   {classFilter}
+  {branchFilter}
 ORDER BY h.duedate ASC
 LIMIT 5
 """;
@@ -529,12 +544,13 @@ ORDER BY c.classname, c.section
         string schema,
         CancellationToken cancellationToken)
     {
+        string branchFilter = BuildBranchColumnFilter("sub");
         string sql = $"""
 SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableSubjects} sub
-WHERE sub.isactive = true
+WHERE sub.isactive = true {branchFilter}
 """;
         return await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<(string? AcademicYear, string? SchoolName)> LoadContextLabelsAsync(CancellationToken cancellationToken)
@@ -658,18 +674,49 @@ WHERE id = @Id AND isactive = true LIMIT 1
         return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[^1][0])}";
     }
 
-    private string BuildStudentExistsFilter(string schema, string alias)
+    /// <summary>
+    /// Restricts rows to the active branch, or to header-selected compare branches (X-Branch-Ids).
+    /// </summary>
+    private string BuildBranchColumnFilter(string alias)
     {
-        if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
+        if (!_branchContext.IsResolved)
         {
             return string.Empty;
         }
 
+        if (_branchContext.SelectedBranchIds.Count > 0)
+        {
+            return $" AND {alias}.branchid = ANY(@SelectedBranchIds)";
+        }
+
+        if (_branchContext.ActiveBranchId.HasValue)
+        {
+            return $" AND {alias}.branchid = @ActiveBranchId";
+        }
+
+        // User has no branch access — do not leak school-wide totals.
+        if (_branchContext.AllowedBranchIds.Count == 0)
+        {
+            return " AND 1 = 0";
+        }
+
+        return string.Empty;
+    }
+
+    private string BuildStudentExistsFilter(string schema, string alias)
+    {
+        string branchFilter = BuildBranchColumnFilter(alias);
+
+        if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
+        {
+            return branchFilter;
+        }
+
         if (_scope.ScopeType is DataScopeType.Self or DataScopeType.LinkedStudents)
         {
-            return _scope.AllowedStudentIds.Count > 0
+            return (_scope.AllowedStudentIds.Count > 0
                 ? $" AND {alias}.id = ANY(@ScopeStudentIds)"
-                : " AND 1 = 0";
+                : " AND 1 = 0") + branchFilter;
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -684,16 +731,18 @@ WHERE id = @Id AND isactive = true LIMIT 1
       AND sa.classid = ANY(@ScopeClassIds)
       AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 )
+{branchFilter}
 """;
     }
 
     private string BuildClassFilter(string schema, string alias)
     {
         string yearFilter = AcademicYearClassFilter(alias);
+        string branchFilter = BuildBranchColumnFilter(alias);
 
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
         {
-            return yearFilter;
+            return yearFilter + branchFilter;
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -701,7 +750,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
             return " AND 1 = 0";
         }
 
-        return $" AND {alias}.id = ANY(@ScopeClassIds){yearFilter}";
+        return $" AND {alias}.id = ANY(@ScopeClassIds){yearFilter}{branchFilter}";
     }
 
     private static string AcademicYearClassFilter(string classTableAlias) =>
@@ -709,19 +758,21 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
     private string BuildemployeeFilter(string schema, string alias)
     {
+        string branchFilter = BuildBranchColumnFilter(alias);
+
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
         {
-            return string.Empty;
+            return branchFilter;
         }
 
         if (_scope.AllowedEmployeeIds.Count > 0)
         {
-            return $" AND {alias}.id = ANY(@ScopeEmployeeIds)";
+            return $" AND {alias}.id = ANY(@ScopeEmployeeIds){branchFilter}";
         }
 
         if (_scope.AllowedDepartmentIds.Count > 0)
         {
-            return $" AND {alias}.departmentid = ANY(@ScopeDepartmentIds)";
+            return $" AND {alias}.departmentid = ANY(@ScopeDepartmentIds){branchFilter}";
         }
 
         if (_scope.ScopeType == DataScopeType.Class)
@@ -729,16 +780,18 @@ WHERE id = @Id AND isactive = true LIMIT 1
             return " AND 1 = 0";
         }
 
-        return string.Empty;
+        return branchFilter;
     }
 
     private string BuildAttendanceFilter(string schema, string alias)
     {
+        string branchFilter = BuildBranchColumnFilter("c");
         string yearFilter = $"""
  AND EXISTS (
     SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
     WHERE c.id = {alias}.classid AND c.isactive = true
       AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
+      {branchFilter}
 )
 """;
 
@@ -764,17 +817,28 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
     private object BuildParameters(
         DashboardAttendanceDateRange? attendanceRange = null,
-        DateOnly? schoolToday = null) => new
+        DateOnly? schoolToday = null,
+        object? extra = null)
     {
-        ScopeStudentIds = _scope.AllowedStudentIds.ToArray(),
-        ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-        ScopeEmployeeIds = _scope.AllowedEmployeeIds.ToArray(),
-        ScopeDepartmentIds = _scope.AllowedDepartmentIds.ToArray(),
-        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
-        SchoolToday = schoolToday ?? attendanceRange?.From,
-        AttendanceFromDate = attendanceRange?.From,
-        AttendanceToDate = attendanceRange?.To
-    };
+        var bag = new DynamicParameters();
+        bag.Add("ScopeStudentIds", _scope.AllowedStudentIds.ToArray());
+        bag.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        bag.Add("ScopeEmployeeIds", _scope.AllowedEmployeeIds.ToArray());
+        bag.Add("ScopeDepartmentIds", _scope.AllowedDepartmentIds.ToArray());
+        bag.Add("ScopeAcademicYearId", _scope.ActiveAcademicYearId);
+        bag.Add("SelectedBranchIds", _branchContext.SelectedBranchIds.ToArray());
+        bag.Add("ActiveBranchId", _branchContext.ActiveBranchId);
+        bag.Add("SchoolToday", schoolToday ?? attendanceRange?.From);
+        bag.Add("AttendanceFromDate", attendanceRange?.From);
+        bag.Add("AttendanceToDate", attendanceRange?.To);
+
+        if (extra is not null)
+        {
+            bag.AddDynamicParams(extra);
+        }
+
+        return bag;
+    }
 
     private sealed class DashboardRow
     {

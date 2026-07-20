@@ -102,6 +102,14 @@ public static class MenuCodes
 
     public const string ExamGradeSetup = "EXAM_GRADE_SETUP";
 
+    public const string Timetable = "TIMETABLE";
+
+    public const string PeriodMaster = "PERIOD_MASTER";
+
+    public const string ClassTimetable = "CLASS_TIMETABLE";
+
+    public const string MyTimetable = "MY_TIMETABLE";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -149,6 +157,10 @@ public static class MenuCodes
         ExamMarksEntry,
         ExamResults,
         ExamHallTickets,
-        ExamGradeSetup
+        ExamGradeSetup,
+        Timetable,
+        PeriodMaster,
+        ClassTimetable,
+        MyTimetable
     ];
 }

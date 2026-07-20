@@ -372,6 +372,42 @@ public static class MenuPolicies
         public const string Export = "Menu:EXAM_GRADE_SETUP:Export";
     }
 
+    public static class Timetable
+    {
+        public const string View = "Menu:TIMETABLE:View";
+        public const string Add = "Menu:TIMETABLE:Add";
+        public const string Edit = "Menu:TIMETABLE:Edit";
+        public const string Delete = "Menu:TIMETABLE:Delete";
+        public const string Export = "Menu:TIMETABLE:Export";
+    }
+
+    public static class PeriodMaster
+    {
+        public const string View = "Menu:PERIOD_MASTER:View";
+        public const string Add = "Menu:PERIOD_MASTER:Add";
+        public const string Edit = "Menu:PERIOD_MASTER:Edit";
+        public const string Delete = "Menu:PERIOD_MASTER:Delete";
+        public const string Export = "Menu:PERIOD_MASTER:Export";
+    }
+
+    public static class ClassTimetable
+    {
+        public const string View = "Menu:CLASS_TIMETABLE:View";
+        public const string Add = "Menu:CLASS_TIMETABLE:Add";
+        public const string Edit = "Menu:CLASS_TIMETABLE:Edit";
+        public const string Delete = "Menu:CLASS_TIMETABLE:Delete";
+        public const string Export = "Menu:CLASS_TIMETABLE:Export";
+    }
+
+    public static class MyTimetable
+    {
+        public const string View = "Menu:MY_TIMETABLE:View";
+        public const string Add = "Menu:MY_TIMETABLE:Add";
+        public const string Edit = "Menu:MY_TIMETABLE:Edit";
+        public const string Delete = "Menu:MY_TIMETABLE:Delete";
+        public const string Export = "Menu:MY_TIMETABLE:Export";
+    }
+
     /// <summary>
     /// Complaints.View OR AdmissionInquiries.View OR VisitorBook.View OR PhoneLogs.View OR FrontOfficeSetup.View
     /// — employee dropdown for front-office assign fields.

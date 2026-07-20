@@ -51,6 +51,10 @@ using SmartOps.Infrastructure.Modules.FrontOffice.Services;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Infrastructure.Modules.Exam;
 using SmartOps.Infrastructure.Modules.Exam.Services;
+using SmartOps.Domain.Modules.Timetable;
+using SmartOps.Application.Modules.Timetable.Interfaces;
+using SmartOps.Infrastructure.Modules.Timetable;
+using SmartOps.Infrastructure.Modules.Timetable.Services;
 using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Infrastructure.Modules.Fees.Services;
 using SmartOps.Infrastructure.Modules.Salary;
@@ -137,6 +141,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IExamService, ExamService>();
         services.AddScoped<IExamMarksService, ExamMarksService>();
         services.AddScoped<IExamResultService, ExamResultService>();
+        services.AddScoped<IPeriodRepository, PeriodRepository>();
+        services.AddScoped<ITimetableRepository, TimetableRepository>();
+        services.AddScoped<ITimetableService, TimetableService>();
 
         if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
             && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PlatformDb")))

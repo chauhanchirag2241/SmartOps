@@ -104,4 +104,9 @@ public static class DatabaseConfig
     public const string TablePhoneLogs = "phonelogs";
     public const string TableComplaints = "complaints";
     public const string TableAdmissionInquiries = "admissioninquiries";
+
+    // Timetable Module
+    public const string TablePeriods = "periods";
+    public const string TableClassTimetables = "class_timetables";
+    public const string TableClassTimetableSlots = "class_timetable_slots";
 }

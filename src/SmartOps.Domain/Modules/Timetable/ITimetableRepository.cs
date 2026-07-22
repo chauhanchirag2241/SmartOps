@@ -12,6 +12,7 @@ public interface ITimetableRepository
     Task DeleteTimetableAsync(Guid id, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<ClassTimetableSlotEntity>> GetSlotsByTimetableIdAsync(Guid timetableId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TimetableSlotDetailRow>> GetSlotDetailsByTimetableIdAsync(Guid timetableId, CancellationToken cancellationToken);
     Task ReplaceSlotsAsync(Guid timetableId, IReadOnlyList<ClassTimetableSlotEntity> slots, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<TimetableConflictRow>> FindTeacherConflictsAsync(

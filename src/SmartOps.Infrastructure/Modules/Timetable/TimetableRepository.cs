@@ -23,6 +23,7 @@ public sealed class TimetableRepository : BaseRepository, ITimetableRepository
         var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
         var sql = $@"
 SELECT id AS Id, academicyearid AS AcademicYearId, classid AS ClassId,
+       periodtemplateid AS PeriodTemplateId,
        effectivefrom AS EffectiveFrom, notes AS Notes,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn,
@@ -37,6 +38,7 @@ WHERE id = @Id{activeFilter};";
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var sql = $@"
 SELECT id AS Id, academicyearid AS AcademicYearId, classid AS ClassId,
+       periodtemplateid AS PeriodTemplateId,
        effectivefrom AS EffectiveFrom, notes AS Notes,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn,
@@ -54,6 +56,7 @@ ORDER BY effectivefrom DESC;";
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var sql = $@"
 SELECT id AS Id, academicyearid AS AcademicYearId, classid AS ClassId,
+       periodtemplateid AS PeriodTemplateId,
        effectivefrom AS EffectiveFrom, notes AS Notes,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn,
@@ -113,6 +116,33 @@ SELECT id AS Id, timetableid AS TimetableId, dayofweek AS DayOfWeek, periodid AS
 FROM {Schema}.{DatabaseConfig.TableClassTimetableSlots}
 WHERE timetableid = @TimetableId AND isactive = true;";
         var rows = await connection.QueryAsync<ClassTimetableSlotEntity>(sql, new { TimetableId = timetableId })
+            .ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<TimetableSlotDetailRow>> GetSlotDetailsByTimetableIdAsync(
+        Guid timetableId,
+        CancellationToken cancellationToken)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // Keep this query lean — only enrich slot subject/teacher names (periods come from template).
+        var sql = $@"
+SELECT
+    s.id AS SlotId,
+    s.timetableid AS TimetableId,
+    s.dayofweek AS DayOfWeek,
+    s.periodid AS PeriodId,
+    s.subjectid AS SubjectId,
+    sub.subjectname AS SubjectName,
+    sub.subjectcode AS SubjectCode,
+    s.employeeid AS EmployeeId,
+    NULLIF(TRIM(CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.lastname, ''))), '') AS EmployeeName,
+    s.roomno AS RoomNo
+FROM {Schema}.{DatabaseConfig.TableClassTimetableSlots} s
+LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} sub ON sub.id = s.subjectid
+LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = s.employeeid
+WHERE s.timetableid = @TimetableId AND s.isactive = true;";
+        var rows = await connection.QueryAsync<TimetableSlotDetailRow>(sql, new { TimetableId = timetableId })
             .ConfigureAwait(false);
         return rows.ToList();
     }

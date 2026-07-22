@@ -54,6 +54,10 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         {
             return NotFound();
         }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+        }
     }
 
     [HttpGet("class-grid")]

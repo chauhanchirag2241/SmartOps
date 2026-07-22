@@ -141,7 +141,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IExamService, ExamService>();
         services.AddScoped<IExamMarksService, ExamMarksService>();
         services.AddScoped<IExamResultService, ExamResultService>();
-        services.AddScoped<IPeriodRepository, PeriodRepository>();
+        services.AddScoped<IPeriodTemplateRepository, PeriodTemplateRepository>();
         services.AddScoped<ITimetableRepository, TimetableRepository>();
         services.AddScoped<ITimetableService, TimetableService>();
 

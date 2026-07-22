@@ -4,6 +4,7 @@ public sealed class CreateTimetableVersionDto
 {
     public Guid AcademicYearId { get; set; }
     public Guid ClassId { get; set; }
+    public Guid PeriodTemplateId { get; set; }
     public DateOnly EffectiveFrom { get; set; }
     public string? Notes { get; set; }
     public bool CopyFromPrevious { get; set; }
@@ -40,6 +41,8 @@ public sealed class TimetableVersionDto
     public Guid AcademicYearId { get; set; }
     public Guid ClassId { get; set; }
     public string? ClassName { get; set; }
+    public Guid PeriodTemplateId { get; set; }
+    public string? PeriodTemplateName { get; set; }
     public DateOnly EffectiveFrom { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; }

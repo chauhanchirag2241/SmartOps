@@ -14,7 +14,7 @@ public sealed class G031_SeedTimetableMenus : Migration
     private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string? Route, string Icon, int Order)[] Menus =
     [
         (TimetableParentId, "Timetable", MenuCodes.Timetable, null, null, "schedule", 26),
-        (Guid.Parse("10000000-0000-0000-0000-000000000071"), "Period Master", MenuCodes.PeriodMaster, TimetableParentId, "/timetable/periods", "view_day", 71),
+        (Guid.Parse("10000000-0000-0000-0000-000000000071"), "Period Templates", MenuCodes.PeriodMaster, TimetableParentId, "/timetable/periods", "view_day", 71),
         (Guid.Parse("10000000-0000-0000-0000-000000000072"), "Class Timetable", MenuCodes.ClassTimetable, TimetableParentId, "/timetable/grid", "calendar_view_week", 72),
         (Guid.Parse("10000000-0000-0000-0000-000000000073"), "My Timetable", MenuCodes.MyTimetable, TimetableParentId, "/timetable/my", "person", 73),
     ];

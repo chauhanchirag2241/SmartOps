@@ -7,7 +7,7 @@ namespace SmartOps.Domain.Modules.Timetable.Entities;
 public sealed class PeriodEntity : AuditableEntity
 {
     public Guid Id { get; set; }
-    public Guid BranchId { get; set; }
+    public Guid TemplateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string ShortName { get; set; } = string.Empty;
     public int PeriodOrder { get; set; }

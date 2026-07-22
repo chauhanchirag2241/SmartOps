@@ -51,7 +51,10 @@ public sealed class TimetableVersionDto
 public sealed class TimetableGridDto
 {
     public TimetableVersionDto? Version { get; set; }
+    /// <summary>Default-schedule periods (dayOfWeek null). Prefer <see cref="PeriodsByDay"/> for UI.</summary>
     public IReadOnlyList<PeriodGridRowDto> Periods { get; set; } = [];
+    /// <summary>Periods for each weekday 1–6 (Mon–Sat). Override days use their own list.</summary>
+    public Dictionary<int, List<PeriodGridRowDto>> PeriodsByDay { get; set; } = new();
     public IReadOnlyList<TimetableSlotCellDto> Slots { get; set; } = [];
     public IReadOnlyList<TimetableConflictDto> Conflicts { get; set; } = [];
 }
@@ -65,6 +68,7 @@ public sealed class PeriodGridRowDto
     public string StartTime { get; set; } = string.Empty;
     public string EndTime { get; set; } = string.Empty;
     public bool IsBreak { get; set; }
+    public int? DayOfWeek { get; set; }
 }
 
 public sealed class TimetableSlotCellDto

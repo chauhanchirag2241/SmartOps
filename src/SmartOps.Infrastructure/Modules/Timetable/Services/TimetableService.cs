@@ -120,7 +120,7 @@ public sealed class TimetableService(
         var version = await timetableRepository.GetCurrentVersionAsync(classId, academicYearId, asOf, ct)
             .ConfigureAwait(false);
         if (version is null)
-            return new TimetableGridDto { Periods = [], Slots = [] };
+            return new TimetableGridDto { Periods = [], PeriodsByDay = new(), Slots = [] };
 
         return await BuildClassGridAsync(version, ct).ConfigureAwait(false);
     }
@@ -173,6 +173,10 @@ public sealed class TimetableService(
 
         var periods = (await periodTemplateRepository.GetPeriodsByTemplateIdAsync(version.PeriodTemplateId, ct)
             .ConfigureAwait(false)).ToDictionary(p => p.Id);
+        var overrideDays = periods.Values
+            .Where(p => p.DayOfWeek.HasValue)
+            .Select(p => p.DayOfWeek!.Value)
+            .ToHashSet();
 
         var cleaned = new List<ClassTimetableSlotEntity>();
         foreach (var slot in request.Slots ?? [])
@@ -182,6 +186,16 @@ public sealed class TimetableService(
 
             if (!periods.TryGetValue(slot.PeriodId, out var period))
                 throw new InvalidOperationException("Period does not belong to this timetable's template.");
+
+            if (period.DayOfWeek.HasValue)
+            {
+                if (period.DayOfWeek.Value != slot.DayOfWeek)
+                    throw new InvalidOperationException("Period is not scheduled for this day.");
+            }
+            else if (overrideDays.Contains(slot.DayOfWeek))
+            {
+                throw new InvalidOperationException("Period is not scheduled for this day.");
+            }
 
             if (period.IsBreak) continue;
 
@@ -404,7 +418,8 @@ public sealed class TimetableService(
                 Notes = version.Notes,
                 IsActive = version.IsActive,
             },
-            Periods = periods.Select(ToPeriodDto).ToList(),
+            Periods = periods.Where(p => !p.DayOfWeek.HasValue).Select(ToPeriodDto).ToList(),
+            PeriodsByDay = BuildPeriodsByDay(periods),
             Slots = slots.Select(s => new TimetableSlotCellDto
             {
                 Id = s.SlotId,
@@ -425,6 +440,56 @@ public sealed class TimetableService(
         };
     }
 
+    private static Dictionary<int, List<PeriodGridRowDto>> BuildPeriodsByDay(IReadOnlyList<PeriodEntity> periods)
+    {
+        var overrideDays = periods
+            .Where(p => p.DayOfWeek.HasValue)
+            .Select(p => p.DayOfWeek!.Value)
+            .ToHashSet();
+
+        var defaults = periods
+            .Where(p => !p.DayOfWeek.HasValue)
+            .OrderBy(p => p.PeriodOrder)
+            .Select(ToPeriodDto)
+            .ToList();
+
+        var result = new Dictionary<int, List<PeriodGridRowDto>>();
+        for (var day = 1; day <= 6; day++)
+        {
+            if (overrideDays.Contains(day))
+            {
+                result[day] = periods
+                    .Where(p => p.DayOfWeek == day)
+                    .OrderBy(p => p.PeriodOrder)
+                    .Select(p =>
+                    {
+                        var dto = ToPeriodDto(p);
+                        dto.DayOfWeek = day;
+                        return dto;
+                    })
+                    .ToList();
+            }
+            else
+            {
+                result[day] = defaults
+                    .Select(p => new PeriodGridRowDto
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                        ShortName = p.ShortName,
+                        PeriodOrder = p.PeriodOrder,
+                        StartTime = p.StartTime,
+                        EndTime = p.EndTime,
+                        IsBreak = p.IsBreak,
+                        DayOfWeek = null,
+                    })
+                    .ToList();
+            }
+        }
+
+        return result;
+    }
+
     private static PeriodGridRowDto ToPeriodDto(PeriodEntity p) => new()
     {
         Id = p.Id,
@@ -434,5 +499,6 @@ public sealed class TimetableService(
         StartTime = p.StartTime,
         EndTime = p.EndTime,
         IsBreak = p.IsBreak,
+        DayOfWeek = p.DayOfWeek,
     };
 }

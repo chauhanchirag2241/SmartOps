@@ -189,6 +189,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
                 starttime AS StartTime,
                 endtime AS EndTime,
                 isbreak AS IsBreak,
+                dayofweek AS DayOfWeek,
                 isactive AS IsActive,
                 versionno AS VersionNo,
                 createdby AS CreatedBy,
@@ -197,7 +198,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
                 updatedon AS UpdatedOn
             FROM {Schema}.{DatabaseConfig.TablePeriods}
             WHERE templateid = @TemplateId AND isactive = true
-            ORDER BY periodorder ASC;";
+            ORDER BY COALESCE(dayofweek, 0) ASC, periodorder ASC;";
 
         var rows = await connection.QueryAsync<PeriodEntity>(sql, new { TemplateId = templateId })
             .ConfigureAwait(false);

@@ -14,4 +14,6 @@ public sealed class PeriodEntity : AuditableEntity
     public string StartTime { get; set; } = string.Empty;
     public string EndTime { get; set; } = string.Empty;
     public bool IsBreak { get; set; }
+    /// <summary>Null = default schedule for days without an override; 1–6 = Mon–Sat override.</summary>
+    public int? DayOfWeek { get; set; }
 }

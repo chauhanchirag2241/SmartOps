@@ -6,6 +6,7 @@ using SmartOps.Application.Modules.Timetable;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Models;
+using SmartOps.Domain.Modules.Timetable.Entities;
 using SmartOps.Domain.Modules.Timetable;
 
 namespace SmartOps.Api.Modules.Timetable.Controllers;
@@ -26,12 +27,22 @@ public sealed class PeriodTemplatesController(
     {
         if (request is null || string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Template name is required.");
-        if (request.Periods is null || request.Periods.Count == 0)
-            return BadRequest("Add at least one period to the template.");
+
+        var scheduleError = PeriodTemplateMappingExtensions.ValidatePeriodSchedules(request.Periods);
+        if (scheduleError is not null)
+            return BadRequest(scheduleError);
 
         var entity = request.ToEntity();
         entity.Id = Guid.NewGuid();
-        var periods = request.ToPeriodEntities(entity.Id);
+        List<PeriodEntity> periods;
+        try
+        {
+            periods = request.ToPeriodEntities(entity.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
 
         var id = await templateRepository.CreateTemplateAsync(entity, periods, ct).ConfigureAwait(false);
         return Ok(new CreatePeriodTemplateResponse("Period template created successfully", id));
@@ -88,6 +99,7 @@ public sealed class PeriodTemplatesController(
                 StartTime = p.StartTime,
                 EndTime = p.EndTime,
                 IsBreak = p.IsBreak,
+                DayOfWeek = p.DayOfWeek,
             }).ToList(),
         });
     }
@@ -98,8 +110,10 @@ public sealed class PeriodTemplatesController(
     public async Task<IActionResult> Update(Guid id, [FromBody] CreatePeriodTemplateDto request, CancellationToken ct)
     {
         if (request is null) return BadRequest("Template data is required.");
-        if (request.Periods is null || request.Periods.Count == 0)
-            return BadRequest("Add at least one period to the template.");
+
+        var scheduleError = PeriodTemplateMappingExtensions.ValidatePeriodSchedules(request.Periods);
+        if (scheduleError is not null)
+            return BadRequest(scheduleError);
 
         var existing = await templateRepository.GetTemplateByIdAsync(id, ct).ConfigureAwait(false);
         if (existing is null) return NotFound();
@@ -111,7 +125,16 @@ public sealed class PeriodTemplatesController(
         entity.CreatedBy = existing.CreatedBy;
         entity.CreatedOn = existing.CreatedOn;
 
-        var periods = request.ToPeriodEntities(id);
+        List<PeriodEntity> periods;
+        try
+        {
+            periods = request.ToPeriodEntities(id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
         await templateRepository.UpdateTemplateAsync(entity, periods, ct).ConfigureAwait(false);
         return NoContent();
     }

@@ -46,12 +46,17 @@ CREATE INDEX ix_period_templates_branchid ON {S}.{DatabaseConfig.TablePeriodTemp
                 .WithColumn("starttime").AsString(10).NotNullable()
                 .WithColumn("endtime").AsString(10).NotNullable()
                 .WithColumn("isbreak").AsBoolean().NotNullable().WithDefaultValue(false)
+                .WithColumn("dayofweek").AsInt16().Nullable()
                 .WithAuditColumns();
 
             Execute.Sql($"""
-CREATE UNIQUE INDEX uq_periods_template_order
+CREATE UNIQUE INDEX uq_periods_template_default_order
     ON {S}.{DatabaseConfig.TablePeriods} (templateid, periodorder)
-    WHERE isactive = true;
+    WHERE isactive = true AND dayofweek IS NULL;
+
+CREATE UNIQUE INDEX uq_periods_template_day_order
+    ON {S}.{DatabaseConfig.TablePeriods} (templateid, dayofweek, periodorder)
+    WHERE isactive = true AND dayofweek IS NOT NULL;
 
 CREATE INDEX ix_periods_templateid ON {S}.{DatabaseConfig.TablePeriods} (templateid);
 """);

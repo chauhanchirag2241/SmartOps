@@ -118,3 +118,31 @@ public sealed class MyTimetableResponseDto
     public string? ClassName { get; set; }
     public TimetableGridDto Grid { get; set; } = new();
 }
+
+public sealed class TeacherWorkloadRowDto
+{
+    public Guid EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = string.Empty;
+    public int PeriodsPerWeek { get; set; }
+    public int ClassCount { get; set; }
+    public int SubjectCount { get; set; }
+    public int DaysActive { get; set; }
+    public int RoomCount { get; set; }
+    public int ConflictCount { get; set; }
+    public int EstimatedFreeSlots { get; set; }
+}
+
+public sealed class TeacherReportDetailDto
+{
+    public Guid EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = string.Empty;
+    public TimetableGridDto Grid { get; set; } = new();
+}
+
+public sealed class TeacherTimetableReportDto
+{
+    public Guid AcademicYearId { get; set; }
+    public DateOnly AsOf { get; set; }
+    public IReadOnlyList<TeacherWorkloadRowDto> Summary { get; set; } = [];
+    public IReadOnlyList<TeacherReportDetailDto> Teachers { get; set; } = [];
+}

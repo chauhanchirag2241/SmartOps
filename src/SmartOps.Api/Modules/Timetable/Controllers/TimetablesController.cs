@@ -138,4 +138,59 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         var result = await timetableService.GetMyTimetableAsync(academicYearId, date, ct).ConfigureAwait(false);
         return Ok(result);
     }
+
+    [HttpGet("teacher-report")]
+    [Authorize(Policy = MenuPolicies.TeacherTimetableReport.View)]
+    [ProducesResponseType(typeof(TeacherTimetableReportDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTeacherReport(
+        [FromQuery] Guid academicYearId,
+        [FromQuery] DateOnly? asOf,
+        [FromQuery] string? employeeIds,
+        [FromQuery] string? classIds,
+        [FromQuery] string? subjectIds,
+        [FromQuery] string? daysOfWeek,
+        [FromQuery] bool includeGrids = true,
+        CancellationToken ct = default)
+    {
+        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var empIds = ParseGuids(employeeIds);
+        var clsIds = ParseGuids(classIds);
+        var subIds = ParseGuids(subjectIds);
+        var dayIds = ParseInts(daysOfWeek);
+
+        try
+        {
+            var result = await timetableService.GetTeacherReportAsync(
+                academicYearId, date, empIds, clsIds, subIds, dayIds, includeGrids, ct).ConfigureAwait(false);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private static List<Guid>? ParseGuids(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return null;
+        var list = csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => Guid.TryParse(s, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .Distinct()
+            .ToList();
+        return list.Count == 0 ? null : list;
+    }
+
+    private static List<int>? ParseInts(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return null;
+        var list = csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : 0)
+            .Where(n => n > 0)
+            .Distinct()
+            .ToList();
+        return list.Count == 0 ? null : list;
+    }
 }

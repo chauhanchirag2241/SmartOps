@@ -408,6 +408,15 @@ public static class MenuPolicies
         public const string Export = "Menu:MY_TIMETABLE:Export";
     }
 
+    public static class TeacherTimetableReport
+    {
+        public const string View = "Menu:TEACHER_TIMETABLE_REPORT:View";
+        public const string Add = "Menu:TEACHER_TIMETABLE_REPORT:Add";
+        public const string Edit = "Menu:TEACHER_TIMETABLE_REPORT:Edit";
+        public const string Delete = "Menu:TEACHER_TIMETABLE_REPORT:Delete";
+        public const string Export = "Menu:TEACHER_TIMETABLE_REPORT:Export";
+    }
+
     /// <summary>
     /// Complaints.View OR AdmissionInquiries.View OR VisitorBook.View OR PhoneLogs.View OR FrontOfficeSetup.View
     /// — employee dropdown for front-office assign fields.

@@ -35,6 +35,22 @@ public interface ITimetableRepository
         DateOnly asOf,
         CancellationToken cancellationToken);
 
+    /// <summary>All teaching slots on current class versions as-of date (optional filters).</summary>
+    Task<IReadOnlyList<TimetableSlotDetailRow>> GetTeacherReportSlotsAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        IReadOnlyList<Guid>? employeeIds,
+        IReadOnlyList<Guid>? classIds,
+        IReadOnlyList<Guid>? subjectIds,
+        IReadOnlyList<int>? daysOfWeek,
+        CancellationToken cancellationToken);
+
+    /// <summary>Teaching period capacity per class (non-break periods × days with schedule) for free-slot estimate.</summary>
+    Task<IReadOnlyDictionary<Guid, int>> GetClassTeachingCapacityAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        CancellationToken cancellationToken);
+
     Task<Guid?> GetEmployeeIdByUserIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<Guid?> GetStudentIdByUserIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<Guid?> GetStudentClassIdAsync(Guid studentId, Guid academicYearId, CancellationToken cancellationToken);

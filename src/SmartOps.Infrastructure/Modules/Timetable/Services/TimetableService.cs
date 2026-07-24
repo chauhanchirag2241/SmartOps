@@ -344,6 +344,98 @@ public sealed class TimetableService(
         return new MyTimetableResponseDto { Persona = "none" };
     }
 
+    public async Task<TeacherTimetableReportDto> GetTeacherReportAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        IReadOnlyList<Guid>? employeeIds,
+        IReadOnlyList<Guid>? classIds,
+        IReadOnlyList<Guid>? subjectIds,
+        IReadOnlyList<int>? daysOfWeek,
+        bool includeGrids,
+        CancellationToken ct)
+    {
+        if (academicYearId == Guid.Empty)
+            throw new InvalidOperationException("Academic year is required.");
+
+        var slots = await timetableRepository.GetTeacherReportSlotsAsync(
+            academicYearId, asOf, employeeIds, classIds, subjectIds, daysOfWeek, ct).ConfigureAwait(false);
+
+        var capacityByClass = await timetableRepository.GetClassTeachingCapacityAsync(academicYearId, asOf, ct)
+            .ConfigureAwait(false);
+
+        // Teacher conflicts: same employee + day + period across different classes.
+        var conflictCounts = slots
+            .Where(s => s.EmployeeId.HasValue)
+            .GroupBy(s => (s.EmployeeId!.Value, s.DayOfWeek, s.PeriodId))
+            .Where(g => g.Select(x => x.ClassId).Distinct().Count() > 1)
+            .GroupBy(g => g.Key.Item1)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var byTeacher = slots
+            .Where(s => s.EmployeeId.HasValue)
+            .GroupBy(s => s.EmployeeId!.Value)
+            .OrderBy(g => g.First().EmployeeName ?? "")
+            .ToList();
+
+        var summary = new List<TeacherWorkloadRowDto>();
+        foreach (var group in byTeacher)
+        {
+            var list = group.ToList();
+            var classes = list.Select(s => s.ClassId).Distinct().ToList();
+            var maxCapacity = classes
+                .Select(c => capacityByClass.TryGetValue(c, out var cap) ? cap : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+            var periods = list.Count;
+            summary.Add(new TeacherWorkloadRowDto
+            {
+                EmployeeId = group.Key,
+                EmployeeName = list.First().EmployeeName ?? "Teacher",
+                PeriodsPerWeek = periods,
+                ClassCount = classes.Count,
+                SubjectCount = list.Where(s => s.SubjectId.HasValue).Select(s => s.SubjectId!.Value).Distinct().Count(),
+                DaysActive = list.Select(s => s.DayOfWeek).Distinct().Count(),
+                RoomCount = list.Where(s => !string.IsNullOrWhiteSpace(s.RoomNo))
+                    .Select(s => s.RoomNo!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(),
+                ConflictCount = conflictCounts.TryGetValue(group.Key, out var cc) ? cc : 0,
+                EstimatedFreeSlots = Math.Max(0, maxCapacity - periods),
+            });
+        }
+
+        var details = new List<TeacherReportDetailDto>();
+        if (includeGrids)
+        {
+            // Prefer explicitly selected teachers; if none selected, only grid first 5 for UI safety.
+            var gridIds = employeeIds is { Count: > 0 }
+                ? employeeIds.ToList()
+                : summary.Take(5).Select(s => s.EmployeeId).ToList();
+
+            foreach (var empId in gridIds)
+            {
+                var grid = await GetTeacherGridAsync(empId, academicYearId, asOf, ct).ConfigureAwait(false);
+                var name = summary.FirstOrDefault(s => s.EmployeeId == empId)?.EmployeeName
+                    ?? slots.FirstOrDefault(s => s.EmployeeId == empId)?.EmployeeName
+                    ?? "Teacher";
+                details.Add(new TeacherReportDetailDto
+                {
+                    EmployeeId = empId,
+                    EmployeeName = name,
+                    Grid = grid,
+                });
+            }
+        }
+
+        return new TeacherTimetableReportDto
+        {
+            AcademicYearId = academicYearId,
+            AsOf = asOf,
+            Summary = summary,
+            Teachers = details,
+        };
+    }
+
     private async Task<TimetableGridDto> BuildClassGridAsync(ClassTimetableEntity version, CancellationToken ct)
     {
         var periods = await periodTemplateRepository.GetPeriodsByTemplateIdAsync(version.PeriodTemplateId, ct)

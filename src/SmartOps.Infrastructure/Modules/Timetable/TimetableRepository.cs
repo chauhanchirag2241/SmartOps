@@ -284,11 +284,28 @@ WHERE r.id <> @ExcludeTimetableId
         DateOnly asOf,
         CancellationToken cancellationToken)
     {
+        return await GetTeacherReportSlotsAsync(
+            academicYearId, asOf, [employeeId], null, null, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<TimetableSlotDetailRow>> GetTeacherReportSlotsAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        IReadOnlyList<Guid>? employeeIds,
+        IReadOnlyList<Guid>? classIds,
+        IReadOnlyList<Guid>? subjectIds,
+        IReadOnlyList<int>? daysOfWeek,
+        CancellationToken cancellationToken)
+    {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var empFilter = employeeIds is { Count: > 0 };
+        var classFilter = classIds is { Count: > 0 };
+        var subjectFilter = subjectIds is { Count: > 0 };
+        var dayFilter = daysOfWeek is { Count: > 0 };
         var sql = $@"
 WITH current_versions AS (
     SELECT DISTINCT ON (t.classid)
-        t.id, t.classid, t.effectivefrom
+        t.id, t.classid, t.effectivefrom, t.periodtemplateid
     FROM {Schema}.{DatabaseConfig.TableClassTimetables} t
     WHERE t.academicyearid = @AcademicYearId
       AND t.isactive = true
@@ -317,20 +334,70 @@ SELECT
     s.roomno AS RoomNo
 FROM current_versions cv
 INNER JOIN {Schema}.{DatabaseConfig.TableClassTimetableSlots} s
-    ON s.timetableid = cv.id AND s.isactive = true AND s.employeeid = @EmployeeId
+    ON s.timetableid = cv.id AND s.isactive = true AND s.employeeid IS NOT NULL
 LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = cv.classid
 LEFT JOIN {Schema}.{DatabaseConfig.TablePeriods} p ON p.id = s.periodid
 LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} sub ON sub.id = s.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = s.employeeid
-ORDER BY p.periodorder, s.dayofweek;";
+WHERE COALESCE(p.isbreak, false) = false
+  AND (@FilterClasses = false OR cv.classid = ANY(@ClassIds))
+  AND (@FilterSubjects = false OR s.subjectid = ANY(@SubjectIds))
+  AND (@FilterDays = false OR s.dayofweek = ANY(@DaysOfWeek))
+  AND (@FilterEmployees = false OR s.employeeid = ANY(@EmployeeIds))
+ORDER BY e.firstname, e.lastname, p.periodorder, s.dayofweek;";
 
         var rows = await connection.QueryAsync<TimetableSlotDetailRow>(sql, new
         {
             AcademicYearId = academicYearId,
-            EmployeeId = employeeId,
             AsOf = asOf,
+            FilterClasses = classFilter,
+            ClassIds = classFilter ? classIds!.ToArray() : Array.Empty<Guid>(),
+            FilterSubjects = subjectFilter,
+            SubjectIds = subjectFilter ? subjectIds!.ToArray() : Array.Empty<Guid>(),
+            FilterDays = dayFilter,
+            DaysOfWeek = dayFilter ? daysOfWeek!.ToArray() : Array.Empty<int>(),
+            FilterEmployees = empFilter,
+            EmployeeIds = empFilter ? employeeIds!.ToArray() : Array.Empty<Guid>(),
         }).ConfigureAwait(false);
         return rows.ToList();
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, int>> GetClassTeachingCapacityAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        CancellationToken cancellationToken)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // Teaching periods on template (default schedule) × 6 weekdays as capacity estimate.
+        var sql = $@"
+WITH current_versions AS (
+    SELECT DISTINCT ON (t.classid)
+        t.classid, t.periodtemplateid
+    FROM {Schema}.{DatabaseConfig.TableClassTimetables} t
+    WHERE t.academicyearid = @AcademicYearId
+      AND t.isactive = true
+      AND t.effectivefrom <= @AsOf
+    ORDER BY t.classid, t.effectivefrom DESC
+)
+SELECT
+    cv.classid AS ClassId,
+    COALESCE((
+        SELECT COUNT(*) * 6
+        FROM {Schema}.{DatabaseConfig.TablePeriods} p
+        WHERE p.templateid = cv.periodtemplateid
+          AND p.isactive = true
+          AND p.isbreak = false
+          AND p.dayofweek IS NULL
+    ), 0) AS Capacity
+FROM current_versions cv;";
+
+        var rows = await connection.QueryAsync<(Guid ClassId, int Capacity)>(sql, new
+        {
+            AcademicYearId = academicYearId,
+            AsOf = asOf,
+        }).ConfigureAwait(false);
+
+        return rows.ToDictionary(r => r.ClassId, r => r.Capacity);
     }
 
     public async Task<Guid?> GetEmployeeIdByUserIdAsync(Guid userId, CancellationToken cancellationToken)

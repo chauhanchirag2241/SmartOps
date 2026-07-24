@@ -13,4 +13,13 @@ public interface ITimetableService
     Task<ConflictCheckResultDto> ValidateConflictsAsync(ValidateConflictsDto request, CancellationToken ct);
     Task DeleteVersionAsync(Guid timetableId, CancellationToken ct);
     Task<MyTimetableResponseDto> GetMyTimetableAsync(Guid academicYearId, DateOnly asOf, CancellationToken ct);
+    Task<TeacherTimetableReportDto> GetTeacherReportAsync(
+        Guid academicYearId,
+        DateOnly asOf,
+        IReadOnlyList<Guid>? employeeIds,
+        IReadOnlyList<Guid>? classIds,
+        IReadOnlyList<Guid>? subjectIds,
+        IReadOnlyList<int>? daysOfWeek,
+        bool includeGrids,
+        CancellationToken ct);
 }

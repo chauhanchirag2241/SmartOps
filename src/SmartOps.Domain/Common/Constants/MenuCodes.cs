@@ -110,6 +110,8 @@ public static class MenuCodes
 
     public const string MyTimetable = "MY_TIMETABLE";
 
+    public const string TeacherTimetableReport = "TEACHER_TIMETABLE_REPORT";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -161,6 +163,7 @@ public static class MenuCodes
         Timetable,
         PeriodMaster,
         ClassTimetable,
-        MyTimetable
+        MyTimetable,
+        TeacherTimetableReport
     ];
 }

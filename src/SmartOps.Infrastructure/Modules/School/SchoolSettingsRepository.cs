@@ -115,6 +115,7 @@ VALUES
             new() { Key = LeaveSettingKeys.StudentLongLeaveMinDays, Value = "4" },
             new() { Key = LeaveSettingKeys.StudentLongLeaveApproverUserTypes, Value = UserTypeCodes.Principal },
             new() { Key = LeaveSettingKeys.StudentLongLeaveTransferToPrincipal, Value = "true" },
+            new() { Key = EmployeeAttendanceSettingKeys.EmployeeType, Value = EmployeeAttendanceTypes.Both },
         ];
 
         return UpsertAsync(schoolId, defaults, cancellationToken);

@@ -26,6 +26,7 @@ using SmartOps.Infrastructure.Modules.Department;
 using SmartOps.Domain.Modules.School;
 using SmartOps.Application.Modules.School.Interfaces;
 using SmartOps.Application.Modules.Attendance.Interfaces;
+using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Application.Modules.Workflow.Interfaces;
@@ -38,6 +39,9 @@ using SmartOps.Infrastructure.Modules.AcademicYear;
 using SmartOps.Infrastructure.Modules.AcademicPeriod;
 using SmartOps.Infrastructure.Modules.Attendance;
 using SmartOps.Infrastructure.Modules.Attendance.Services;
+using SmartOps.Infrastructure.Modules.StaffAttendance;
+using SmartOps.Infrastructure.Modules.StaffAttendance.Services;
+using Microsoft.Extensions.Options;
 using SmartOps.Infrastructure.Modules.Homework;
 using SmartOps.Infrastructure.Modules.Homework.Services;
 using SmartOps.Infrastructure.Modules.Leave;
@@ -103,6 +107,22 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<IAttendanceReportRepository, AttendanceReportRepository>();
         services.AddScoped<IAttendanceService, AttendanceService>();
+        services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
+        services.AddScoped<IEmployeeFaceEnrollmentRepository, EmployeeFaceEnrollmentRepository>();
+        services.AddScoped<IEmployeeAttendanceSettingsService, EmployeeAttendanceSettingsService>();
+        services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
+        services.Configure<FaceServiceOptions>(configuration.GetSection(FaceServiceOptions.SectionName));
+        services.AddHttpClient<IFaceRecognitionClient, FaceRecognitionClient>((sp, client) =>
+        {
+            FaceServiceOptions opts = sp.GetRequiredService<IOptions<FaceServiceOptions>>().Value;
+            string baseUrl = string.IsNullOrWhiteSpace(opts.BaseUrl) ? "http://localhost:8090" : opts.BaseUrl.TrimEnd('/');
+            client.BaseAddress = new Uri(baseUrl + "/");
+            if (!string.IsNullOrWhiteSpace(opts.ApiKey))
+            {
+                client.DefaultRequestHeaders.Remove("ApiKey");
+                client.DefaultRequestHeaders.Add("ApiKey", opts.ApiKey);
+            }
+        });
         services.AddScoped<IHomeworkRepository, HomeworkRepository>();
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IFeeStructureRepository, FeeStructureRepository>();

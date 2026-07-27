@@ -39,5 +39,6 @@ public class EmployeeEntity : AuditableEntity
     public Guid? UserId { get; set; }
     public Guid? DepartmentId { get; set; }
     public Guid? ReportingManagerId { get; set; }
+    public string? PhotoUrl { get; set; }
     public bool IsActive { get; set; } = true;
 }

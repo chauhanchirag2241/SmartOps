@@ -162,6 +162,50 @@ public sealed class EmployeesController(
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/photo")]
+    [Authorize(Policy = MenuPolicies.Employees.Edit)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadPhoto(
+        [FromRoute] Guid id,
+        IFormFile photo,
+        [FromServices] SmartOps.Application.Abstractions.Storage.IBlobStorageService blobStorage,
+        CancellationToken cancellationToken)
+    {
+        if (photo is null || photo.Length == 0)
+        {
+            return BadRequest("Photo is required.");
+        }
+
+        if (!await resourceAuthorization.CanAccessEmployeeAsync(id, AccessLevel.Edit, cancellationToken).ConfigureAwait(false))
+        {
+            return NotFound();
+        }
+
+        EmployeeEntity? employee = await employeeRepository
+            .GetEmployeeByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+        if (employee is null)
+        {
+            return NotFound();
+        }
+
+        await using Stream stream = photo.OpenReadStream();
+        string extension = Path.GetExtension(photo.FileName);
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".jpg";
+        }
+
+        string blobName = $"{id}/photo{extension}";
+        string url = await blobStorage
+            .UploadFileAsync("employee-faces", blobName, stream, photo.ContentType, cancellationToken)
+            .ConfigureAwait(false);
+
+        employee.PhotoUrl = url;
+        await employeeRepository.UpdateEmployeeAsync(employee, cancellationToken).ConfigureAwait(false);
+        return Ok(new { Url = url });
+    }
+
     [HttpGet("{id:guid}/history")]
     [Authorize(Policy = MenuPolicies.Employees.View)]
     public async Task<IActionResult> GetHistory(

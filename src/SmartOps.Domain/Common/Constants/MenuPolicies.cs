@@ -156,6 +156,24 @@ public static class MenuPolicies
         public const string Export = "Menu:ATTENDANCE:Export";
     }
 
+    public static class StaffAttendance
+    {
+        public const string View = "Menu:STAFF_ATTENDANCE:View";
+        public const string Add = "Menu:STAFF_ATTENDANCE:Add";
+        public const string Edit = "Menu:STAFF_ATTENDANCE:Edit";
+        public const string Delete = "Menu:STAFF_ATTENDANCE:Delete";
+        public const string Export = "Menu:STAFF_ATTENDANCE:Export";
+    }
+
+    public static class StaffAttendanceReport
+    {
+        public const string View = "Menu:STAFF_ATTENDANCE_REPORT:View";
+        public const string Add = "Menu:STAFF_ATTENDANCE_REPORT:Add";
+        public const string Edit = "Menu:STAFF_ATTENDANCE_REPORT:Edit";
+        public const string Delete = "Menu:STAFF_ATTENDANCE_REPORT:Delete";
+        public const string Export = "Menu:STAFF_ATTENDANCE_REPORT:Export";
+    }
+
     public static class Homework
     {
         public const string View = "Menu:HOMEWORK:View";

@@ -49,6 +49,10 @@ public static class MenuCodes
 
     public const string AttendanceReport = "ATTENDANCE_REPORT";
 
+    public const string StaffAttendance = "STAFF_ATTENDANCE";
+
+    public const string StaffAttendanceReport = "STAFF_ATTENDANCE_REPORT";
+
     public const string Homework = "HOMEWORK";
 
     public const string FeesStructure = "FEES_STRUCTURE";
@@ -135,6 +139,8 @@ public static class MenuCodes
         AcademicPeriods,
         Attendance,
         AttendanceReport,
+        StaffAttendance,
+        StaffAttendanceReport,
         Homework,
         FeesStructure,
         FeesClassAmounts,

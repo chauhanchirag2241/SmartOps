@@ -22,6 +22,8 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableStudentFeeInstallments,
         DatabaseConfig.TableStudentCustomFields,
         DatabaseConfig.TableAttendance,
+        DatabaseConfig.TableStaffAttendance,
+        DatabaseConfig.TableEmployeeFaceEnrollments,
         DatabaseConfig.TableHomework,
         DatabaseConfig.TableHomeworkDetails,
         DatabaseConfig.TableFeeStructureVersions,
@@ -74,6 +76,11 @@ internal static class SchoolSchemaCatalog
             DatabaseConfig.TableAttendance,
             "classid",
             "studentid",
+            "attendancedate"),
+        new(
+            "uq_staffattendance_employee_date",
+            DatabaseConfig.TableStaffAttendance,
+            "employeeid",
             "attendancedate"),
         new(
             "uq_homeworkdetails_homework_student",

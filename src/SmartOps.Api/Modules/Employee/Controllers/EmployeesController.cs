@@ -78,7 +78,7 @@ public sealed class EmployeesController(
     }
 
     [HttpGet("/api/employee/class-teacher-dropdown")]
-    [Authorize(Policy = MenuPolicies.Employees.View)]
+    [Authorize(Policy = MenuPolicies.Employees.ListForTimetableDropdown)]
     public async Task<IActionResult> GetClassTeacherDropdown(CancellationToken cancellationToken)
     {
         var result = await employeeRepository.GetClassTeacherDropdownAsync(cancellationToken).ConfigureAwait(false);

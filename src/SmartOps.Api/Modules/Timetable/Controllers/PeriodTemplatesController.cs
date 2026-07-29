@@ -67,7 +67,7 @@ public sealed class PeriodTemplatesController(
     }
 
     [HttpGet("/api/period-template/dropdown")]
-    [Authorize(Policy = MenuPolicies.PeriodMaster.View)]
+    [Authorize(Policy = MenuPolicies.PeriodMaster.ListForTimetableDropdown)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDropdown(CancellationToken ct)
     {

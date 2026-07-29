@@ -42,11 +42,11 @@ public sealed class BranchOperationalSeedService
         ("Personal Visit", "Personal or unofficial visit", 7),
     ];
 
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ISchoolDbConnectionFactory _schoolDb;
 
-    public BranchOperationalSeedService(IDbConnectionFactory connectionFactory)
+    public BranchOperationalSeedService(ISchoolDbConnectionFactory schoolDb)
     {
-        _connectionFactory = connectionFactory;
+        _schoolDb = schoolDb;
     }
 
     public async Task SeedForSchoolAsync(
@@ -66,8 +66,8 @@ public sealed class BranchOperationalSeedService
             return;
         }
 
-        using var connection = await _connectionFactory
-            .CreateConnectionAsync(connectionString, cancellationToken)
+        using var connection = await _schoolDb
+            .OpenAsync(connectionString, cancellationToken)
             .ConfigureAwait(false);
 
         string s = DatabaseConfig.Schema_School;

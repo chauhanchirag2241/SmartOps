@@ -13,17 +13,17 @@ namespace SmartOps.Infrastructure.Modules.Branch;
 
 public sealed class BranchRepository : BaseRepository, IBranchRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ISchoolDbConnectionFactory _schoolDb;
     private readonly TenantContext _tenantContext;
 
     public BranchRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        IDbConnectionFactory connectionFactory,
+        ISchoolDbConnectionFactory schoolDb,
         TenantContext tenantContext)
         : base(context, currentUser)
     {
-        _connectionFactory = connectionFactory;
+        _schoolDb = schoolDb;
         _tenantContext = tenantContext;
     }
 
@@ -31,7 +31,9 @@ public sealed class BranchRepository : BaseRepository, IBranchRepository
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        await using var schoolDb = await OpenSchoolConnectionAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        await using var schoolDb = (Npgsql.NpgsqlConnection)await _schoolDb
+            .OpenBySchoolIdAsync(schoolId, cancellationToken)
+            .ConfigureAwait(false);
         string schema = DatabaseConfig.Schema_Man;
         string sql = $"""
 SELECT id AS Id, name AS Name, isheadoffice AS IsHeadOffice, false AS IsDefault
@@ -178,31 +180,6 @@ WHERE userid = @UserId AND schoolid = @SchoolId AND isactive = true;
         _ = branches;
         _ = cancellationToken;
         return Task.CompletedTask;
-    }
-
-    private async Task<Npgsql.NpgsqlConnection> OpenSchoolConnectionAsync(
-        Guid schoolId,
-        CancellationToken cancellationToken)
-    {
-        IDbConnection platform = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
-        string? connectionString = await platform.QuerySingleOrDefaultAsync<string>(
-            $"""
-SELECT connectionstring
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
-WHERE id = @SchoolId AND isactive = true
-LIMIT 1;
-""",
-            new { SchoolId = schoolId }).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException(
-                $"School {schoolId} has no dedicated database connection string; schoolbranches live on the school DB.");
-        }
-
-        return (Npgsql.NpgsqlConnection)await _connectionFactory
-            .CreateConnectionAsync(connectionString, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     private async Task<IDbConnection> GetIdentityConnectionAsync(CancellationToken cancellationToken)

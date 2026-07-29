@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using Npgsql;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.School.Interfaces;
 using SmartOps.Domain.Common.Configuration;
@@ -9,11 +10,20 @@ using SmartOps.Infrastructure.Persistence.Context;
 
 namespace SmartOps.Infrastructure.Modules.School;
 
+/// <summary>
+/// School settings SoT is <c>man.schoolsettings</c> on each school database (not platform <c>global</c>).
+/// </summary>
 public sealed class SchoolSettingsRepository : BaseRepository, ISchoolSettingsRepository
 {
-    public SchoolSettingsRepository(DapperContext context, ICurrentUserService currentUser)
+    private readonly ISchoolDbConnectionFactory _schoolDb;
+
+    public SchoolSettingsRepository(
+        DapperContext context,
+        ICurrentUserService currentUser,
+        ISchoolDbConnectionFactory schoolDb)
         : base(context, currentUser)
     {
+        _schoolDb = schoolDb;
     }
 
     public async Task<IReadOnlyList<SchoolSettingRow>> GetByPrefixAsync(
@@ -21,10 +31,13 @@ public sealed class SchoolSettingsRepository : BaseRepository, ISchoolSettingsRe
         string keyPrefix,
         CancellationToken cancellationToken = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenBySchoolIdAsync(schoolId, cancellationToken)
+            .ConfigureAwait(false);
+
         string sql = $"""
 SELECT settingkey AS Key, settingvalue AS Value
-FROM {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
+FROM {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolSettings}
 WHERE schoolid = @SchoolId AND isactive = true AND settingkey LIKE @Prefix
 ORDER BY settingkey;
 """;
@@ -46,7 +59,10 @@ ORDER BY settingkey;
             return;
         }
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenBySchoolIdAsync(schoolId, cancellationToken)
+            .ConfigureAwait(false);
+
         Guid actor = ResolveUpdateActor();
         DateTime utcNow = DateTime.UtcNow;
 
@@ -58,7 +74,7 @@ ORDER BY settingkey;
             }
 
             string updateSql = $"""
-UPDATE {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
+UPDATE {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolSettings}
 SET settingvalue = @Value, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
 WHERE schoolid = @SchoolId AND settingkey = @Key AND isactive = true;
 """;
@@ -81,7 +97,7 @@ WHERE schoolid = @SchoolId AND settingkey = @Key AND isactive = true;
             }
 
             string insertSql = $"""
-INSERT INTO {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
+INSERT INTO {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolSettings}
     (id, schoolid, settingkey, settingvalue, isactive, versionno, createdby, createdon, updatedby, updatedon)
 VALUES
     (@Id, @SchoolId, @Key, @Value, true, 1, @Actor, @Now, @Actor, @Now);

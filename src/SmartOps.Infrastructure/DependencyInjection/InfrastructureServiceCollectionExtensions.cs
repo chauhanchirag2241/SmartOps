@@ -95,6 +95,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
         services.AddScoped<DapperContext>();
+        services.AddScoped<ISchoolDbConnectionFactory, SchoolDbConnectionFactory>();
         
         services.AddScoped<IStudentRepository, StudentRepository>();
         services.AddScoped<IStudentFeeHeadAssignmentRepository, StudentFeeHeadAssignmentRepository>();

@@ -20,15 +20,18 @@ public sealed class SchoolDefaultAdminProvisioner : ISchoolDefaultAdminProvision
     private static readonly Guid SystemActor = Guid.Parse(DatabaseConfig.SystemUserId);
 
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ISchoolDbConnectionFactory _schoolDb;
     private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
     private readonly ILogger<SchoolDefaultAdminProvisioner> _logger;
 
     public SchoolDefaultAdminProvisioner(
         IDbConnectionFactory connectionFactory,
+        ISchoolDbConnectionFactory schoolDb,
         IPasswordHasher<ApplicationUser> passwordHasher,
         ILogger<SchoolDefaultAdminProvisioner> logger)
     {
         _connectionFactory = connectionFactory;
+        _schoolDb = schoolDb;
         _passwordHasher = passwordHasher;
         _logger = logger;
     }
@@ -150,8 +153,8 @@ VALUES
     {
         if (!string.IsNullOrWhiteSpace(school.ConnectionString))
         {
-            return (NpgsqlConnection)await _connectionFactory
-                .CreateConnectionAsync(school.ConnectionString, cancellationToken)
+            return (NpgsqlConnection)await _schoolDb
+                .OpenAsync(school.ConnectionString, cancellationToken)
                 .ConfigureAwait(false);
         }
 

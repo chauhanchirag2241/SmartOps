@@ -43,6 +43,8 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
     private readonly IDbConnectionFactory _connectionFactory;
 
+    private readonly ISchoolDbConnectionFactory _schoolDb;
+
     private readonly ITenantProvisioningService _tenantProvisioning;
 
     private readonly ISchoolDatabaseProvisioner _schoolDatabaseProvisioner;
@@ -65,6 +67,8 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         IDbConnectionFactory connectionFactory,
 
+        ISchoolDbConnectionFactory schoolDb,
+
         ITenantProvisioningService tenantProvisioning,
 
         ISchoolDatabaseProvisioner schoolDatabaseProvisioner,
@@ -82,6 +86,8 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
     {
 
         _connectionFactory = connectionFactory;
+
+        _schoolDb = schoolDb;
 
         _tenantProvisioning = tenantProvisioning;
 
@@ -605,7 +611,8 @@ WHERE id = @Id;
         };
         EnsureInsertAudit(branch, utcNow);
 
-        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenAsync(school.ConnectionString, cancellationToken)
             .ConfigureAwait(false);
         await InsertAsync(connection, DatabaseConfig.Schema_Man, BranchesTable, branch).ConfigureAwait(false);
 
@@ -629,7 +636,8 @@ WHERE id = @Id;
             return null;
         }
 
-        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenAsync(school.ConnectionString, cancellationToken)
             .ConfigureAwait(false);
         var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
             $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
@@ -662,7 +670,8 @@ WHERE id = @Id;
             return false;
         }
 
-        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenAsync(school.ConnectionString, cancellationToken)
             .ConfigureAwait(false);
         var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
             $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
@@ -707,7 +716,8 @@ WHERE id = @Id;
             return Array.Empty<SchoolBranchEntity>();
         }
 
-        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenAsync(school.ConnectionString, cancellationToken)
             .ConfigureAwait(false);
         var rows = await connection.QueryAsync<SchoolBranchEntity>(
             $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
@@ -722,7 +732,8 @@ WHERE id = @Id;
         IEnumerable<SchoolBranchEntity> branches,
         CancellationToken cancellationToken)
     {
-        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(connectionString, cancellationToken)
+        await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
+            .OpenAsync(connectionString, cancellationToken)
             .ConfigureAwait(false);
         foreach (SchoolBranchEntity branch in branches)
         {
@@ -730,15 +741,7 @@ WHERE id = @Id;
         }
     }
 
-    private async Task<NpgsqlConnection> OpenSchoolConnectionAsync(
-        string connectionString,
-        CancellationToken cancellationToken) =>
-        (NpgsqlConnection)await _connectionFactory.CreateConnectionAsync(connectionString, cancellationToken)
-            .ConfigureAwait(false);
-
     private async Task<NpgsqlConnection> OpenPlatformConnectionAsync(CancellationToken cancellationToken) =>
-
         (NpgsqlConnection)await _connectionFactory.CreatePlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-
 }
 

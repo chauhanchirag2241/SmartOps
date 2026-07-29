@@ -47,7 +47,7 @@ public sealed class SubjectsController(
     }
 
     [HttpGet("/api/subject/dropdown")]
-    [Authorize(Policy = MenuPolicies.Subjects.View)]
+    [Authorize(Policy = MenuPolicies.Subjects.ListForTimetableDropdown)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSubjectDropdown(CancellationToken ct)
     {

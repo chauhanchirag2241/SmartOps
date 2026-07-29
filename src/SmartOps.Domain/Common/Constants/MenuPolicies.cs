@@ -87,6 +87,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:EMPLOYEES:Edit";
         public const string Delete = "Menu:EMPLOYEES:Delete";
         public const string Export = "Menu:EMPLOYEES:Export";
+
+        /// <summary>EMPLOYEES.View or CLASS_TIMETABLE.View — teacher dropdown on timetable assign.</summary>
+        public const string ListForTimetableDropdown = "Menu:EMPLOYEES:ViewOrClassTimetableView";
     }
 
     [Obsolete("Use Employees instead.")]
@@ -107,7 +110,10 @@ public static class MenuPolicies
         public const string Delete = "Menu:CLASSES:Delete";
         public const string Export = "Menu:CLASSES:Export";
 
-        /// <summary>CLASSES.View or ATTENDANCE.View — class dropdown on attendance page.</summary>
+        /// <summary>
+        /// CLASSES.View or related module View — shared class dropdown
+        /// (attendance, homework, timetable, fees, exams).
+        /// </summary>
         public const string ListForAttendanceDropdown = "Menu:CLASSES:ViewOrAttendanceView";
     }
 
@@ -127,6 +133,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:SUBJECTS:Edit";
         public const string Delete = "Menu:SUBJECTS:Delete";
         public const string Export = "Menu:SUBJECTS:Export";
+
+        /// <summary>SUBJECTS.View or CLASS_TIMETABLE.View — subject dropdown on timetable assign.</summary>
+        public const string ListForTimetableDropdown = "Menu:SUBJECTS:ViewOrClassTimetableView";
     }
 
     public static class Shifts
@@ -415,6 +424,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:PERIOD_MASTER:Edit";
         public const string Delete = "Menu:PERIOD_MASTER:Delete";
         public const string Export = "Menu:PERIOD_MASTER:Export";
+
+        /// <summary>PERIOD_MASTER.View or CLASS_TIMETABLE.View — template dropdown on timetable screens.</summary>
+        public const string ListForTimetableDropdown = "Menu:PERIOD_MASTER:ViewOrClassTimetableView";
     }
 
     public static class ClassTimetable

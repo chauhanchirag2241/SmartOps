@@ -34,7 +34,28 @@ public static class AuthorizationExtensions
                 MenuPolicies.Classes.ListForAttendanceDropdown,
                 (MenuCodes.Classes, MenuPermissionAction.View),
                 (MenuCodes.Attendance, MenuPermissionAction.View),
-                (MenuCodes.Homework, MenuPermissionAction.View));
+                (MenuCodes.Homework, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View),
+                (MenuCodes.FeesCollection, MenuPermissionAction.View),
+                (MenuCodes.Exams, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.PeriodMaster.ListForTimetableDropdown,
+                (MenuCodes.PeriodMaster, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.Subjects.ListForTimetableDropdown,
+                (MenuCodes.Subjects, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.Employees.ListForTimetableDropdown,
+                (MenuCodes.Employees, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,

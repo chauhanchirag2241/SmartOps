@@ -61,116 +61,10 @@ public sealed class SchoolDataMigrationService : ISchoolDataMigrationService
         await schoolDb.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         PostgresDataCopier dataCopier = new(_logger);
-        string g = DatabaseConfig.Schema_Global;
+        string man = DatabaseConfig.Schema_Man;
 
-        await dataCopier.CopyAllRowsAsync(platform, g, schoolDb, g, DatabaseConfig.TableUserTypes, cancellationToken)
-            .ConfigureAwait(false);
-        await dataCopier.CopyAllRowsAsync(platform, g, schoolDb, g, DatabaseConfig.TableRoles, cancellationToken)
-            .ConfigureAwait(false);
-        await dataCopier.CopyAllRowsAsync(platform, g, schoolDb, g, DatabaseConfig.TableMenus, cancellationToken)
-            .ConfigureAwait(false);
-        await dataCopier.CopyAllRowsAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableRoleMenuPermissions,
-            cancellationToken).ConfigureAwait(false);
-        await dataCopier.CopyAllRowsAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableDashboardWidgets,
-            cancellationToken).ConfigureAwait(false);
-        await dataCopier.CopyAllRowsAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableRoleDashboardWidgetPermissions,
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableUsers,
-            """
-u.id IN (
-    SELECT m.userid FROM global.userschoolmappings m
-    WHERE m.schoolid = @SchoolId AND m.isactive = true
-)
-""",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableUserRoles,
-            """
-ur.userid IN (
-    SELECT m.userid FROM global.userschoolmappings m
-    WHERE m.schoolid = @SchoolId AND m.isactive = true
-)
-""",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableUserSchoolMappings,
-            "schoolid = @SchoolId",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableSchoolSettings,
-            "schoolid = @SchoolId",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableRefreshTokens,
-            """
-userid IN (
-    SELECT m.userid FROM global.userschoolmappings m
-    WHERE m.schoolid = @SchoolId AND m.isactive = true
-)
-""",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
-        await dataCopier.CopyTableDataAsync(
-            platform,
-            g,
-            schoolDb,
-            g,
-            DatabaseConfig.TableUserScopeVersions,
-            """
-userid IN (
-    SELECT m.userid FROM global.userschoolmappings m
-    WHERE m.schoolid = @SchoolId AND m.isactive = true
-)
-""",
-            new { SchoolId = schoolId },
-            cancellationToken).ConfigureAwait(false);
-
+        // Catalog (menus/widgets/usertypes) stays on platform — provision seed grants Admin permissions.
+        // Copy operational tables from legacy shared tenant schema into school.school.
         foreach (string table in SchoolSchemaCatalog.TemplateTables)
         {
             await dataCopier.CopyAllRowsAsync(
@@ -181,6 +75,27 @@ userid IN (
                 table,
                 cancellationToken).ConfigureAwait(false);
         }
+
+        // Best-effort: if legacy platform still has schoolsettings/branches for this school, copy into man.
+        await dataCopier.CopyTableDataAsync(
+            platform,
+            DatabaseConfig.Schema_Global,
+            schoolDb,
+            man,
+            DatabaseConfig.TableSchoolSettings,
+            "schoolid = @SchoolId",
+            new { SchoolId = schoolId },
+            cancellationToken).ConfigureAwait(false);
+
+        await dataCopier.CopyTableDataAsync(
+            platform,
+            DatabaseConfig.Schema_Global,
+            schoolDb,
+            man,
+            DatabaseConfig.TableSchoolBranches,
+            "schoolid = @SchoolId",
+            new { SchoolId = schoolId },
+            cancellationToken).ConfigureAwait(false);
 
         school.DatabaseName = databaseName;
         school.ConnectionString = connectionString;

@@ -8,7 +8,7 @@ internal static class StudentFeeHeadAssignmentSql
     /// <summary>
     /// True when the fee type applies: no assignment rows (legacy) or an active row with isincluded = true.
     /// </summary>
-    public static string FeeTypeIncludedPredicate(string schema, string feeTypeIdColumn, string studentIdColumn, string versionIdColumn)
+    public static string FeeHeadIncludedPredicate(string schema, string feeHeadIdColumn, string studentIdColumn, string versionIdColumn)
     {
         string table = $"{schema}.{DatabaseConfig.TableStudentFeeHeadAssignments}";
         return $"""
@@ -16,14 +16,14 @@ internal static class StudentFeeHeadAssignmentSql
               NOT EXISTS (
                 SELECT 1 FROM {table} sfha
                 WHERE sfha.studentid = {studentIdColumn}
-                  AND sfha.feestructureversionid = {versionIdColumn}
+                  AND sfha.feestructureid = {versionIdColumn}
                   AND sfha.isactive = true
               )
               OR EXISTS (
                 SELECT 1 FROM {table} sfha
                 WHERE sfha.studentid = {studentIdColumn}
-                  AND sfha.feestructureversionid = {versionIdColumn}
-                  AND sfha.feetypeid = {feeTypeIdColumn}
+                  AND sfha.feestructureid = {versionIdColumn}
+                  AND sfha.feeheadid = {feeHeadIdColumn}
                   AND sfha.isincluded = true
                   AND sfha.isactive = true
               )

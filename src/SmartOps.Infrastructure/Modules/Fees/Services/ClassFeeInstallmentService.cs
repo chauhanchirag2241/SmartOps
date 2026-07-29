@@ -12,7 +12,7 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
 
     public async Task RegenerateForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default)
     {
@@ -21,17 +21,17 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
             return;
         }
 
-        if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureVersionId, ct).ConfigureAwait(false))
+        if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureId, ct).ConfigureAwait(false))
         {
             return;
         }
 
-        await _installmentRepo.RegenerateForClassVersionAsync(classId, feeStructureVersionId, academicYearId, ct)
+        await _installmentRepo.RegenerateForClassVersionAsync(classId, feeStructureId, academicYearId, ct)
             .ConfigureAwait(false);
     }
 
     public async Task RegenerateForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default)
     {
@@ -40,23 +40,23 @@ public sealed class ClassFeeInstallmentService : IClassFeeInstallmentService
             return;
         }
 
-        if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureVersionId, ct).ConfigureAwait(false))
+        if (await _installmentRepo.VersionHasInstallmentPaymentsAsync(feeStructureId, ct).ConfigureAwait(false))
         {
             return;
         }
 
-        await _installmentRepo.RegenerateForVersionAsync(feeStructureVersionId, academicYearId, ct)
+        await _installmentRepo.RegenerateForVersionAsync(feeStructureId, academicYearId, ct)
             .ConfigureAwait(false);
     }
 
     public Task EnsureMissingInstallmentsForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default) =>
         _installmentRepo.EnsureMissingInstallmentsForClassVersionAsync(
             classId,
-            feeStructureVersionId,
+            feeStructureId,
             academicYearId,
             ct);
 }

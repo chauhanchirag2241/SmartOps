@@ -27,6 +27,16 @@ public sealed class TenantSchemaProvider : ITenantSchemaProvider
         return DatabaseConfig.Schema_Global;
     }
 
+    public string GetIdentitySchema()
+    {
+        if (_tenantContext.UsesDedicatedDatabase)
+        {
+            return DatabaseConfig.Schema_Man;
+        }
+
+        return DatabaseConfig.Schema_Global;
+    }
+
     public bool IsTenantScoped =>
         _tenantContext.UsesDedicatedDatabase || !string.IsNullOrWhiteSpace(_tenantContext.SchemaName);
 }

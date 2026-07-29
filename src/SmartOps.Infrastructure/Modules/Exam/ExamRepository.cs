@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Exam.Interfaces;
@@ -39,10 +40,6 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         _tenantSchema.IsTenantScoped
             ? _tenantSchema.GetOperationalSchema()
             : DatabaseConfig.Schema_School;
-
-    /// <summary>Display label for classes (matches class dropdown).</summary>
-    internal const string ClassDisplayNameSql =
-        "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
 
     private static string YearFilter(string alias) =>
         $" AND (@ScopeAcademicYearId IS NULL OR {alias}.academicyearid = @ScopeAcademicYearId)";
@@ -517,11 +514,12 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         string sql = $"""
             SELECT xc.examid AS ExamId,
                    xc.classid AS ClassId,
-                   COALESCE({ClassDisplayNameSql}, '') AS ClassName
+                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName
             FROM {Schema}.{DatabaseConfig.TableExamClasses} xc
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = xc.classid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             WHERE xc.examid = ANY(@ExamIds) AND xc.isactive = true
-            ORDER BY c.classname, c.section;
+            ORDER BY cg.classname, c.section;
             """;
 
         IEnumerable<ExamClassRow> rows = await connection.QueryAsync<ExamClassRow>(
@@ -808,7 +806,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
                    sc.examid AS ExamId,
                    COALESCE(e.name, '') AS ExamName,
                    sc.classid AS ClassId,
-                   COALESCE({ClassDisplayNameSql}, '') AS ClassName,
+                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName,
                    sc.subjectid AS SubjectId,
                    COALESCE(s.subjectname, '') AS SubjectName,
                    sc.examdate AS ExamDate,
@@ -817,15 +815,17 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
                    sc.roomno AS RoomNo,
                    sc.invigilatorid AS InvigilatorId,
                    CASE WHEN emp.id IS NULL THEN NULL
-                        ELSE TRIM(COALESCE(emp.firstname, '') || ' ' || COALESCE(emp.lastname, ''))
+                        ELSE TRIM(COALESCE(empu.firstname, '') || ' ' || COALESCE(empu.lastname, ''))
                    END AS InvigilatorName,
                    COALESCE((SELECT SUM(mc.maxmarks) FROM {Schema}.{DatabaseConfig.TableExamMarkComponents} mc
                              WHERE mc.examid = sc.examid AND mc.isactive = true), 0) AS MaxMarks
             FROM {Schema}.{DatabaseConfig.TableExamSchedules} sc
             INNER JOIN {Schema}.{DatabaseConfig.TableExams} e ON e.id = sc.examid
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sc.classid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = sc.subjectid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} emp ON emp.id = sc.invigilatorid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} empu ON empu.id = emp.userid
             WHERE {where}
             ORDER BY sc.examdate, sc.starttime NULLS LAST;
             """;

@@ -62,8 +62,17 @@ public sealed class ClassesController(
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetClassDropdown(
         [FromQuery] Guid? academicYearId,
+        [FromQuery] string? scope,
         CancellationToken cancellationToken = default)
     {
+        if (string.Equals(scope, "group", StringComparison.OrdinalIgnoreCase))
+        {
+            var groups = await classRepository
+                .GetClassGroupDropdownAsync(academicYearId, cancellationToken)
+                .ConfigureAwait(false);
+            return Ok(groups);
+        }
+
         var result = await classRepository.GetClassDropdownAsync(academicYearId, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }

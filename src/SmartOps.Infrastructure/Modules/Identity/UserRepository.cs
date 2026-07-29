@@ -7,6 +7,7 @@ using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity;
 
@@ -22,6 +23,10 @@ public sealed class UserRepository : BaseRepository, IUserRepository
         string sql = $"""
 SELECT
     id AS Id,
+    firstname AS FirstName,
+    lastname AS LastName,
+    mobile AS Mobile,
+    usertypeid AS UserTypeId,
     username AS Username,
     email AS Email,
     passwordhash AS PasswordHash,
@@ -35,7 +40,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers}
 WHERE lower(trim(email)) = lower(trim(@Email)) AND isactive = true
 LIMIT 1
 """;
@@ -50,6 +55,10 @@ LIMIT 1
         string sql = $"""
 SELECT
     id AS Id,
+    firstname AS FirstName,
+    lastname AS LastName,
+    mobile AS Mobile,
+    usertypeid AS UserTypeId,
     username AS Username,
     email AS Email,
     passwordhash AS PasswordHash,
@@ -63,7 +72,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers}
 WHERE id = @Id AND isactive = true
 LIMIT 1
 """;
@@ -78,6 +87,10 @@ LIMIT 1
         string sql = $"""
 SELECT
     id AS Id,
+    firstname AS FirstName,
+    lastname AS LastName,
+    mobile AS Mobile,
+    usertypeid AS UserTypeId,
     username AS Username,
     email AS Email,
     passwordhash AS PasswordHash,
@@ -91,7 +104,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers}
 WHERE lower(trim(username)) = lower(trim(@Username)) AND isactive = true
 LIMIT 1
 """;
@@ -145,20 +158,27 @@ LIMIT 1
         string tenDigitMobile,
         CancellationToken cancellationToken)
     {
-        string schema = Context.OperationalSchema;
-        if (string.IsNullOrWhiteSpace(schema) || schema == DatabaseConfig.Schema_Global)
-        {
-            return null;
-        }
-
         string sql = $"""
-SELECT userid AS UserId, email AS Email
-FROM {schema}.employees
-WHERE isactive = true
-  AND right(regexp_replace(mobile, '\D', '', 'g'), 10) = @Mobile
-UNION ALL
-SELECT userid AS UserId, email AS Email
-FROM {schema}.students
+SELECT
+    id AS Id,
+    firstname AS FirstName,
+    lastname AS LastName,
+    mobile AS Mobile,
+    usertypeid AS UserTypeId,
+    username AS Username,
+    email AS Email,
+    passwordhash AS PasswordHash,
+    securitystamp AS SecurityStamp,
+    lockoutend AS LockoutEnd,
+    accessfailedcount AS AccessFailedCount,
+    lockoutenabled AS LockoutEnabled,
+    isactive AS IsActive,
+    versionno AS VersionNo,
+    createdby AS CreatedBy,
+    createdon AS CreatedOn,
+    updatedby AS UpdatedBy,
+    updatedon AS UpdatedOn
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers}
 WHERE isactive = true
   AND mobile IS NOT NULL
   AND right(regexp_replace(mobile, '\D', '', 'g'), 10) = @Mobile
@@ -166,28 +186,10 @@ LIMIT 1
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        MobileLoginRow? row = await connection
-            .QuerySingleOrDefaultAsync<MobileLoginRow>(
+        return await connection
+            .QuerySingleOrDefaultAsync<ApplicationUser>(
                 new CommandDefinition(sql, new { Mobile = tenDigitMobile }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-
-        if (row?.UserId is Guid userId && userId != Guid.Empty)
-        {
-            return await GetByIdAsync(userId, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!string.IsNullOrWhiteSpace(row?.Email))
-        {
-            return await GetByEmailAsync(row.Email.Trim().ToLowerInvariant(), cancellationToken).ConfigureAwait(false);
-        }
-
-        return null;
-    }
-
-    private sealed class MobileLoginRow
-    {
-        public Guid? UserId { get; init; }
-        public string? Email { get; init; }
     }
 
     private static string NormalizeMobileDigits(string value)
@@ -212,9 +214,13 @@ LIMIT 1
         EnsureInsertAudit(user, utcNow, user.Id);
 
         string sql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableUsers}
 (
     id,
+    firstname,
+    lastname,
+    mobile,
+    usertypeid,
     username,
     email,
     passwordhash,
@@ -232,6 +238,10 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
 VALUES
 (
     @Id,
+    @FirstName,
+    @LastName,
+    @Mobile,
+    @UserTypeId,
     @Username,
     @Email,
     @PasswordHash,
@@ -259,8 +269,12 @@ VALUES
         Guid actor = ResolveUpdateActor(user.Id);
 
         string sql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableUsers}
 SET
+    firstname = @FirstName,
+    lastname = @LastName,
+    mobile = @Mobile,
+    usertypeid = @UserTypeId,
     username = @Username,
     email = @Email,
     passwordhash = @PasswordHash,
@@ -281,6 +295,10 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
             new
             {
                 user.Id,
+                user.FirstName,
+                user.LastName,
+                user.Mobile,
+                user.UserTypeId,
                 user.Username,
                 user.Email,
                 user.PasswordHash,
@@ -311,6 +329,10 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
         string sql = $"""
 SELECT
     u.id AS Id,
+    u.firstname AS FirstName,
+    u.lastname AS LastName,
+    u.mobile AS Mobile,
+    u.usertypeid AS UserTypeId,
     u.username AS Username,
     u.email AS Email,
     u.passwordhash AS PasswordHash,
@@ -324,9 +346,9 @@ SELECT
     u.createdon AS CreatedOn,
     u.updatedby AS UpdatedBy,
     u.updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.userid = u.id
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r ON r.id = ur.roleid
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers} u
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur ON ur.userid = u.id
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableRoles} r ON r.id = ur.roleid
 WHERE r.name = @RoleName
   AND u.isactive = true
   AND ur.isactive = true
@@ -344,8 +366,8 @@ WHERE r.name = @RoleName
     {
         string sql = $"""
 SELECT r.name
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles} r
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
 WHERE ur.userid = @UserId
   AND ur.isactive = true
   AND r.isactive = true
@@ -358,32 +380,33 @@ WHERE ur.userid = @UserId
         return rows.ToList();
     }
 
-    public async Task<IList<string>> GetRoleCodesAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<string?> GetUserTypeCodeAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT r.code
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
-WHERE ur.userid = @UserId
-  AND ur.isactive = true
-  AND r.isactive = true
+SELECT u.usertypeid
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers} u
+WHERE u.id = @UserId
+  AND u.isactive = true
+LIMIT 1
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<string> rows = await connection.QueryAsync<string>(
+        Guid? userTypeId = await connection.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        return rows.ToList();
+        return userTypeId is null || userTypeId == Guid.Empty
+            ? null
+            : UserTypeCodes.GetName(userTypeId.Value);
     }
 
-    public async Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(
+    public async Task<(Guid RoleId, string RoleName)?> GetPrimaryRoleAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT r.id AS RoleId, r.name AS RoleName, r.code AS RoleCode
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
+SELECT r.id AS RoleId, r.name AS RoleName
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles} r
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = r.id
 WHERE ur.userid = @UserId
   AND ur.isactive = true
   AND r.isactive = true
@@ -395,7 +418,7 @@ LIMIT 1
         RoleSummaryRow? row = await connection.QuerySingleOrDefaultAsync<RoleSummaryRow>(
             new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        return row is null ? null : (row.RoleId, row.RoleName, row.RoleCode);
+        return row is null ? null : (row.RoleId, row.RoleName);
     }
 
     public async Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default)
@@ -407,7 +430,7 @@ LIMIT 1
 
         string roleSql = $"""
 SELECT id
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles}
 WHERE name = @RoleName AND isactive = true
 LIMIT 1
 """;
@@ -422,7 +445,7 @@ LIMIT 1
 
         string mappingSql = $"""
 SELECT isactive AS IsActive, versionno AS VersionNo
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableUserRoles}
 WHERE userid = @UserId AND roleid = @RoleId
 LIMIT 1
 """;
@@ -441,7 +464,7 @@ LIMIT 1
             }
 
             string reviveSql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableUserRoles}
 SET isactive = true,
     updatedby = @Actor,
     updatedon = @Now,
@@ -471,7 +494,7 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = false AND versionno =
         }
 
         string insertSql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableUserRoles}
 (
     userid,
     roleid,
@@ -517,7 +540,7 @@ VALUES
 
         string roleSql = $"""
 SELECT id
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles}
 WHERE name = @RoleName AND isactive = true
 LIMIT 1
 """;
@@ -532,7 +555,7 @@ LIMIT 1
 
         string selectVersionSql = $"""
 SELECT versionno
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableUserRoles}
 WHERE userid = @UserId AND roleid = @RoleId AND isactive = true
 LIMIT 1
 """;
@@ -549,7 +572,7 @@ LIMIT 1
         }
 
         string updateSql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableUserRoles}
 SET isactive = false,
     updatedby = @Actor,
     updatedon = @Now,
@@ -576,120 +599,37 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = true AND versionno = 
         }
     }
 
-    public async Task AddUserToSchoolAsync(
+    public async Task SetUserTypeAsync(
         Guid userId,
-        Guid schoolId,
-        string schoolRole,
-        Guid? userTypeId = null,
-        CancellationToken cancellationToken = default)
-    {
-        Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = DateTime.UtcNow;
-
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        string existsSql = $"""
-SELECT role, usertypeid AS UserTypeId, isactive, versionno
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
-WHERE userid = @UserId AND schoolid = @SchoolId
-LIMIT 1
-""";
-
-        var existing = await connection.QuerySingleOrDefaultAsync<SchoolMappingRow>(
-            new CommandDefinition(
-                existsSql,
-                new { UserId = userId, SchoolId = schoolId },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        if (existing is not null)
-        {
-            if (existing.IsActive
-                && string.Equals(existing.Role, schoolRole, StringComparison.Ordinal)
-                && existing.UserTypeId == userTypeId)
-            {
-                return;
-            }
-
-            string updateSql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
-SET role = @Role, usertypeid = @UserTypeId, isactive = true, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
-WHERE userid = @UserId AND schoolid = @SchoolId AND versionno = @VersionNo
-""";
-            int rows = await connection.ExecuteAsync(
-                new CommandDefinition(
-                    updateSql,
-                    new
-                    {
-                        UserId = userId,
-                        SchoolId = schoolId,
-                        Role = schoolRole,
-                        UserTypeId = userTypeId,
-                        Actor = actor,
-                        Now = utcNow,
-                        VersionNo = existing.VersionNo
-                    },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-            if (rows == 0)
-            {
-                throw new ConcurrencyException("Record was modified by another user.");
-            }
-
-            return;
-        }
-
-        string insertSql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
-(
-    userid, schoolid, role, usertypeid, isactive, versionno, createdby, createdon, updatedby, updatedon
-)
-VALUES
-(
-    @UserId, @SchoolId, @Role, @UserTypeId, true, 1, @Actor, @Now, @Actor, @Now
-)
-""";
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                insertSql,
-                new
-                {
-                    UserId = userId,
-                    SchoolId = schoolId,
-                    Role = schoolRole,
-                    UserTypeId = userTypeId,
-                    Actor = actor,
-                    Now = utcNow
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    public async Task SetUserTypeForSchoolAsync(
-        Guid userId,
-        Guid schoolId,
         Guid? userTypeId,
         CancellationToken cancellationToken = default)
     {
-        Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = DateTime.UtcNow;
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        if (userTypeId is null || userTypeId == Guid.Empty)
+        {
+            return;
+        }
 
-        string sql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings}
-SET usertypeid = @UserTypeId, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
-WHERE userid = @UserId AND schoolid = @SchoolId AND isactive = true;
-""";
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                sql,
-                new { UserId = userId, SchoolId = schoolId, UserTypeId = userTypeId, Actor = actor, Now = utcNow },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        ApplicationUser? user = await GetByIdAsync(userId, cancellationToken).ConfigureAwait(false);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.UserTypeId = userTypeId.Value;
+        await UpdateAsync(user, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ApplicationUser>> GetUsersBySchoolAsync(Guid schoolId, CancellationToken cancellationToken = default)
     {
+        // Dedicated school databases only contain that school's users.
+        _ = schoolId;
         string sql = $"""
 SELECT
     u.id AS Id,
+    u.firstname AS FirstName,
+    u.lastname AS LastName,
+    u.mobile AS Mobile,
+    u.usertypeid AS UserTypeId,
     u.username AS Username,
     u.email AS Email,
     u.passwordhash AS PasswordHash,
@@ -703,15 +643,14 @@ SELECT
     u.createdon AS CreatedOn,
     u.updatedby AS UpdatedBy,
     u.updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserSchoolMappings} m ON m.userid = u.id
-WHERE m.schoolid = @SchoolId AND m.isactive = true AND u.isactive = true
+FROM {IdentitySchema}.{DatabaseConfig.TableUsers} u
+WHERE u.isactive = true
 ORDER BY u.username
 """;
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<ApplicationUser> rows = await connection.QueryAsync<ApplicationUser>(
-            new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
     }
 
@@ -727,18 +666,5 @@ ORDER BY u.username
         public Guid RoleId { get; set; }
 
         public string RoleName { get; set; } = string.Empty;
-
-        public string RoleCode { get; set; } = string.Empty;
-    }
-
-    private sealed class SchoolMappingRow
-    {
-        public string Role { get; set; } = string.Empty;
-
-        public Guid? UserTypeId { get; set; }
-
-        public bool IsActive { get; set; }
-
-        public int VersionNo { get; set; }
     }
 }

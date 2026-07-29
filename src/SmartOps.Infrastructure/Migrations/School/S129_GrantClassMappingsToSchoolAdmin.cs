@@ -5,41 +5,43 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.School;
 
 /// <summary>
-/// Dedicated school databases store menus/permissions in <c>global</c> — sync CLASS_MAPPINGS for School Admin.
+/// Grants CLASS_MAPPINGS menu permission to Admin on school DB (menus live on platform global only).
 /// </summary>
 [Tags("School")]
-[Migration(129, "School database — grant class mapping menu to school admin")]
+[Migration(129, "School database — grant class mapping menu to admin")]
 public sealed class S129_GrantClassMappingsToSchoolAdmin : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
 
+    /// <summary>Fixed menu id from <c>G014_SeedClassMappingsMenu</c>.</summary>
+    private static readonly Guid ClassMappingsMenuId = Guid.Parse("10000000-0000-0000-0000-000000000017");
+
     public override void Up()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        string g = DatabaseConfig.Schema_Global;
+        string man = DatabaseConfig.Schema_Man;
 
         Execute.Sql($"""
-INSERT INTO {g}.{DatabaseConfig.TableRoleMenuPermissions}
+INSERT INTO {man}.{DatabaseConfig.TableRoleMenuPermissions}
     (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {g}.{DatabaseConfig.TableRoles} r
-CROSS JOIN {g}.{DatabaseConfig.TableMenus} m
-WHERE r.code = '{RoleCodes.SchoolAdmin}' AND m.code = '{MenuCodes.ClassMappings}'
+SELECT gen_random_uuid(), r.id, '{ClassMappingsMenuId}', true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+FROM {man}.{DatabaseConfig.TableRoles} r
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}'))
   AND NOT EXISTS (
-    SELECT 1 FROM {g}.{DatabaseConfig.TableRoleMenuPermissions} rp
-    WHERE rp.roleid = r.id AND rp.menuid = m.id
+    SELECT 1 FROM {man}.{DatabaseConfig.TableRoleMenuPermissions} rp
+    WHERE rp.roleid = r.id AND rp.menuid = '{ClassMappingsMenuId}'
   );
 """);
     }
 
     public override void Down()
     {
-        string g = DatabaseConfig.Schema_Global;
+        string man = DatabaseConfig.Schema_Man;
 
         Execute.Sql($"""
-DELETE FROM {g}.{DatabaseConfig.TableRoleMenuPermissions}
-WHERE roleid IN (SELECT id FROM {g}.{DatabaseConfig.TableRoles} WHERE code = '{RoleCodes.SchoolAdmin}')
-  AND menuid IN (SELECT id FROM {g}.{DatabaseConfig.TableMenus} WHERE code = '{MenuCodes.ClassMappings}');
+DELETE FROM {man}.{DatabaseConfig.TableRoleMenuPermissions}
+WHERE roleid IN (SELECT id FROM {man}.{DatabaseConfig.TableRoles} WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}')))
+  AND menuid = '{ClassMappingsMenuId}';
 """);
     }
 }

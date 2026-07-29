@@ -35,7 +35,7 @@ public sealed class S119_CreatePayrollRunsTable : Migration
         Execute.Sql($"""
 ALTER TABLE {S}.{DatabaseConfig.TablePayrollRuns}
     ADD CONSTRAINT fk_payrollruns_branchid FOREIGN KEY (branchid)
-    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+    REFERENCES {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolBranches}(id);
 
 CREATE INDEX ix_payrollruns_branchid ON {S}.{DatabaseConfig.TablePayrollRuns} (branchid);
 """);

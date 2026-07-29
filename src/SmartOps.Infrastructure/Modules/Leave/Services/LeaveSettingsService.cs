@@ -24,7 +24,7 @@ public sealed class LeaveSettingsService : ILeaveSettingsService
         return new StaffLeaveApprovalSettings
         {
             ApprovalMode = GetValue(map, LeaveSettingKeys.StaffApprovalMode, LeaveApprovalModes.AnyOne),
-            ApproverUserTypeCodes = ParseCsv(GetValue(map, LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.SchoolAdmin)),
+            ApproverUserTypeCodes = ParseCsv(GetValue(map, LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.OfficeStaff)),
         };
     }
 
@@ -42,7 +42,7 @@ public sealed class LeaveSettingsService : ILeaveSettingsService
             DefaultApprover = GetValue(map, LeaveSettingKeys.StudentDefaultApprover, LeaveApproverTokens.ClassTeacher),
             LongLeaveMinDays = int.TryParse(GetValue(map, LeaveSettingKeys.StudentLongLeaveMinDays, "4"), out int days) ? days : 4,
             LongLeaveApproverUserTypeCodes = ParseCsv(
-                GetValue(map, LeaveSettingKeys.StudentLongLeaveApproverUserTypes, UserTypeCodes.Principal)),
+                GetValue(map, LeaveSettingKeys.StudentLongLeaveApproverUserTypes, UserTypeCodes.OfficeStaff)),
             LongLeaveTransferToPrincipal = ParseBool(
                 GetValue(map, LeaveSettingKeys.StudentLongLeaveTransferToPrincipal, "true")),
         };

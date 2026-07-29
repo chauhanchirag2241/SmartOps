@@ -16,17 +16,34 @@ public sealed class DashboardWidgetRepository : BaseRepository, IDashboardWidget
     {
     }
 
+    private bool IsSchoolTenant =>
+        !string.Equals(IdentitySchema, CatalogSchema, StringComparison.Ordinal);
+
     public async Task<IReadOnlyList<RoleDashboardWidgetPermissionDto>> GetWidgetTemplatesAsync(
         CancellationToken cancellationToken = default)
     {
-        return await QueryWidgetPermissionsAsync(null, cancellationToken).ConfigureAwait(false);
+        return await LoadWidgetCatalogAsync(canViewByWidgetId: null, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<RoleDashboardWidgetPermissionDto>> GetWidgetPermissionsForRoleAsync(
         Guid roleId,
         CancellationToken cancellationToken = default)
     {
-        return await QueryWidgetPermissionsAsync(roleId, cancellationToken).ConfigureAwait(false);
+        Dictionary<Guid, bool>? canViewByWidgetId = null;
+        if (IsSchoolTenant)
+        {
+            IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+            string permsSql = $"""
+SELECT widgetid AS WidgetId, canview AS CanView
+FROM {IdentitySchema}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
+WHERE roleid = @RoleId AND isactive = true
+""";
+            canViewByWidgetId = (await tenant.QueryAsync<WidgetPermissionRow>(
+                new CommandDefinition(permsSql, new { RoleId = roleId }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToDictionary(r => r.WidgetId, r => r.CanView);
+        }
+
+        return await LoadWidgetCatalogAsync(canViewByWidgetId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SetRoleWidgetPermissionsAsync(
@@ -34,42 +51,56 @@ public sealed class DashboardWidgetRepository : BaseRepository, IDashboardWidget
         IReadOnlyList<RoleDashboardWidgetPermissionDto> permissions,
         CancellationToken cancellationToken = default)
     {
-        if (permissions.Count == 0)
+        if (permissions.Count == 0 || !IsSchoolTenant)
         {
             return;
         }
 
         Guid actor = ResolveUpdateActor();
         DateTime utcNow = DateTime.UtcNow;
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string widgetsSql = $"""
+SELECT id AS Id, code AS Code
+FROM {CatalogSchema}.{DatabaseConfig.TableDashboardWidgets}
+WHERE isactive = true
+""";
+        Dictionary<string, Guid> widgetIdsByCode = (await catalog.QueryAsync<CodeIdRow>(
+            new CommandDefinition(widgetsSql, cancellationToken: cancellationToken)).ConfigureAwait(false))
+            .ToDictionary(w => w.Code, w => w.Id, StringComparer.OrdinalIgnoreCase);
+
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         string upsertSql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
     (id, roleid, widgetid, canview, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), @RoleId, w.id, @CanView, true, 1, @Actor, @Now, @Actor, @Now
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets} w
-WHERE w.code = @WidgetCode AND w.isactive = true
+VALUES
+    (gen_random_uuid(), @RoleId, @WidgetId, @CanView, true, 1, @Actor, @Now, @Actor, @Now)
 ON CONFLICT ON CONSTRAINT uq_role_dashboard_widget_permissions_role_widget
 DO UPDATE SET
     canview = EXCLUDED.canview,
     isactive = true,
     updatedby = @Actor,
     updatedon = @Now,
-    versionno = {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}.versionno + 1
+    versionno = {IdentitySchema}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}.versionno + 1
 """;
 
-        using IDbTransaction transaction = connection.BeginTransaction();
+        using IDbTransaction transaction = tenant.BeginTransaction();
         try
         {
             foreach (RoleDashboardWidgetPermissionDto permission in permissions)
             {
-                await connection.ExecuteAsync(
+                if (!widgetIdsByCode.TryGetValue(permission.WidgetCode, out Guid widgetId))
+                {
+                    continue;
+                }
+
+                await tenant.ExecuteAsync(
                     new CommandDefinition(
                         upsertSql,
                         new
                         {
                             RoleId = roleId,
-                            permission.WidgetCode,
+                            WidgetId = widgetId,
                             permission.CanView,
                             Actor = actor,
                             Now = utcNow
@@ -91,31 +122,54 @@ DO UPDATE SET
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        string sql = $"""
-SELECT w.code AS WidgetCode
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets} w
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} rdwp
-    ON rdwp.widgetid = w.id AND rdwp.isactive = true AND rdwp.canview = true
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur
+        if (!IsSchoolTenant)
+        {
+            return Array.Empty<string>();
+        }
+
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string permsSql = $"""
+SELECT rdwp.widgetid AS WidgetId
+FROM {IdentitySchema}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} rdwp
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur
     ON ur.roleid = rdwp.roleid AND ur.isactive = true
 WHERE ur.userid = @UserId
-  AND w.isactive = true
-GROUP BY w.code, w.displayorder
-ORDER BY w.displayorder
+  AND rdwp.isactive = true
+  AND rdwp.canview = true
+GROUP BY rdwp.widgetid
 """;
+        HashSet<Guid> allowedWidgetIds = (await tenant.QueryAsync<Guid>(
+            new CommandDefinition(permsSql, new { UserId = userId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet();
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<string> rows = await connection.QueryAsync<string>(
-            new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.ToList();
+        if (allowedWidgetIds.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string widgetsSql = $"""
+SELECT id AS Id, code AS Code, displayorder AS DisplayOrder
+FROM {CatalogSchema}.{DatabaseConfig.TableDashboardWidgets}
+WHERE isactive = true
+ORDER BY displayorder
+""";
+        List<WidgetCodeRow> widgets =
+            (await catalog.QueryAsync<WidgetCodeRow>(
+                new CommandDefinition(widgetsSql, cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+
+        return widgets
+            .Where(w => allowedWidgetIds.Contains(w.Id))
+            .OrderBy(w => w.DisplayOrder)
+            .Select(w => w.Code)
+            .ToList();
     }
 
-    private async Task<IReadOnlyList<RoleDashboardWidgetPermissionDto>> QueryWidgetPermissionsAsync(
-        Guid? roleId,
+    private async Task<IReadOnlyList<RoleDashboardWidgetPermissionDto>> LoadWidgetCatalogAsync(
+        IReadOnlyDictionary<Guid, bool>? canViewByWidgetId,
         CancellationToken cancellationToken)
     {
-        string sql = roleId.HasValue
-            ? $"""
+        string sql = $"""
 SELECT
     w.id AS WidgetId,
     w.code AS WidgetCode,
@@ -123,32 +177,54 @@ SELECT
     w.category AS Category,
     w.requiredmenucode AS RequiredMenuCode,
     w.displayorder AS DisplayOrder,
-    w.defaultsize AS DefaultSize,
-    COALESCE(rdwp.canview, false) AS CanView
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets} w
-LEFT JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} rdwp
-    ON rdwp.widgetid = w.id AND rdwp.isactive = true AND rdwp.roleid = @RoleId
-WHERE w.isactive = true
-ORDER BY w.displayorder, w.name
-"""
-            : $"""
-SELECT
-    w.id AS WidgetId,
-    w.code AS WidgetCode,
-    w.name AS WidgetName,
-    w.category AS Category,
-    w.requiredmenucode AS RequiredMenuCode,
-    w.displayorder AS DisplayOrder,
-    w.defaultsize AS DefaultSize,
-    false AS CanView
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets} w
+    w.defaultsize AS DefaultSize
+FROM {CatalogSchema}.{DatabaseConfig.TableDashboardWidgets} w
 WHERE w.isactive = true
 ORDER BY w.displayorder, w.name
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<RoleDashboardWidgetPermissionDto> rows = await connection.QueryAsync<RoleDashboardWidgetPermissionDto>(
-            new CommandDefinition(sql, new { RoleId = roleId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.ToList();
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        List<RoleDashboardWidgetPermissionDto> rows = (await catalog.QueryAsync<RoleDashboardWidgetPermissionDto>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+
+        if (canViewByWidgetId is null)
+        {
+            foreach (RoleDashboardWidgetPermissionDto row in rows)
+            {
+                row.CanView = false;
+            }
+
+            return rows;
+        }
+
+        foreach (RoleDashboardWidgetPermissionDto row in rows)
+        {
+            row.CanView = canViewByWidgetId.TryGetValue(row.WidgetId, out bool canView) && canView;
+        }
+
+        return rows;
+    }
+
+    private sealed class WidgetPermissionRow
+    {
+        public Guid WidgetId { get; set; }
+
+        public bool CanView { get; set; }
+    }
+
+    private sealed class CodeIdRow
+    {
+        public Guid Id { get; set; }
+
+        public string Code { get; set; } = string.Empty;
+    }
+
+    private sealed class WidgetCodeRow
+    {
+        public Guid Id { get; set; }
+
+        public string Code { get; set; } = string.Empty;
+
+        public int DisplayOrder { get; set; }
     }
 }

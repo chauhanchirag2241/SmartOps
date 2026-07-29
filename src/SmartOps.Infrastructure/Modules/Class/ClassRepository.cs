@@ -2,7 +2,6 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
-using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Class.Entities;
@@ -12,6 +11,7 @@ using SmartOps.Infrastructure.Persistence;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using System.Data;
+using SmartOps.Application.Modules.Authorization;
 
 namespace SmartOps.Infrastructure.Modules.Class;
 
@@ -46,42 +46,41 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
             classEntity.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(classEntity, utcNow);
-
         classEntity.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(classEntity.BranchId, cancellationToken)
             .ConfigureAwait(false);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var existingSql = $@"
-            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            WHERE branchid = @BranchId
-            AND classname = @ClassName 
-            AND section = @Section 
-            AND streamgroup = @StreamGroup 
-            AND academicyearid = @AcademicYearId 
-            AND isactive = true;";
-
-        var exists = await connection.ExecuteScalarAsync<int?>(existingSql, new 
-        { 
-            classEntity.BranchId,
-            classEntity.ClassName, 
-            classEntity.Section, 
-            classEntity.StreamGroup, 
-            classEntity.AcademicYearId 
-        }).ConfigureAwait(false);
-
-        if (exists.HasValue)
-        {
-            throw new InvalidOperationException("A class with the same name, section, stream/group and academic year already exists.");
-        }
+        var schema = Context.OperationalSchema;
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var classId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, classEntity, tx)
+            var groupId = await FindOrCreateClassGroupAsync(conn, tx, classEntity, utcNow, cancellationToken)
                 .ConfigureAwait(false);
-            return classId;
+            classEntity.ClassGroupId = groupId;
+
+            var existingSql = $@"
+                SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
+                WHERE classgroupid = @ClassGroupId
+                AND section = @Section
+                AND isactive = true;";
+
+            var exists = await conn.ExecuteScalarAsync<int?>(
+                new CommandDefinition(
+                    existingSql,
+                    new { classEntity.ClassGroupId, classEntity.Section },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (exists.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "A class with the same name, section and stream/group already exists.");
+            }
+
+            EnsureInsertAudit(classEntity, utcNow);
+            return await InsertAsync(conn, schema, DatabaseConfig.TableClasses, classEntity, tx)
+                .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
@@ -89,13 +88,63 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     public async Task<ClassEntity?> GetClassByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
+        var activeFilter = includeInactive ? string.Empty : " AND c.isactive = true";
+        var schema = Context.OperationalSchema;
 
         var sql = $@"
-            SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            WHERE id = @Id{activeFilter};";
+            SELECT
+                c.id AS Id,
+                c.classgroupid AS ClassGroupId,
+                c.section AS Section,
+                c.capacity AS Capacity,
+                c.roomnumber AS RoomNumber,
+                c.shiftid AS ShiftId,
+                c.isactive AS IsActive,
+                c.createdby AS CreatedBy,
+                c.createdon AS CreatedOn,
+                c.updatedby AS UpdatedBy,
+                c.updatedon AS UpdatedOn,
+                c.versionno AS VersionNo,
+                cg.classname AS ClassName,
+                cg.streamgroup AS StreamGroup,
+                cg.branchid AS BranchId,
+                cg.medium AS Medium,
+                cg.description AS Description
+            FROM {schema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            WHERE c.id = @Id{activeFilter};";
 
         return await connection.QuerySingleOrDefaultAsync<ClassEntity>(sql, new { Id = id }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<ClassGroupEntity?> GetClassGroupByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default,
+        bool includeInactive = false)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
+        var schema = Context.OperationalSchema;
+
+        var sql = $@"
+            SELECT
+                id AS Id,
+                branchid AS BranchId,
+                classname AS ClassName,
+                streamgroup AS StreamGroup,
+                medium AS Medium,
+                description AS Description,
+                isactive AS IsActive,
+                createdby AS CreatedBy,
+                createdon AS CreatedOn,
+                updatedby AS UpdatedBy,
+                updatedon AS UpdatedOn,
+                versionno AS VersionNo
+            FROM {schema}.{DatabaseConfig.TableClassGroups}
+            WHERE id = @Id{activeFilter};";
+
+        return await connection.QuerySingleOrDefaultAsync<ClassGroupEntity>(sql, new { Id = id }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -114,8 +163,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
-        whereClause = AcademicYearScopeSql.AppendAcademicYearFilter(_scope, "c.academicyearid", ref whereClause);
-        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "c", ref whereClause);
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "cg", ref whereClause);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
             if (_scope.AllowedClassIds.Count > 0)
@@ -129,20 +177,19 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         }
 
         var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
-
         var schema = Context.OperationalSchema;
-        var table = DatabaseConfig.TableClasses;
 
         var countSql = $@"
             SELECT COUNT(*)
-            FROM {schema}.{table} c
-            INNER JOIN {schema}.{DatabaseConfig.TableAcademicYears} ay ON c.academicyearid = ay.id
+            FROM {schema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             {whereClause};";
 
         var querySql = $@"
             SELECT
                 c.id AS Id,
-                c.classname AS ClassName,
+                c.classgroupid AS ClassGroupId,
+                cg.classname AS ClassName,
                 CASE c.section
                     WHEN 1 THEN 'A'
                     WHEN 2 THEN 'B'
@@ -151,26 +198,25 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     ELSE 'N/A'
                 END AS Section,
                 CASE
-                    WHEN c.streamgroup IS NULL THEN NULL
-                    WHEN c.streamgroup = 1 THEN 'None'
-                    WHEN c.streamgroup = 2 THEN 'Science'
-                    WHEN c.streamgroup = 3 THEN 'Commerce'
-                    WHEN c.streamgroup = 4 THEN 'Arts'
-                    WHEN c.streamgroup = 5 THEN 'Regional'
-                    WHEN c.streamgroup = 6 THEN 'Primary'
+                    WHEN cg.streamgroup IS NULL THEN NULL
+                    WHEN cg.streamgroup = 1 THEN 'None'
+                    WHEN cg.streamgroup = 2 THEN 'Science'
+                    WHEN cg.streamgroup = 3 THEN 'Commerce'
+                    WHEN cg.streamgroup = 4 THEN 'Arts'
+                    WHEN cg.streamgroup = 5 THEN 'Regional'
+                    WHEN cg.streamgroup = 6 THEN 'Primary'
                     ELSE NULL
                 END AS StreamGroup,
-                ay.title AS AcademicYear,
                 c.capacity AS Capacity,
                 COALESCE(c.roomnumber, 'N/A') AS RoomNumber,
                 CASE WHEN c.isactive THEN 'Active' ELSE 'Inactive' END AS Status,
                 c.isactive AS IsActive
-            FROM {schema}.{table} c
-            INNER JOIN {schema}.{DatabaseConfig.TableAcademicYears} ay ON c.academicyearid = ay.id
+            FROM {schema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             {whereClause}
             ORDER BY {orderBy}";
 
-        var result = await GetPagedResultAsync<ClassListModel>(
+        return await GetPagedResultAsync<ClassListModel>(
                 connection,
                 querySql,
                 countSql,
@@ -178,14 +224,11 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 {
                     SearchTerm = searchTerm,
                     ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-                    ScopeAcademicYearId = _scope.ActiveAcademicYearId,
                     ActiveBranchId = _branchContext.ActiveBranchId
                 },
                 pageIndex,
                 pageSize)
             .ConfigureAwait(false);
-
-        return result;
     }
 
     /// <inheritdoc />
@@ -193,22 +236,20 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         Guid? academicYearId = null,
         CancellationToken cancellationToken = default)
     {
+        // academicYearId retained for API compatibility; class groups are timeless.
+        _ = academicYearId;
+
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
-        Guid? yearFilter = academicYearId ?? _scope.ActiveAcademicYearId;
+        var schema = Context.OperationalSchema;
 
-        string whereClause = "WHERE c.isactive = true";
-        if (yearFilter.HasValue)
-        {
-            whereClause += " AND c.academicyearid = @ScopeAcademicYearId";
-        }
+        string whereClause = "WHERE c.isactive = true AND cg.isactive = true";
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "cg", ref whereClause);
 
-        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "c", ref whereClause);
-
-        object parameters = new { ScopeAcademicYearId = yearFilter, ActiveBranchId = _branchContext.ActiveBranchId };
+        object parameters = new { ActiveBranchId = _branchContext.ActiveBranchId };
 
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
@@ -218,7 +259,6 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                 parameters = new
                 {
                     ScopeClassIds = _scope.AllowedClassIds.ToArray(),
-                    ScopeAcademicYearId = yearFilter,
                     ActiveBranchId = _branchContext.ActiveBranchId
                 };
             }
@@ -231,17 +271,63 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var sql = $@"
             SELECT
                 c.id AS Id,
-                c.classname ||
-                    CASE c.section
-                        WHEN 1 THEN ' - A'
-                        WHEN 2 THEN ' - B'
-                        WHEN 3 THEN ' - C'
-                        WHEN 4 THEN ' - D'
-                        ELSE ''
-                    END AS Name
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
+                {DashboardClassLabel.DisplayNameSql} AS Name
+            FROM {schema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             {whereClause}
-            ORDER BY c.classname ASC, c.section ASC;";
+            ORDER BY cg.classname ASC, c.section ASC;";
+
+        var items = await connection.QueryAsync<DropdownDto>(sql, parameters).ConfigureAwait(false);
+        return items.ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DropdownDto>> GetClassGroupDropdownAsync(
+        Guid? academicYearId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // academicYearId retained for API compatibility; class groups are timeless.
+        _ = academicYearId;
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+
+        var schema = Context.OperationalSchema;
+
+        string whereClause = "WHERE cg.isactive = true";
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "cg", ref whereClause);
+
+        object parameters = new { ActiveBranchId = _branchContext.ActiveBranchId };
+
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count > 0)
+            {
+                whereClause += $@"
+                    AND EXISTS (
+                        SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+                        WHERE c.classgroupid = cg.id AND c.isactive = true AND c.id = ANY(@ScopeClassIds))";
+                parameters = new
+                {
+                    ScopeClassIds = _scope.AllowedClassIds.ToArray(),
+                    ActiveBranchId = _branchContext.ActiveBranchId
+                };
+            }
+            else
+            {
+                return [];
+            }
+        }
+
+        var sql = $@"
+            SELECT
+                cg.id AS Id,
+                cg.classname AS Name
+            FROM {schema}.{DatabaseConfig.TableClassGroups} cg
+            {whereClause}
+            ORDER BY cg.classname ASC;";
 
         var items = await connection.QueryAsync<DropdownDto>(sql, parameters).ConfigureAwait(false);
         return items.ToList();
@@ -255,34 +341,76 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         ApplyUpdateAudit(classEntity, actorId, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var existingSql = $@"
-            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            WHERE classname = @ClassName 
-            AND section = @Section 
-            AND streamgroup = @StreamGroup 
-            AND academicyearid = @AcademicYearId 
-            AND id != @Id
-            AND isactive = true;";
-
-        var exists = await connection.ExecuteScalarAsync<int?>(existingSql, new 
-        { 
-            classEntity.ClassName, 
-            classEntity.Section, 
-            classEntity.StreamGroup, 
-            classEntity.AcademicYearId,
-            classEntity.Id
-        }).ConfigureAwait(false);
-
-        if (exists.HasValue)
-        {
-            throw new InvalidOperationException("Another class with the same name, section, stream/group and academic year already exists.");
-        }
+        var schema = Context.OperationalSchema;
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, classEntity, tx, "Id")
+            classEntity.BranchId = await _branchWrite
+                .ResolveWriteBranchIdAsync(classEntity.BranchId, cancellationToken)
                 .ConfigureAwait(false);
+
+            var groupId = await FindOrCreateClassGroupAsync(conn, tx, classEntity, utcNow, cancellationToken)
+                .ConfigureAwait(false);
+
+            var existingSql = $@"
+                SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
+                WHERE classgroupid = @ClassGroupId
+                AND section = @Section
+                AND id != @Id
+                AND isactive = true;";
+
+            var exists = await conn.ExecuteScalarAsync<int?>(
+                new CommandDefinition(
+                    existingSql,
+                    new { ClassGroupId = groupId, classEntity.Section, classEntity.Id },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (exists.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "Another class with the same name, section and stream/group already exists.");
+            }
+
+            var previousGroupId = await conn.ExecuteScalarAsync<Guid?>(
+                new CommandDefinition(
+                    $"SELECT classgroupid FROM {schema}.{DatabaseConfig.TableClasses} WHERE id = @Id;",
+                    new { classEntity.Id },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            classEntity.ClassGroupId = groupId;
+            await UpdateAsync(conn, schema, DatabaseConfig.TableClasses, classEntity, tx, "Id")
+                .ConfigureAwait(false);
+
+            // Keep group shared fields in sync when reusing the same group.
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                    UPDATE {schema}.{DatabaseConfig.TableClassGroups}
+                    SET medium = @Medium,
+                        description = @Description,
+                        updatedby = @ActorId,
+                        updatedon = @UtcNow,
+                        versionno = versionno + 1
+                    WHERE id = @ClassGroupId;
+                    """,
+                    new
+                    {
+                        ClassGroupId = groupId,
+                        classEntity.Medium,
+                        classEntity.Description,
+                        ActorId = actorId,
+                        UtcNow = utcNow
+                    },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (previousGroupId.HasValue && previousGroupId.Value != groupId)
+            {
+                await SoftDeleteGroupIfEmptyAsync(conn, tx, previousGroupId.Value, actorId, utcNow, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
     }
 
@@ -290,20 +418,21 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     public async Task DeleteClassAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
 
         var studentsCount = await connection.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(1) FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} WHERE classid = @Id AND isactive = true;", 
+            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableStudentAcademics} WHERE classid = @Id AND isactive = true;",
             new { Id = id }).ConfigureAwait(false);
-            
+
         if (studentsCount > 0)
         {
             throw new InvalidOperationException("Cannot delete class as it is already mapped with students.");
         }
 
         var teacherMappingCount = await connection.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(1) FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassSubjectTeacherMappings} WHERE classid = @Id;", 
+            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} WHERE classid = @Id;",
             new { Id = id }).ConfigureAwait(false);
-            
+
         if (teacherMappingCount > 0)
         {
             throw new InvalidOperationException("Cannot delete class as it is already mapped with subject or teacher.");
@@ -311,8 +440,22 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableClasses, id, tx)
+            var groupId = await conn.ExecuteScalarAsync<Guid?>(
+                new CommandDefinition(
+                    $"SELECT classgroupid FROM {schema}.{DatabaseConfig.TableClasses} WHERE id = @Id;",
+                    new { Id = id },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            await SoftDeleteAsync(conn, schema, DatabaseConfig.TableClasses, id, tx)
                 .ConfigureAwait(false);
+
+            if (groupId.HasValue)
+            {
+                await SoftDeleteGroupIfEmptyAsync(
+                        conn, tx, groupId.Value, ResolveUpdateActor(), DateTime.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
     }
 
@@ -320,18 +463,179 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     public async Task RecoverClassAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var sql = $"""
-            UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-            SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
-            WHERE id = @Id AND isactive = false;
-        """;
-        await connection.ExecuteAsync(sql, new
+        var schema = Context.OperationalSchema;
+        var now = DateTime.UtcNow;
+        var actor = ResolveUpdateActor();
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            Id = id,
-            Now = DateTime.UtcNow,
-            Actor = ResolveUpdateActor()
+            var groupId = await conn.ExecuteScalarAsync<Guid?>(
+                new CommandDefinition(
+                    $"SELECT classgroupid FROM {schema}.{DatabaseConfig.TableClasses} WHERE id = @Id;",
+                    new { Id = id },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                    UPDATE {schema}.{DatabaseConfig.TableClasses}
+                    SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+                    WHERE id = @Id AND isactive = false;
+                    """,
+                    new { Id = id, Now = now, Actor = actor },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (groupId.HasValue)
+            {
+                await conn.ExecuteAsync(
+                    new CommandDefinition(
+                        $"""
+                        UPDATE {schema}.{DatabaseConfig.TableClassGroups}
+                        SET isactive = true, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
+                        WHERE id = @GroupId AND isactive = false;
+                        """,
+                        new { GroupId = groupId.Value, Now = now, Actor = actor },
+                        tx,
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
     }
+
+    #region Class group helpers
+
+    private async Task<Guid> FindOrCreateClassGroupAsync(
+        IDbConnection conn,
+        IDbTransaction tx,
+        ClassEntity classEntity,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var schema = Context.OperationalSchema;
+
+        var findSql = $@"
+            SELECT id FROM {schema}.{DatabaseConfig.TableClassGroups}
+            WHERE branchid = @BranchId
+              AND classname = @ClassName
+              AND streamgroup IS NOT DISTINCT FROM @StreamGroup
+              AND isactive = true
+            LIMIT 1;";
+
+        var existingId = await conn.ExecuteScalarAsync<Guid?>(
+            new CommandDefinition(
+                findSql,
+                new
+                {
+                    classEntity.BranchId,
+                    classEntity.ClassName,
+                    classEntity.StreamGroup
+                },
+                tx,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (existingId.HasValue)
+        {
+            return existingId.Value;
+        }
+
+        // Reactivate inactive group with same identity if present.
+        var inactiveSql = $@"
+            SELECT id FROM {schema}.{DatabaseConfig.TableClassGroups}
+            WHERE branchid = @BranchId
+              AND classname = @ClassName
+              AND streamgroup IS NOT DISTINCT FROM @StreamGroup
+              AND isactive = false
+            LIMIT 1;";
+
+        var inactiveId = await conn.ExecuteScalarAsync<Guid?>(
+            new CommandDefinition(
+                inactiveSql,
+                new
+                {
+                    classEntity.BranchId,
+                    classEntity.ClassName,
+                    classEntity.StreamGroup
+                },
+                tx,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (inactiveId.HasValue)
+        {
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                    UPDATE {schema}.{DatabaseConfig.TableClassGroups}
+                    SET isactive = true,
+                        medium = @Medium,
+                        description = @Description,
+                        updatedby = @ActorId,
+                        updatedon = @UtcNow,
+                        versionno = versionno + 1
+                    WHERE id = @Id;
+                    """,
+                    new
+                    {
+                        Id = inactiveId.Value,
+                        classEntity.Medium,
+                        classEntity.Description,
+                        ActorId = ResolveUpdateActor(),
+                        UtcNow = utcNow
+                    },
+                    tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return inactiveId.Value;
+        }
+
+        var group = new ClassGroupEntity
+        {
+            Id = Guid.NewGuid(),
+            BranchId = classEntity.BranchId,
+            ClassName = classEntity.ClassName,
+            StreamGroup = classEntity.StreamGroup,
+            Medium = classEntity.Medium,
+            Description = classEntity.Description,
+        };
+        EnsureInsertAudit(group, utcNow);
+        return await InsertAsync(conn, schema, DatabaseConfig.TableClassGroups, group, tx)
+            .ConfigureAwait(false);
+    }
+
+    private async Task SoftDeleteGroupIfEmptyAsync(
+        IDbConnection conn,
+        IDbTransaction tx,
+        Guid groupId,
+        Guid actorId,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var schema = Context.OperationalSchema;
+        var activeSections = await conn.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                $@"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableClasses}
+                   WHERE classgroupid = @GroupId AND isactive = true;",
+                new { GroupId = groupId },
+                tx,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (activeSections > 0)
+        {
+            return;
+        }
+
+        await conn.ExecuteAsync(
+            new CommandDefinition(
+                $"""
+                UPDATE {schema}.{DatabaseConfig.TableClassGroups}
+                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                WHERE id = @GroupId AND isactive = true;
+                """,
+                new { GroupId = groupId, ActorId = actorId, UtcNow = utcNow },
+                tx,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    #endregion
 
     #region List query helpers
 
@@ -351,7 +655,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            where += " AND (c.classname ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm OR ay.title ILIKE @SearchTerm)";
+            where += " AND (cg.classname ILIKE @SearchTerm OR c.roomnumber ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 
@@ -369,7 +673,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (IsSortKey(sortColumn, "className"))
         {
-            return $"c.classname {direction}, c.id ASC";
+            return $"cg.classname {direction}, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "section"))
@@ -379,12 +683,13 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         if (IsSortKey(sortColumn, "streamGroup"))
         {
-            return $"c.streamgroup {direction}, c.id ASC";
+            return $"cg.streamgroup {direction}, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "academicYear"))
         {
-            return $"ay.title {direction}, c.id ASC";
+            // Class groups are timeless; fall back to default order.
+            return "c.createdon DESC, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "capacity"))

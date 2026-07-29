@@ -11,7 +11,7 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
     private readonly ITenantSchemaProvider _tenantSchemaProvider;
     private readonly TenantContext _tenantContext;
     private NpgsqlConnection? _connection;
-    private NpgsqlConnection? _platformConnection;
+    private NpgsqlConnection? _globalDatabaseConnection;
     private string? _operationalBindingKey;
 
     public DapperContext(
@@ -24,25 +24,37 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
         _tenantContext = tenantContext;
     }
 
+    /// <summary>Operational schema (<c>school</c> on dedicated DB).</summary>
     public string OperationalSchema => _tenantSchemaProvider.GetOperationalSchema();
 
-    public async Task<IDbConnection> GetPlatformConnectionAsync(CancellationToken cancellationToken = default)
-    {
-        if (!_tenantContext.UsesDedicatedDatabase)
-        {
-            return await GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        }
+    /// <summary>
+    /// Identity/management schema: <c>man</c> on dedicated school DB, else platform <c>global</c>.
+    /// </summary>
+    public string IdentitySchema => _tenantSchemaProvider.GetIdentitySchema();
 
-        if (_platformConnection is null || IsConnectionDisposed(_platformConnection))
+    /// <summary>
+    /// Always opens the platform/global catalog database (<c>GlobalDatabase</c>), never the tenant school CS.
+    /// </summary>
+    public async Task<IDbConnection> GetGlobalDatabaseConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        if (_globalDatabaseConnection is null || IsConnectionDisposed(_globalDatabaseConnection))
         {
-            _platformConnection = (NpgsqlConnection)await _connectionFactory
-                .CreatePlatformConnectionAsync(cancellationToken)
+            _globalDatabaseConnection = (NpgsqlConnection)await _connectionFactory
+                .CreateGlobalDatabaseConnectionAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        return _platformConnection;
+        return _globalDatabaseConnection;
     }
 
+    public Task<IDbConnection> GetPlatformConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        return GetGlobalDatabaseConnectionAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Tenant identity/ops connection: dedicated school CS when set, otherwise platform.
+    /// </summary>
     public async Task<IDbConnection> GetGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
         string bindingKey = GetOperationalBindingKey();
@@ -67,7 +79,7 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
             else
             {
                 _connection = (NpgsqlConnection)await _connectionFactory
-                    .CreatePlatformConnectionAsync(cancellationToken)
+                    .CreateGlobalDatabaseConnectionAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -122,10 +134,10 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
             _operationalBindingKey = null;
         }
 
-        if (_platformConnection is not null)
+        if (_globalDatabaseConnection is not null)
         {
-            _platformConnection.Dispose();
-            _platformConnection = null;
+            _globalDatabaseConnection.Dispose();
+            _globalDatabaseConnection = null;
         }
     }
 
@@ -138,10 +150,10 @@ public sealed class DapperContext : IDisposable, IAsyncDisposable
             _operationalBindingKey = null;
         }
 
-        if (_platformConnection is not null)
+        if (_globalDatabaseConnection is not null)
         {
-            await _platformConnection.DisposeAsync().ConfigureAwait(false);
-            _platformConnection = null;
+            await _globalDatabaseConnection.DisposeAsync().ConfigureAwait(false);
+            _globalDatabaseConnection = null;
         }
     }
 }

@@ -6,7 +6,7 @@ namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
 [Migration(10, "Global — seed menus")]
-public sealed class G010_SeedMenus : Migration
+public sealed class G010_SeedPermissions : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
 

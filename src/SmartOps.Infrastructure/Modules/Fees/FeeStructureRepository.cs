@@ -36,7 +36,6 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             : DatabaseConfig.Schema_School;
 
     public async Task<IList<FeeStructureVersionListRow>> GetVersionsAsync(
-        Guid? academicYearId,
         FeeStructureVersionStatus? status,
         CancellationToken ct = default)
     {
@@ -46,25 +45,21 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             .ConfigureAwait(false);
         string sql = $"""
             SELECT v.id AS Id,
-                   v.academicyearid AS AcademicYearId,
-                   COALESCE(ay.title, '') AS AcademicYearTitle,
                    v.versionnumber AS VersionNumber,
                    v.status AS Status,
                    v.effectivedate AS EffectiveDate,
                    v.publishedon AS PublishedOn,
                    v.activatedon AS ActivatedOn,
-                   (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
-                    WHERE ft.feestructureversionid = v.id AND ft.isactive = true) AS FeeTypeCount,
+                   (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableFeeHead} ft
+                    WHERE ft.feestructureid = v.id AND ft.isactive = true) AS FeeHeadCount,
                    EXISTS (
                        SELECT 1 FROM {Schema}.{DatabaseConfig.TableFeePayments} fp
-                       WHERE fp.feestructureversionid = v.id AND fp.isactive = true
+                       WHERE fp.feestructureid = v.id AND fp.isactive = true
                    ) AS HasStudentPayments
-            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions} v
-            LEFT JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay ON ay.id = v.academicyearid
+            FROM {Schema}.{DatabaseConfig.TableFeeStructure} v
             WHERE v.isactive = true{branchFilter}
-            {(academicYearId.HasValue ? "AND v.academicyearid = @AcademicYearId" : string.Empty)}
             {(status.HasValue ? "AND v.status = @Status" : string.Empty)}
-            ORDER BY ay.title, v.versionnumber DESC;
+            ORDER BY v.versionnumber DESC;
             """;
 
         IEnumerable<FeeStructureVersionListRow> rows = await connection
@@ -72,7 +67,6 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 sql,
                 new
                 {
-                    AcademicYearId = academicYearId,
                     Status = status.HasValue ? (short)status.Value : (short?)null,
                     ActiveBranchId = activeBranchId
                 },
@@ -81,89 +75,93 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         return rows.ToList();
     }
 
-    public async Task<FeeStructureVersionEntity?> GetVersionByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<FeeStructureEntity?> GetVersionByIdAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
+            SELECT id AS Id, versionnumber AS VersionNumber,
                    status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
                    activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            FROM {Schema}.{DatabaseConfig.TableFeeStructure}
             WHERE id = @Id AND isactive = true;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<FeeStructureVersionEntity>(
+            .QueryFirstOrDefaultAsync<FeeStructureEntity>(
                 new CommandDefinition(sql, new { Id = id }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<FeeStructureVersionEntity?> GetActiveVersionForYearAsync(Guid academicYearId, CancellationToken ct = default)
+    public async Task<FeeStructureEntity?> GetActiveFeeStructureAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
-                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
-                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions}
-            WHERE academicyearid = @AcademicYearId AND status = @ActiveStatus AND isactive = true
-            ORDER BY versionnumber DESC
+            SELECT v.id AS Id, v.versionnumber AS VersionNumber,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
+                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableFeeStructure} v
+            WHERE v.status = @ActiveStatus AND v.isactive = true{branchFilter}
+            ORDER BY v.versionnumber DESC
             LIMIT 1;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<FeeStructureVersionEntity>(new CommandDefinition(
+            .QueryFirstOrDefaultAsync<FeeStructureEntity>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, ActiveStatus = (short)FeeStructureVersionStatus.Active },
+                new { ActiveStatus = (short)FeeStructureVersionStatus.Active, ActiveBranchId = activeBranchId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<FeeStructureVersionEntity?> GetAdmissionVersionForYearAsync(
-        Guid academicYearId,
-        CancellationToken ct = default)
+    public async Task<FeeStructureEntity?> GetAdmissionFeeStructureAsync(CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? active = await GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        FeeStructureEntity? active = await GetActiveFeeStructureAsync(ct).ConfigureAwait(false);
         if (active is not null)
         {
             return active;
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
-                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
-                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions}
-            WHERE academicyearid = @AcademicYearId
-              AND status = @PublishedStatus
-              AND isactive = true
-            ORDER BY versionnumber DESC
+            SELECT v.id AS Id, v.versionnumber AS VersionNumber,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
+                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableFeeStructure} v
+            WHERE v.status = @PublishedStatus
+              AND v.isactive = true{branchFilter}
+            ORDER BY v.versionnumber DESC
             LIMIT 1;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<FeeStructureVersionEntity>(new CommandDefinition(
+            .QueryFirstOrDefaultAsync<FeeStructureEntity>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, PublishedStatus = (short)FeeStructureVersionStatus.Published },
+                new { PublishedStatus = (short)FeeStructureVersionStatus.Published, ActiveBranchId = activeBranchId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<int> GetNextVersionNumberAsync(Guid academicYearId, CancellationToken ct = default)
+    public async Task<int> GetNextVersionNumberAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        Guid branchId = await _branchWrite.ResolveWriteBranchIdAsync(Guid.Empty, ct).ConfigureAwait(false);
         string sql = $"""
             SELECT COALESCE(MAX(versionnumber), 0) + 1
-            FROM {Schema}.{DatabaseConfig.TableFeeStructureVersions}
-            WHERE academicyearid = @AcademicYearId;
+            FROM {Schema}.{DatabaseConfig.TableFeeStructure}
+            WHERE branchid = @BranchId;
             """;
         return await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: ct))
+            new CommandDefinition(sql, new { BranchId = branchId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<Guid> CreateVersionAsync(FeeStructureVersionEntity entity, CancellationToken ct = default)
+    public async Task<Guid> CreateVersionAsync(FeeStructureEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         DateTime utcNow = DateTime.UtcNow;
@@ -173,23 +171,23 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableFeeStructureVersions}
-                (id, branchid, academicyearid, versionnumber, status, effectivedate, publishedon, activatedon,
+            INSERT INTO {Schema}.{DatabaseConfig.TableFeeStructure}
+                (id, branchid, versionnumber, status, effectivedate, publishedon, activatedon,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @BranchId, @AcademicYearId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
+                (@Id, @BranchId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
         return entity.Id;
     }
 
-    public async Task UpdateVersionAsync(FeeStructureVersionEntity entity, CancellationToken ct = default)
+    public async Task UpdateVersionAsync(FeeStructureEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeStructure}
             SET status = @Status,
                 effectivedate = @EffectiveDate,
                 publishedon = @PublishedOn,
@@ -208,7 +206,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeStructure}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE id = @Id;
             """;
@@ -216,27 +214,28 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             .ConfigureAwait(false);
     }
 
-    public async Task ArchiveActiveVersionsForYearAsync(Guid academicYearId, Guid exceptVersionId, CancellationToken ct = default)
+    public async Task ArchiveActiveStructuresAsync(Guid exceptVersionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeStructure} v
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
-                versionno = versionno + 1
-            WHERE academicyearid = @AcademicYearId
-              AND id <> @ExceptVersionId
-              AND status = @ActiveStatus
-              AND isactive = true;
+                versionno = v.versionno + 1
+            WHERE v.branchid = (
+                      SELECT branchid FROM {Schema}.{DatabaseConfig.TableFeeStructure} WHERE id = @ExceptVersionId
+                  )
+              AND v.id <> @ExceptVersionId
+              AND v.status = @ActiveStatus
+              AND v.isactive = true;
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new
             {
-                AcademicYearId = academicYearId,
                 ExceptVersionId = exceptVersionId,
                 ActiveStatus = (short)FeeStructureVersionStatus.Active,
                 ArchivedStatus = (short)FeeStructureVersionStatus.Archived,
@@ -246,30 +245,28 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             cancellationToken: ct)).ConfigureAwait(false);
     }
 
-    public async Task ArchivePublishedVersionsForYearAsync(
-        Guid academicYearId,
-        Guid exceptVersionId,
-        CancellationToken ct = default)
+    public async Task ArchivePublishedStructuresAsync(Guid exceptVersionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeStructure} v
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
-                versionno = versionno + 1
-            WHERE academicyearid = @AcademicYearId
-              AND id <> @ExceptVersionId
-              AND status = @PublishedStatus
-              AND isactive = true;
+                versionno = v.versionno + 1
+            WHERE v.branchid = (
+                      SELECT branchid FROM {Schema}.{DatabaseConfig.TableFeeStructure} WHERE id = @ExceptVersionId
+                  )
+              AND v.id <> @ExceptVersionId
+              AND v.status = @PublishedStatus
+              AND v.isactive = true;
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new
             {
-                AcademicYearId = academicYearId,
                 ExceptVersionId = exceptVersionId,
                 PublishedStatus = (short)FeeStructureVersionStatus.Published,
                 ArchivedStatus = (short)FeeStructureVersionStatus.Archived,
@@ -285,7 +282,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         string sql = $"""
             SELECT EXISTS(
                 SELECT 1 FROM {Schema}.{DatabaseConfig.TableFeePayments}
-                WHERE feestructureversionid = @VersionId AND isactive = true);
+                WHERE feestructureid = @VersionId AND isactive = true);
             """;
         return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
@@ -298,7 +295,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         string sql = $"""
             SELECT EXISTS(
                 SELECT 1 FROM {Schema}.{DatabaseConfig.TableStudentAcademics}
-                WHERE feestructureversionid = @VersionId AND isactive = true);
+                WHERE feestructureid = @VersionId AND isactive = true);
             """;
         return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
@@ -319,27 +316,27 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             DateTime utcNow = DateTime.UtcNow;
             Guid actorId = ResolveInsertActor();
 
-            IList<FeeTypeEntity> sourceTypes = (await connection.QueryAsync<FeeTypeEntity>(new CommandDefinition(
+            IList<FeeHeadEntity> sourceTypes = (await connection.QueryAsync<FeeHeadEntity>(new CommandDefinition(
                 $"""
-                SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
+                SELECT id AS Id, feestructureid AS FeeStructureId, name AS Name,
                        category AS Category, frequency AS CollectionType,
                        ismandatory AS IsMandatory, isrefundable AS IsRefundable,
                        COALESCE(studentwisedifferentamount, false) AS StudentWiseDifferentAmount,
                        isactive AS IsActive
-                FROM {Schema}.{DatabaseConfig.TableFeeTypes}
-                WHERE feestructureversionid = @SourceVersionId AND isactive = true;
+                FROM {Schema}.{DatabaseConfig.TableFeeHead}
+                WHERE feestructureid = @SourceVersionId AND isactive = true;
                 """,
                 new { SourceVersionId = sourceVersionId },
                 transaction,
                 cancellationToken: ct)).ConfigureAwait(false)).ToList();
 
             var typeMap = new Dictionary<Guid, Guid>();
-            foreach (FeeTypeEntity sourceType in sourceTypes)
+            foreach (FeeHeadEntity sourceType in sourceTypes)
             {
-                var cloneType = new FeeTypeEntity
+                var cloneType = new FeeHeadEntity
                 {
                     Id = Guid.NewGuid(),
-                    FeeStructureVersionId = newVersionId,
+                    FeeStructureId = newVersionId,
                     Name = sourceType.Name,
                     Category = sourceType.Category,
                     CollectionType = sourceType.CollectionType,
@@ -350,11 +347,11 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 EnsureInsertAudit(cloneType, utcNow, actorId);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
-                    INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                        (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+                    INSERT INTO {Schema}.{DatabaseConfig.TableFeeHead}
+                        (id, feestructureid, name, category, frequency, ismandatory, isrefundable,
                          studentwisedifferentamount, isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @FeeStructureVersionId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
+                        (@Id, @FeeStructureId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
                          @StudentWiseDifferentAmount, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneType,
@@ -365,10 +362,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
 
             IList<ClassFeeAmountEntity> sourceAmounts = (await connection.QueryAsync<ClassFeeAmountEntity>(new CommandDefinition(
                 $"""
-                SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, classid AS ClassId,
-                       feetypeid AS FeeTypeId, academicyearid AS AcademicYearId, amount AS Amount
+                SELECT id AS Id, feestructureid AS FeeStructureId, classgroupid AS ClassGroupId,
+                       feeheadid AS FeeHeadId, academicyearid AS AcademicYearId, amount AS Amount
                 FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                WHERE feestructureversionid = @SourceVersionId AND isactive = true;
+                WHERE feestructureid = @SourceVersionId AND isactive = true;
                 """,
                 new { SourceVersionId = sourceVersionId },
                 transaction,
@@ -376,7 +373,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
 
             foreach (ClassFeeAmountEntity sourceAmount in sourceAmounts)
             {
-                if (!typeMap.TryGetValue(sourceAmount.FeeTypeId, out Guid newFeeTypeId))
+                if (!typeMap.TryGetValue(sourceAmount.FeeHeadId, out Guid newFeeHeadId))
                 {
                     continue;
                 }
@@ -384,9 +381,9 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 var cloneAmount = new ClassFeeAmountEntity
                 {
                     Id = Guid.NewGuid(),
-                    FeeStructureVersionId = newVersionId,
-                    ClassId = sourceAmount.ClassId,
-                    FeeTypeId = newFeeTypeId,
+                    FeeStructureId = newVersionId,
+                    ClassGroupId = sourceAmount.ClassGroupId,
+                    FeeHeadId = newFeeHeadId,
                     AcademicYearId = sourceAmount.AcademicYearId,
                     Amount = sourceAmount.Amount,
                 };
@@ -394,10 +391,10 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-                        (id, feestructureversionid, classid, feetypeid, academicyearid, amount,
+                        (id, feestructureid, classgroupid, feeheadid, academicyearid, amount,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @FeeStructureVersionId, @ClassId, @FeeTypeId, @AcademicYearId, @Amount,
+                        (@Id, @FeeStructureId, @ClassGroupId, @FeeHeadId, @AcademicYearId, @Amount,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """,
                     cloneAmount,
@@ -447,12 +444,12 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         }
     }
 
-    public async Task<IList<FeeTypeListRow>> GetFeeTypesAsync(Guid feeStructureVersionId, CancellationToken ct = default)
+    public async Task<IList<FeeHeadListRow>> GetFeeHeadsAsync(Guid feeStructureId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT ft.id AS Id,
-                   ft.feestructureversionid AS FeeStructureVersionId,
+                   ft.feestructureid AS FeeStructureId,
                    ft.name AS Name,
                    ft.category AS Category,
                    ft.frequency AS CollectionType,
@@ -465,41 +462,41 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                        FROM {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa
                        INNER JOIN {Schema}.{DatabaseConfig.TableFeePayments} fp
                            ON fp.id = fpa.paymentid AND fp.isactive = true
-                       WHERE fpa.feetypeid = ft.id AND fpa.isactive = true AND fpa.amount > 0
+                       WHERE fpa.feeheadid = ft.id AND fpa.isactive = true AND fpa.amount > 0
                    ) AS HasStudentPayments
-            FROM {Schema}.{DatabaseConfig.TableFeeTypes} ft
-            WHERE ft.feestructureversionid = @VersionId AND ft.isactive = true
+            FROM {Schema}.{DatabaseConfig.TableFeeHead} ft
+            WHERE ft.feestructureid = @VersionId AND ft.isactive = true
             ORDER BY ft.name;
             """;
-        IEnumerable<FeeTypeListRow> rows = await connection
-            .QueryAsync<FeeTypeListRow>(new CommandDefinition(
+        IEnumerable<FeeHeadListRow> rows = await connection
+            .QueryAsync<FeeHeadListRow>(new CommandDefinition(
                 sql,
-                new { VersionId = feeStructureVersionId },
+                new { VersionId = feeStructureId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
 
-    public async Task<FeeTypeEntity?> GetFeeTypeByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<FeeHeadEntity?> GetFeeHeadByIdAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, feestructureversionid AS FeeStructureVersionId, name AS Name,
+            SELECT id AS Id, feestructureid AS FeeStructureId, name AS Name,
                    category AS Category, frequency AS CollectionType,
                    ismandatory AS IsMandatory, isrefundable AS IsRefundable,
                    COALESCE(studentwisedifferentamount, false) AS StudentWiseDifferentAmount,
                    isactive AS IsActive,
                    versionno AS VersionNo, createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableFeeTypes}
+            FROM {Schema}.{DatabaseConfig.TableFeeHead}
             WHERE id = @Id;
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<FeeTypeEntity>(new CommandDefinition(sql, new { Id = id }, cancellationToken: ct))
+            .QueryFirstOrDefaultAsync<FeeHeadEntity>(new CommandDefinition(sql, new { Id = id }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<Guid> CreateFeeTypeAsync(FeeTypeEntity entity, CancellationToken ct = default)
+    public async Task<Guid> CreateFeeHeadAsync(FeeHeadEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         DateTime utcNow = DateTime.UtcNow;
@@ -508,23 +505,23 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableFeeTypes}
-                (id, feestructureversionid, name, category, frequency, ismandatory, isrefundable,
+            INSERT INTO {Schema}.{DatabaseConfig.TableFeeHead}
+                (id, feestructureid, name, category, frequency, ismandatory, isrefundable,
                  studentwisedifferentamount, isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @FeeStructureVersionId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
+                (@Id, @FeeStructureId, @Name, @Category, @CollectionType, @IsMandatory, @IsRefundable,
                  @StudentWiseDifferentAmount, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
         return entity.Id;
     }
 
-    public async Task UpdateFeeTypeAsync(FeeTypeEntity entity, CancellationToken ct = default)
+    public async Task UpdateFeeHeadAsync(FeeHeadEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeTypes}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeHead}
             SET name = @Name,
                 category = @Category,
                 frequency = @CollectionType,
@@ -539,13 +536,13 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
     }
 
-    public async Task SoftDeleteFeeTypeAsync(Guid id, CancellationToken ct = default)
+    public async Task SoftDeleteFeeHeadAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeTypes}
+            UPDATE {Schema}.{DatabaseConfig.TableFeeHead}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE id = @Id;
             """;
@@ -553,7 +550,7 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> FeeTypeHasPaymentsAsync(Guid feeTypeId, CancellationToken ct = default)
+    public async Task<bool> FeeHeadHasPaymentsAsync(Guid feeHeadId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
@@ -561,19 +558,19 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
                 SELECT 1
                 FROM {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa
                 INNER JOIN {Schema}.{DatabaseConfig.TableFeePayments} fp ON fp.id = fpa.paymentid AND fp.isactive = true
-                WHERE fpa.feetypeid = @FeeTypeId AND fpa.isactive = true AND fpa.amount > 0);
+                WHERE fpa.feeheadid = @FeeHeadId AND fpa.isactive = true AND fpa.amount > 0);
             """;
         return await connection.ExecuteScalarAsync<bool>(
-            new CommandDefinition(sql, new { FeeTypeId = feeTypeId }, cancellationToken: ct))
+            new CommandDefinition(sql, new { FeeHeadId = feeHeadId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<int> CountActiveFeeTypesForVersionAsync(Guid versionId, CancellationToken ct = default)
+    public async Task<int> CountActiveFeeHeadsForStructureAsync(Guid versionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT COUNT(*) FROM {Schema}.{DatabaseConfig.TableFeeTypes}
-            WHERE feestructureversionid = @VersionId AND isactive = true;
+            SELECT COUNT(*) FROM {Schema}.{DatabaseConfig.TableFeeHead}
+            WHERE feestructureid = @VersionId AND isactive = true;
             """;
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
@@ -584,82 +581,12 @@ public sealed class FeeStructureRepository : BaseRepository, IFeeStructureReposi
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT COUNT(DISTINCT classid)
+            SELECT COUNT(DISTINCT classgroupid)
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts}
-            WHERE feestructureversionid = @VersionId AND isactive = true AND amount > 0;
+            WHERE feestructureid = @VersionId AND isactive = true AND amount > 0;
             """;
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
-            .ConfigureAwait(false);
-    }
-
-    public async Task<FeeSettingsEntity?> GetSettingsAsync(CancellationToken ct = default)
-    {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT id AS Id, latefeeday AS LateFeePerDay,
-                   defaultacademicyearid AS DefaultAcademicYearId,
-                   isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn,
-                   updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableFeeSettings}
-            WHERE isactive = true
-            ORDER BY createdon
-            LIMIT 1;
-            """;
-        return await connection
-            .QueryFirstOrDefaultAsync<FeeSettingsEntity>(new CommandDefinition(sql, cancellationToken: ct))
-            .ConfigureAwait(false);
-    }
-
-    public async Task<Guid> UpsertSettingsAsync(FeeSettingsEntity entity, CancellationToken ct = default)
-    {
-        FeeSettingsEntity? existing = await GetSettingsAsync(ct).ConfigureAwait(false);
-        if (existing is null)
-        {
-            IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-            DateTime utcNow = DateTime.UtcNow;
-            Guid actorId = ResolveInsertActor();
-            entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-            EnsureInsertAudit(entity, utcNow, actorId);
-            string insertSql = $"""
-                INSERT INTO {Schema}.{DatabaseConfig.TableFeeSettings}
-                    (id, paymentcycle, latefeeday, defaultacademicyearid,
-                     isactive, versionno, createdby, createdon, updatedby, updatedon)
-                VALUES
-                    (@Id, 0, @LateFeePerDay, @DefaultAcademicYearId,
-                     @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
-                """;
-            await connection.ExecuteAsync(new CommandDefinition(insertSql, entity, cancellationToken: ct)).ConfigureAwait(false);
-            return entity.Id;
-        }
-
-        entity.Id = existing.Id;
-        entity.VersionNo = existing.VersionNo;
-        IDbConnection updateConnection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
-        string updateSql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableFeeSettings}
-            SET latefeeday = @LateFeePerDay,
-                defaultacademicyearid = @DefaultAcademicYearId,
-                updatedby = @UpdatedBy,
-                updatedon = @UpdatedOn,
-                versionno = versionno + 1
-            WHERE id = @Id;
-            """;
-        await updateConnection.ExecuteAsync(new CommandDefinition(updateSql, entity, cancellationToken: ct)).ConfigureAwait(false);
-        return entity.Id;
-    }
-
-    public async Task<string?> GetAcademicYearTitleAsync(Guid academicYearId, CancellationToken ct = default)
-    {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT title FROM {Schema}.{DatabaseConfig.TableAcademicYears}
-            WHERE id = @Id AND isactive = true;
-            """;
-        return await connection.ExecuteScalarAsync<string?>(
-            new CommandDefinition(sql, new { Id = academicYearId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 }

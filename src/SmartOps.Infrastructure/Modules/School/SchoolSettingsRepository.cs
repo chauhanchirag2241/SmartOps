@@ -16,8 +16,6 @@ public sealed class SchoolSettingsRepository : BaseRepository, ISchoolSettingsRe
     {
     }
 
-    private static string G => DatabaseConfig.Schema_Global;
-
     public async Task<IReadOnlyList<SchoolSettingRow>> GetByPrefixAsync(
         Guid schoolId,
         string keyPrefix,
@@ -26,7 +24,7 @@ public sealed class SchoolSettingsRepository : BaseRepository, ISchoolSettingsRe
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         string sql = $"""
 SELECT settingkey AS Key, settingvalue AS Value
-FROM {G}.{DatabaseConfig.TableSchoolSettings}
+FROM {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
 WHERE schoolid = @SchoolId AND isactive = true AND settingkey LIKE @Prefix
 ORDER BY settingkey;
 """;
@@ -60,7 +58,7 @@ ORDER BY settingkey;
             }
 
             string updateSql = $"""
-UPDATE {G}.{DatabaseConfig.TableSchoolSettings}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
 SET settingvalue = @Value, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
 WHERE schoolid = @SchoolId AND settingkey = @Key AND isactive = true;
 """;
@@ -83,7 +81,7 @@ WHERE schoolid = @SchoolId AND settingkey = @Key AND isactive = true;
             }
 
             string insertSql = $"""
-INSERT INTO {G}.{DatabaseConfig.TableSchoolSettings}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableSchoolSettings}
     (id, schoolid, settingkey, settingvalue, isactive, versionno, createdby, createdon, updatedby, updatedon)
 VALUES
     (@Id, @SchoolId, @Key, @Value, true, 1, @Actor, @Now, @Actor, @Now);
@@ -109,11 +107,11 @@ VALUES
         SchoolSettingUpsert[] defaults =
         [
             new() { Key = LeaveSettingKeys.StaffApprovalMode, Value = LeaveApprovalModes.AnyOne },
-            new() { Key = LeaveSettingKeys.StaffApproverUserTypes, Value = UserTypeCodes.SchoolAdmin },
+            new() { Key = LeaveSettingKeys.StaffApproverUserTypes, Value = UserTypeCodes.OfficeStaff },
             new() { Key = LeaveSettingKeys.StudentApprovalMode, Value = LeaveApprovalModes.AnyOne },
             new() { Key = LeaveSettingKeys.StudentDefaultApprover, Value = LeaveApproverTokens.ClassTeacher },
             new() { Key = LeaveSettingKeys.StudentLongLeaveMinDays, Value = "4" },
-            new() { Key = LeaveSettingKeys.StudentLongLeaveApproverUserTypes, Value = UserTypeCodes.Principal },
+            new() { Key = LeaveSettingKeys.StudentLongLeaveApproverUserTypes, Value = UserTypeCodes.OfficeStaff },
             new() { Key = LeaveSettingKeys.StudentLongLeaveTransferToPrincipal, Value = "true" },
             new() { Key = EmployeeAttendanceSettingKeys.EmployeeType, Value = EmployeeAttendanceTypes.Both },
         ];

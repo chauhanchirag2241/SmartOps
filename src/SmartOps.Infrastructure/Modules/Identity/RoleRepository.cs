@@ -24,7 +24,6 @@ public sealed class RoleRepository : BaseRepository, IRoleRepository
 SELECT
     id AS Id,
     name AS Name,
-    code AS Code,
     description AS Description,
     isactive AS IsActive,
     versionno AS VersionNo,
@@ -32,7 +31,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles}
 WHERE id = @Id AND isactive = true
 LIMIT 1
 """;
@@ -48,7 +47,6 @@ LIMIT 1
 SELECT
     id AS Id,
     name AS Name,
-    code AS Code,
     description AS Description,
     isactive AS IsActive,
     versionno AS VersionNo,
@@ -56,7 +54,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles}
 WHERE name = @Name AND isactive = true
 LIMIT 1
 """;
@@ -77,11 +75,10 @@ LIMIT 1
         EnsureInsertAudit(role, utcNow);
 
         string sql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRoles}
 (
     id,
     name,
-    code,
     description,
     isactive,
     versionno,
@@ -94,7 +91,6 @@ VALUES
 (
     @Id,
     @Name,
-    @Code,
     @Description,
     @IsActive,
     @VersionNo,
@@ -115,10 +111,9 @@ VALUES
         Guid actor = ResolveUpdateActor();
 
         string sql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableRoles}
 SET
     name = @Name,
-    code = @Code,
     description = @Description,
     isactive = @IsActive,
     updatedby = @UpdatedBy,
@@ -135,7 +130,6 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
                 {
                     role.Id,
                     role.Name,
-                    role.Code,
                     role.Description,
                     role.IsActive,
                     UpdatedBy = actor,
@@ -160,7 +154,6 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
 SELECT
     id AS Id,
     name AS Name,
-    code AS Code,
     description AS Description,
     isactive AS IsActive,
     versionno AS VersionNo,
@@ -168,7 +161,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+FROM {IdentitySchema}.{DatabaseConfig.TableRoles}
 WHERE isactive = true
 ORDER BY name
 """;
@@ -183,29 +176,50 @@ ORDER BY name
         Guid roleId,
         CancellationToken cancellationToken = default)
     {
-        string sql = $"""
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string menusSql = $"""
 SELECT
     m.id AS MenuId,
     m.code AS MenuCode,
     m.name AS MenuName,
     m.parentmenuid AS ParentMenuId,
-    m.displayorder AS DisplayOrder,
-    COALESCE(rmp.canview, false) AS CanView,
-    COALESCE(rmp.canadd, false) AS CanAdd,
-    COALESCE(rmp.canedit, false) AS CanEdit,
-    COALESCE(rmp.candelete, false) AS CanDelete,
-    COALESCE(rmp.canexport, false) AS CanExport
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-LEFT JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rmp
-    ON rmp.menuid = m.id AND rmp.roleid = @RoleId AND rmp.isactive = true
+    m.displayorder AS DisplayOrder
+FROM {CatalogSchema}.{DatabaseConfig.TableMenus} m
 WHERE m.isactive = true
 ORDER BY m.displayorder, m.name
 """;
+        List<RoleMenuPermissionDto> menus = (await catalog.QueryAsync<RoleMenuPermissionDto>(
+            new CommandDefinition(menusSql, cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<RoleMenuPermissionDto> rows = await connection.QueryAsync<RoleMenuPermissionDto>(
-            new CommandDefinition(sql, new { RoleId = roleId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.ToList();
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string permsSql = $"""
+SELECT
+    menuid AS MenuId,
+    canview AS CanView,
+    canadd AS CanAdd,
+    canedit AS CanEdit,
+    candelete AS CanDelete,
+    canexport AS CanExport
+FROM {IdentitySchema}.{DatabaseConfig.TableRoleMenuPermissions}
+WHERE roleid = @RoleId AND isactive = true
+""";
+        Dictionary<Guid, PermissionFlags> perms = (await tenant.QueryAsync<PermissionFlags>(
+            new CommandDefinition(permsSql, new { RoleId = roleId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToDictionary(p => p.MenuId);
+
+        foreach (RoleMenuPermissionDto menu in menus)
+        {
+            if (perms.TryGetValue(menu.MenuId, out PermissionFlags? flags))
+            {
+                menu.CanView = flags.CanView;
+                menu.CanAdd = flags.CanAdd;
+                menu.CanEdit = flags.CanEdit;
+                menu.CanDelete = flags.CanDelete;
+                menu.CanExport = flags.CanExport;
+            }
+        }
+
+        return menus;
     }
 
     public async Task SetRoleMenuPermissionsAsync(
@@ -220,14 +234,28 @@ ORDER BY m.displayorder, m.name
 
         Guid actor = ResolveUpdateActor();
         DateTime utcNow = DateTime.UtcNow;
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string menusSql = $"""
+SELECT id AS Id, code AS Code
+FROM {CatalogSchema}.{DatabaseConfig.TableMenus}
+WHERE isactive = true
+""";
+        List<MenuCodeRow> menuRows = (await catalog.QueryAsync<MenuCodeRow>(
+            new CommandDefinition(menusSql, cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+
+        HashSet<Guid> activeMenuIds = menuRows.Select(m => m.Id).ToHashSet();
+        // Same code can exist per application (e.g. USERS for Config + School); prefer first match as fallback only.
+        Dictionary<string, Guid> menuIdsByCode = menuRows
+            .GroupBy(m => m.Code, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         string upsertSql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRoleMenuPermissions}
     (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), @RoleId, m.id, @CanView, @CanAdd, @CanEdit, @CanDelete, @CanExport, true, 1, @Actor, @Now, @Actor, @Now
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE m.code = @MenuCode AND m.isactive = true
+VALUES
+    (gen_random_uuid(), @RoleId, @MenuId, @CanView, @CanAdd, @CanEdit, @CanDelete, @CanExport, true, 1, @Actor, @Now, @Actor, @Now)
 ON CONFLICT ON CONSTRAINT uq_role_menu_permissions_role_menu
 DO UPDATE SET
     canview = EXCLUDED.canview,
@@ -238,21 +266,35 @@ DO UPDATE SET
     isactive = true,
     updatedby = @Actor,
     updatedon = @Now,
-    versionno = {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}.versionno + 1
+    versionno = {IdentitySchema}.{DatabaseConfig.TableRoleMenuPermissions}.versionno + 1
 """;
 
-        using IDbTransaction transaction = connection.BeginTransaction();
+        using IDbTransaction transaction = tenant.BeginTransaction();
         try
         {
             foreach (RoleMenuPermissionDto permission in permissions)
             {
-                await connection.ExecuteAsync(
+                Guid menuId = permission.MenuId;
+                if (menuId != Guid.Empty)
+                {
+                    if (!activeMenuIds.Contains(menuId))
+                    {
+                        continue;
+                    }
+                }
+                else if (string.IsNullOrWhiteSpace(permission.MenuCode)
+                    || !menuIdsByCode.TryGetValue(permission.MenuCode, out menuId))
+                {
+                    continue;
+                }
+
+                await tenant.ExecuteAsync(
                     new CommandDefinition(
                         upsertSql,
                         new
                         {
                             RoleId = roleId,
-                            permission.MenuCode,
+                            MenuId = menuId,
                             permission.CanView,
                             permission.CanAdd,
                             permission.CanEdit,
@@ -272,5 +314,27 @@ DO UPDATE SET
             transaction.Rollback();
             throw;
         }
+    }
+
+    private sealed class PermissionFlags
+    {
+        public Guid MenuId { get; set; }
+
+        public bool CanView { get; set; }
+
+        public bool CanAdd { get; set; }
+
+        public bool CanEdit { get; set; }
+
+        public bool CanDelete { get; set; }
+
+        public bool CanExport { get; set; }
+    }
+
+    private sealed class MenuCodeRow
+    {
+        public Guid Id { get; set; }
+
+        public string Code { get; set; } = string.Empty;
     }
 }

@@ -23,35 +23,28 @@ public sealed class FeeStructureService : IFeeStructureService
     }
 
     public async Task<Result<IList<FeeStructureVersionListItemDto>>> GetVersionsAsync(
-        Guid? academicYearId,
         string? statusFilter,
         CancellationToken ct = default)
     {
-        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        Guid? effectiveYearId = academicYearId ?? _scope.ActiveAcademicYearId;
-
         FeeStructureVersionStatus? status = ParseStatusFilter(statusFilter);
-        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(effectiveYearId, status, ct).ConfigureAwait(false);
+        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(status, ct).ConfigureAwait(false);
         IList<FeeStructureVersionListItemDto> dtos = rows.Select(MapVersionListItem).ToList();
         return Result<IList<FeeStructureVersionListItemDto>>.Success(dtos);
     }
 
     public async Task<Result<FeeStructureVersionDetailDto>> GetVersionDetailAsync(Guid versionId, CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<FeeStructureVersionDetailDto>.Failure("Fee structure version not found.");
         }
 
-        IList<FeeTypeListRow> types = await _repo.GetFeeTypesAsync(versionId, ct).ConfigureAwait(false);
-        string? yearTitle = await _repo.GetAcademicYearTitleAsync(version.AcademicYearId, ct).ConfigureAwait(false);
+        IList<FeeHeadListRow> types = await _repo.GetFeeHeadsAsync(versionId, ct).ConfigureAwait(false);
         bool hasPayments = await _repo.VersionHasPaymentsAsync(versionId, ct).ConfigureAwait(false);
 
         return Result<FeeStructureVersionDetailDto>.Success(new FeeStructureVersionDetailDto(
             version.Id,
-            version.AcademicYearId,
-            yearTitle ?? string.Empty,
             version.VersionNumber,
             version.Status,
             FeeLabelHelper.VersionStatusLabel(version.Status),
@@ -60,22 +53,16 @@ public sealed class FeeStructureService : IFeeStructureService
             version.ActivatedOn,
             hasPayments,
             IsVersionLocked(version.Status),
-            types.Select(MapFeeType).ToList()));
+            types.Select(MapFeeHead).ToList()));
     }
 
     public async Task<Result<FeeStructureVersionListItemDto>> CreateVersionAsync(
         CreateFeeStructureVersionRequestDto request,
         CancellationToken ct = default)
     {
-        if (request.AcademicYearId == Guid.Empty)
+        int versionNumber = await _repo.GetNextVersionNumberAsync(ct).ConfigureAwait(false);
+        var entity = new FeeStructureEntity
         {
-            return Result<FeeStructureVersionListItemDto>.Failure("Academic year is required.");
-        }
-
-        int versionNumber = await _repo.GetNextVersionNumberAsync(request.AcademicYearId, ct).ConfigureAwait(false);
-        var entity = new FeeStructureVersionEntity
-        {
-            AcademicYearId = request.AcademicYearId,
             VersionNumber = versionNumber,
             Status = FeeStructureVersionStatus.Draft,
             EffectiveDate = request.EffectiveDate
@@ -84,7 +71,7 @@ public sealed class FeeStructureService : IFeeStructureService
 
         if (request.CloneFromVersionId.HasValue && request.CloneFromVersionId.Value != Guid.Empty)
         {
-            FeeStructureVersionEntity? source = await _repo.GetVersionByIdAsync(request.CloneFromVersionId.Value, ct).ConfigureAwait(false);
+            FeeStructureEntity? source = await _repo.GetVersionByIdAsync(request.CloneFromVersionId.Value, ct).ConfigureAwait(false);
             if (source is null)
             {
                 return Result<FeeStructureVersionListItemDto>.Failure("Source fee structure version not found.");
@@ -98,7 +85,7 @@ public sealed class FeeStructureService : IFeeStructureService
 
     public async Task<Result<FeeStructureVersionListItemDto>> PublishVersionAsync(Guid versionId, CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<FeeStructureVersionListItemDto>.Failure("Fee structure version not found.");
@@ -109,13 +96,13 @@ public sealed class FeeStructureService : IFeeStructureService
             return Result<FeeStructureVersionListItemDto>.Failure("Only draft fee structures can be published.");
         }
 
-        int typeCount = await _repo.CountActiveFeeTypesForVersionAsync(versionId, ct).ConfigureAwait(false);
+        int typeCount = await _repo.CountActiveFeeHeadsForStructureAsync(versionId, ct).ConfigureAwait(false);
         if (typeCount == 0)
         {
             return Result<FeeStructureVersionListItemDto>.Failure("Add at least one fee type before publishing.");
         }
 
-        await _repo.ArchivePublishedVersionsForYearAsync(version.AcademicYearId, versionId, ct).ConfigureAwait(false);
+        await _repo.ArchivePublishedStructuresAsync(versionId, ct).ConfigureAwait(false);
         version.Status = FeeStructureVersionStatus.Published;
         version.PublishedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
@@ -124,7 +111,7 @@ public sealed class FeeStructureService : IFeeStructureService
 
     public async Task<Result<FeeStructureVersionListItemDto>> ActivateVersionAsync(Guid versionId, CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<FeeStructureVersionListItemDto>.Failure("Fee structure version not found.");
@@ -135,12 +122,18 @@ public sealed class FeeStructureService : IFeeStructureService
             return Result<FeeStructureVersionListItemDto>.Failure("Only published fee structures can be activated.");
         }
 
-        await _repo.ArchiveActiveVersionsForYearAsync(version.AcademicYearId, versionId, ct).ConfigureAwait(false);
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        if (!_scope.ActiveAcademicYearId.HasValue)
+        {
+            return Result<FeeStructureVersionListItemDto>.Failure("Active academic year is required to activate fee structure.");
+        }
+
+        await _repo.ArchiveActiveStructuresAsync(versionId, ct).ConfigureAwait(false);
         version.Status = FeeStructureVersionStatus.Active;
         version.ActivatedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
         await _installmentService
-            .RegenerateForVersionAsync(versionId, version.AcademicYearId, ct)
+            .RegenerateForVersionAsync(versionId, _scope.ActiveAcademicYearId.Value, ct)
             .ConfigureAwait(false);
         return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
     }
@@ -149,7 +142,7 @@ public sealed class FeeStructureService : IFeeStructureService
         Guid sourceVersionId,
         CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? source = await _repo.GetVersionByIdAsync(sourceVersionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? source = await _repo.GetVersionByIdAsync(sourceVersionId, ct).ConfigureAwait(false);
         if (source is null)
         {
             return Result<FeeStructureVersionListItemDto>.Failure("Source fee structure version not found.");
@@ -161,14 +154,13 @@ public sealed class FeeStructureService : IFeeStructureService
         }
 
         return await CreateVersionAsync(new CreateFeeStructureVersionRequestDto(
-            source.AcademicYearId,
             source.EffectiveDate,
             source.Id), ct).ConfigureAwait(false);
     }
 
     public async Task<Result<bool>> DeleteVersionAsync(Guid versionId, CancellationToken ct = default)
     {
-        FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<bool>.Failure("Fee structure version not found.");
@@ -193,22 +185,22 @@ public sealed class FeeStructureService : IFeeStructureService
         return Result<bool>.Success(true);
     }
 
-    public async Task<Result<FeeTypeDto>> CreateFeeTypeAsync(CreateFeeTypeRequestDto request, CancellationToken ct = default)
+    public async Task<Result<FeeHeadDto>> CreateFeeHeadAsync(CreateFeeHeadRequestDto request, CancellationToken ct = default)
     {
-        Result<FeeStructureVersionEntity> versionResult = await RequireEditableVersionAsync(request.FeeStructureVersionId, ct).ConfigureAwait(false);
+        Result<FeeStructureEntity> versionResult = await RequireEditableVersionAsync(request.FeeStructureId, ct).ConfigureAwait(false);
         if (!versionResult.IsSuccess)
         {
-            return Result<FeeTypeDto>.Failure(versionResult.Error!);
+            return Result<FeeHeadDto>.Failure(versionResult.Error!);
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result<FeeTypeDto>.Failure("Fee type name is required.");
+            return Result<FeeHeadDto>.Failure("Fee type name is required.");
         }
 
-        var entity = new FeeTypeEntity
+        var entity = new FeeHeadEntity
         {
-            FeeStructureVersionId = request.FeeStructureVersionId,
+            FeeStructureId = request.FeeStructureId,
             Name = request.Name.Trim(),
             Category = request.Category,
             CollectionType = request.CollectionType,
@@ -216,30 +208,30 @@ public sealed class FeeStructureService : IFeeStructureService
             IsRefundable = request.IsRefundable,
             StudentWiseDifferentAmount = request.StudentWiseDifferentAmount
         };
-        Guid id = await _repo.CreateFeeTypeAsync(entity, ct).ConfigureAwait(false);
-        FeeTypeEntity? saved = await _repo.GetFeeTypeByIdAsync(id, ct).ConfigureAwait(false);
+        Guid id = await _repo.CreateFeeHeadAsync(entity, ct).ConfigureAwait(false);
+        FeeHeadEntity? saved = await _repo.GetFeeHeadByIdAsync(id, ct).ConfigureAwait(false);
         return saved is null
-            ? Result<FeeTypeDto>.Failure("Failed to create fee type.")
-            : Result<FeeTypeDto>.Success(MapFeeType(saved, false));
+            ? Result<FeeHeadDto>.Failure("Failed to create fee type.")
+            : Result<FeeHeadDto>.Success(MapFeeHead(saved, false));
     }
 
-    public async Task<Result<FeeTypeDto>> UpdateFeeTypeAsync(Guid id, UpdateFeeTypeRequestDto request, CancellationToken ct = default)
+    public async Task<Result<FeeHeadDto>> UpdateFeeHeadAsync(Guid id, UpdateFeeHeadRequestDto request, CancellationToken ct = default)
     {
-        FeeTypeEntity? existing = await _repo.GetFeeTypeByIdAsync(id, ct).ConfigureAwait(false);
+        FeeHeadEntity? existing = await _repo.GetFeeHeadByIdAsync(id, ct).ConfigureAwait(false);
         if (existing is null || !existing.IsActive)
         {
-            return Result<FeeTypeDto>.Failure("Fee type not found.");
+            return Result<FeeHeadDto>.Failure("Fee type not found.");
         }
 
-        Result<FeeStructureVersionEntity> versionResult = await RequireEditableVersionAsync(existing.FeeStructureVersionId, ct).ConfigureAwait(false);
+        Result<FeeStructureEntity> versionResult = await RequireEditableVersionAsync(existing.FeeStructureId, ct).ConfigureAwait(false);
         if (!versionResult.IsSuccess)
         {
-            return Result<FeeTypeDto>.Failure(versionResult.Error!);
+            return Result<FeeHeadDto>.Failure(versionResult.Error!);
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return Result<FeeTypeDto>.Failure("Fee type name is required.");
+            return Result<FeeHeadDto>.Failure("Fee type name is required.");
         }
 
         existing.Name = request.Name.Trim();
@@ -248,91 +240,63 @@ public sealed class FeeStructureService : IFeeStructureService
         existing.IsMandatory = request.IsMandatory;
         existing.IsRefundable = request.IsRefundable;
         existing.StudentWiseDifferentAmount = request.StudentWiseDifferentAmount;
-        await _repo.UpdateFeeTypeAsync(existing, ct).ConfigureAwait(false);
-        bool hasPayments = await _repo.FeeTypeHasPaymentsAsync(id, ct).ConfigureAwait(false);
-        return Result<FeeTypeDto>.Success(MapFeeType(existing, hasPayments));
+        await _repo.UpdateFeeHeadAsync(existing, ct).ConfigureAwait(false);
+        bool hasPayments = await _repo.FeeHeadHasPaymentsAsync(id, ct).ConfigureAwait(false);
+        return Result<FeeHeadDto>.Success(MapFeeHead(existing, hasPayments));
     }
 
-    public async Task<Result<bool>> DeleteFeeTypeAsync(Guid id, CancellationToken ct = default)
+    public async Task<Result<bool>> DeleteFeeHeadAsync(Guid id, CancellationToken ct = default)
     {
-        FeeTypeEntity? existing = await _repo.GetFeeTypeByIdAsync(id, ct).ConfigureAwait(false);
+        FeeHeadEntity? existing = await _repo.GetFeeHeadByIdAsync(id, ct).ConfigureAwait(false);
         if (existing is null || !existing.IsActive)
         {
             return Result<bool>.Failure("Fee type not found.");
         }
 
-        Result<FeeStructureVersionEntity> versionResult = await RequireEditableVersionAsync(existing.FeeStructureVersionId, ct).ConfigureAwait(false);
+        Result<FeeStructureEntity> versionResult = await RequireEditableVersionAsync(existing.FeeStructureId, ct).ConfigureAwait(false);
         if (!versionResult.IsSuccess)
         {
             return Result<bool>.Failure(versionResult.Error!);
         }
 
-        if (await _repo.FeeTypeHasPaymentsAsync(id, ct).ConfigureAwait(false))
+        if (await _repo.FeeHeadHasPaymentsAsync(id, ct).ConfigureAwait(false))
         {
             return Result<bool>.Failure("This fee type has payment records and cannot be deleted.");
         }
 
-        await _repo.SoftDeleteFeeTypeAsync(id, ct).ConfigureAwait(false);
+        await _repo.SoftDeleteFeeHeadAsync(id, ct).ConfigureAwait(false);
         return Result<bool>.Success(true);
     }
 
-    public async Task<Result<FeeSettingsDto>> GetSettingsAsync(CancellationToken ct = default)
+    public async Task<Guid?> ResolveActiveFeeStructureIdAsync(CancellationToken ct = default)
     {
-        FeeSettingsEntity? settings = await _repo.GetSettingsAsync(ct).ConfigureAwait(false);
-        if (settings is null)
-        {
-            return Result<FeeSettingsDto>.Success(new FeeSettingsDto(Guid.Empty, 0, null));
-        }
-
-        return Result<FeeSettingsDto>.Success(MapSettings(settings));
-    }
-
-    public async Task<Result<FeeSettingsDto>> UpsertSettingsAsync(UpsertFeeSettingsRequestDto request, CancellationToken ct = default)
-    {
-        var entity = new FeeSettingsEntity
-        {
-            LateFeePerDay = request.LateFeePerDay,
-            DefaultAcademicYearId = request.DefaultAcademicYearId
-        };
-        await _repo.UpsertSettingsAsync(entity, ct).ConfigureAwait(false);
-        FeeSettingsEntity? saved = await _repo.GetSettingsAsync(ct).ConfigureAwait(false);
-        return saved is null
-            ? Result<FeeSettingsDto>.Failure("Failed to save fee settings.")
-            : Result<FeeSettingsDto>.Success(MapSettings(saved));
-    }
-
-    public async Task<Guid?> ResolveActiveVersionIdForYearAsync(Guid academicYearId, CancellationToken ct = default)
-    {
-        FeeStructureVersionEntity? active = await _repo.GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        FeeStructureEntity? active = await _repo.GetActiveFeeStructureAsync(ct).ConfigureAwait(false);
         return active?.Id;
     }
 
     private async Task<Result<FeeStructureVersionListItemDto>> GetVersionListItemByIdAsync(Guid versionId, CancellationToken ct)
     {
-        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(null, null, ct).ConfigureAwait(false);
+        IList<FeeStructureVersionListRow> rows = await _repo.GetVersionsAsync(null, ct).ConfigureAwait(false);
         FeeStructureVersionListRow? row = rows.FirstOrDefault(r => r.Id == versionId);
         if (row is null)
         {
-            FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+            FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
             if (version is null)
             {
                 return Result<FeeStructureVersionListItemDto>.Failure("Fee structure version not found.");
             }
 
-            string? title = await _repo.GetAcademicYearTitleAsync(version.AcademicYearId, ct).ConfigureAwait(false);
             bool hasPayments = await _repo.VersionHasPaymentsAsync(versionId, ct).ConfigureAwait(false);
-            int typeCount = await _repo.CountActiveFeeTypesForVersionAsync(versionId, ct).ConfigureAwait(false);
+            int typeCount = await _repo.CountActiveFeeHeadsForStructureAsync(versionId, ct).ConfigureAwait(false);
             row = new FeeStructureVersionListRow
             {
                 Id = version.Id,
-                AcademicYearId = version.AcademicYearId,
-                AcademicYearTitle = title ?? string.Empty,
                 VersionNumber = version.VersionNumber,
                 Status = version.Status,
                 EffectiveDate = version.EffectiveDate,
                 PublishedOn = version.PublishedOn,
                 ActivatedOn = version.ActivatedOn,
-                FeeTypeCount = typeCount,
+                FeeHeadCount = typeCount,
                 HasStudentPayments = hasPayments
             };
         }
@@ -340,20 +304,20 @@ public sealed class FeeStructureService : IFeeStructureService
         return Result<FeeStructureVersionListItemDto>.Success(MapVersionListItem(row));
     }
 
-    private async Task<Result<FeeStructureVersionEntity>> RequireEditableVersionAsync(Guid versionId, CancellationToken ct)
+    private async Task<Result<FeeStructureEntity>> RequireEditableVersionAsync(Guid versionId, CancellationToken ct)
     {
-        FeeStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
-            return Result<FeeStructureVersionEntity>.Failure("Fee structure version not found.");
+            return Result<FeeStructureEntity>.Failure("Fee structure version not found.");
         }
 
         if (version.Status != FeeStructureVersionStatus.Draft)
         {
-            return Result<FeeStructureVersionEntity>.Failure("Only draft fee structures can be edited.");
+            return Result<FeeStructureEntity>.Failure("Only draft fee structures can be edited.");
         }
 
-        return Result<FeeStructureVersionEntity>.Success(version);
+        return Result<FeeStructureEntity>.Success(version);
     }
 
     private static FeeStructureVersionStatus? ParseStatusFilter(string? statusFilter)
@@ -378,21 +342,19 @@ public sealed class FeeStructureService : IFeeStructureService
 
     private static FeeStructureVersionListItemDto MapVersionListItem(FeeStructureVersionListRow row) => new(
         row.Id,
-        row.AcademicYearId,
-        row.AcademicYearTitle,
         row.VersionNumber,
         row.Status,
         FeeLabelHelper.VersionStatusLabel(row.Status),
         row.EffectiveDate,
         row.PublishedOn,
         row.ActivatedOn,
-        row.FeeTypeCount,
+        row.FeeHeadCount,
         row.HasStudentPayments,
         IsVersionLocked(row.Status));
 
-    private static FeeTypeDto MapFeeType(FeeTypeListRow row) => new(
+    private static FeeHeadDto MapFeeHead(FeeHeadListRow row) => new(
         row.Id,
-        row.FeeStructureVersionId,
+        row.FeeStructureId,
         row.Name,
         row.Category,
         FeeLabelHelper.CategoryLabel(row.Category),
@@ -404,9 +366,9 @@ public sealed class FeeStructureService : IFeeStructureService
         row.IsActive,
         row.HasStudentPayments);
 
-    private static FeeTypeDto MapFeeType(FeeTypeEntity entity, bool hasStudentPayments) => new(
+    private static FeeHeadDto MapFeeHead(FeeHeadEntity entity, bool hasStudentPayments) => new(
         entity.Id,
-        entity.FeeStructureVersionId,
+        entity.FeeStructureId,
         entity.Name,
         entity.Category,
         FeeLabelHelper.CategoryLabel(entity.Category),
@@ -417,9 +379,4 @@ public sealed class FeeStructureService : IFeeStructureService
         entity.StudentWiseDifferentAmount,
         entity.IsActive,
         hasStudentPayments);
-
-    private static FeeSettingsDto MapSettings(FeeSettingsEntity settings) => new(
-        settings.Id,
-        settings.LateFeePerDay,
-        settings.DefaultAcademicYearId);
 }

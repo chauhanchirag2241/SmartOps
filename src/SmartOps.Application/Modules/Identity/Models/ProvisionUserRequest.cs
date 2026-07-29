@@ -5,19 +5,19 @@ public sealed class ProvisionUserRequest
 {
     public required Guid SchoolId { get; init; }
 
-    public required string RoleName { get; init; }
+    /// <summary>Optional portal role; when omitted, no role is assigned (Admin is the only seeded role).</summary>
+    public string? RoleName { get; init; }
 
-    /// <summary>When set, overrides automatic role-to-user-type mapping.</summary>
-    public string? UserTypeCode { get; init; }
+    public required string UserTypeCode { get; init; }
 
-    public bool PortalAccess { get; init; }
+    public required string FirstName { get; init; }
 
-    public string? Email { get; init; }
+    public required string LastName { get; init; }
 
+    public required string Email { get; init; }
+
+    public string? Mobile { get; init; }
+
+    /// <summary>Optional explicit username; default is firstname.lastname.</summary>
     public string? Username { get; init; }
-
-    public DateOnly? DateOfBirth { get; init; }
-
-    /// <summary>Fallback identifier when email is absent (e.g. admission number).</summary>
-    public string? LoginIdentifier { get; init; }
 }

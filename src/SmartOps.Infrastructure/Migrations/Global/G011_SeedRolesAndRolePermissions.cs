@@ -1,11 +1,12 @@
 using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
 [Migration(11, "Global — seed admin role and permissions")]
-public sealed class G011_SeedAdminRoleAndPermissions : Migration
+public sealed class G011_SeedRolesAndRolePermissions : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid AdminRoleId = Guid.Parse("20000000-0000-0000-0000-000000000001");
@@ -16,10 +17,11 @@ public sealed class G011_SeedAdminRoleAndPermissions : Migration
 
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
-    (id, name, code, description, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{AdminRoleId}', 'Admin', 'ADMIN', 'Default administrator role', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+    (id, name, description, isactive, versionno, createdby, createdon, updatedby, updatedon)
+SELECT '{AdminRoleId}', '{RoleNames.Admin}', 'Default administrator role', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} WHERE code = 'ADMIN'
+    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+    WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'))
 );
 """);
 
@@ -29,7 +31,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = 'ADMIN' AND m.isactive = true
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.isactive = true
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id
@@ -41,8 +43,12 @@ WHERE r.code = 'ADMIN' AND m.isactive = true
     {
         Execute.Sql($"""
 DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
-WHERE roleid IN (SELECT id FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} WHERE code = 'ADMIN');
-DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} WHERE code = 'ADMIN';
+WHERE roleid IN (
+    SELECT id FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+    WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'))
+);
+DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
+WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'));
 """);
     }
 }

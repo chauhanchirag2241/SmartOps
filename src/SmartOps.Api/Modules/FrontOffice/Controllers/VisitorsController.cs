@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.Audit;
 using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.FrontOffice;
 using SmartOps.Application.Modules.FrontOffice.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Common.Models;
 
 namespace SmartOps.Api.Modules.FrontOffice.Controllers;
 
@@ -60,10 +62,28 @@ public sealed class VisitorsController : ControllerBase
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
-        var result = await _auditLogRepository
+        PagedResult<AuditLogListItemDto> result = await _auditLogRepository
             .GetEntityHistoryAsync(DatabaseConfig.TableVisitors, id, page, pageSize, cancellationToken)
             .ConfigureAwait(false);
-        return Ok(result);
+
+        IReadOnlyDictionary<string, string> purposeNames = await LoadPurposeNamesAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(new PagedResult<AuditLogListItemDto>
+        {
+            Items = result.Items.Select(item => new AuditLogListItemDto
+            {
+                Id = item.Id,
+                Action = item.Action,
+                ChangedBy = item.ChangedBy,
+                ChangedByName = item.ChangedByName,
+                ChangedOn = item.ChangedOn,
+                Changes = MapVisitorHistoryChanges(item.Changes, purposeNames)
+            }).ToList(),
+            TotalCount = result.TotalCount,
+            PageIndex = result.PageIndex,
+            PageSize = result.PageSize
+        });
     }
 
     [HttpPost]
@@ -96,5 +116,64 @@ public sealed class VisitorsController : ControllerBase
     {
         var result = await _service.DeleteVisitorAsync(id, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> LoadPurposeNamesAsync(CancellationToken cancellationToken)
+    {
+        var purposes = await _service.GetVisitorPurposesAsync("All", cancellationToken).ConfigureAwait(false);
+        if (!purposes.IsSuccess || purposes.Value is null)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return purposes.Value
+            .Where(p => p.Id != Guid.Empty && !string.IsNullOrWhiteSpace(p.Name))
+            .ToDictionary(
+                p => p.Id.ToString(),
+                p => p.Name.Trim(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Visitor-specific history shaping: hide BranchId; show Purpose name instead of PurposeId.
+    /// </summary>
+    private static IReadOnlyList<FieldChangeDto> MapVisitorHistoryChanges(
+        IReadOnlyList<FieldChangeDto> changes,
+        IReadOnlyDictionary<string, string> purposeNames)
+    {
+        List<FieldChangeDto> mapped = new(changes.Count);
+        foreach (FieldChangeDto change in changes)
+        {
+            string field = change.Field?.Trim() ?? string.Empty;
+            if (field.Equals("BranchId", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (field.Equals("PurposeId", StringComparison.OrdinalIgnoreCase))
+            {
+                mapped.Add(new FieldChangeDto
+                {
+                    Field = "Purpose",
+                    OldValue = ResolvePurposeName(change.OldValue, purposeNames),
+                    NewValue = ResolvePurposeName(change.NewValue, purposeNames)
+                });
+                continue;
+            }
+
+            mapped.Add(change);
+        }
+
+        return mapped;
+    }
+
+    private static string? ResolvePurposeName(string? raw, IReadOnlyDictionary<string, string> purposeNames)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return raw;
+        }
+
+        return purposeNames.TryGetValue(raw.Trim(), out string? name) ? name : raw;
     }
 }

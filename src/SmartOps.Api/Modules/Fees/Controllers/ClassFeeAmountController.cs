@@ -20,10 +20,10 @@ public sealed class ClassFeeAmountController : ControllerBase
     [ProducesResponseType(typeof(IList<ClassFeeSummaryDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetClassSummaries(
         [FromQuery] Guid academicYearId,
-        [FromQuery] Guid? feeStructureVersionId,
+        [FromQuery] Guid? feeStructureId,
         CancellationToken ct)
     {
-        var result = await _service.GetClassSummariesAsync(academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        var result = await _service.GetClassSummariesAsync(academicYearId, feeStructureId, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -33,10 +33,10 @@ public sealed class ClassFeeAmountController : ControllerBase
     public async Task<IActionResult> GetClassAmounts(
         Guid classId,
         [FromQuery] Guid academicYearId,
-        [FromQuery] Guid? feeStructureVersionId,
+        [FromQuery] Guid? feeStructureId,
         CancellationToken ct)
     {
-        var result = await _service.GetClassAmountsAsync(classId, academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        var result = await _service.GetClassAmountsAsync(classId, academicYearId, feeStructureId, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -58,10 +58,10 @@ public sealed class ClassFeeAmountController : ControllerBase
     public async Task<IActionResult> GetInstallmentPreview(
         Guid classId,
         [FromQuery] Guid academicYearId,
-        [FromQuery] Guid? feeStructureVersionId,
+        [FromQuery] Guid? feeStructureId,
         CancellationToken ct)
     {
-        var result = await _service.GetInstallmentPreviewAsync(classId, academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        var result = await _service.GetInstallmentPreviewAsync(classId, academicYearId, feeStructureId, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

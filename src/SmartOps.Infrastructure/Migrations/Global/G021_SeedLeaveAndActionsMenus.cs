@@ -5,8 +5,8 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
-[Migration(23, "Global — seed leave and actions menus")]
-public sealed class G023_SeedLeaveAndActionsMenus : Migration
+[Migration(21, "Global — seed leave and actions menus")]
+public sealed class G021_SeedLeaveAndActionsMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid LeaveManagementParentId = Guid.Parse("10000000-0000-0000-0000-000000000042");
@@ -47,11 +47,6 @@ WHERE NOT EXISTS (
 """);
         }
 
-        SeedRole(RoleCodes.Teacher, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: false, leaveStudentAdd: false, myActions: true, notices: false, frontOfficeFull: false, frontOfficeOpsEdit: true);
-        SeedRole(RoleCodes.Hod, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true, frontOfficeFull: false, frontOfficeOpsEdit: true);
-        SeedRole(RoleCodes.SchoolAdmin, leaveStaffView: true, leaveStaffAdd: true, leaveStudentView: true, leaveStudentAdd: false, myActions: true, notices: true, frontOfficeFull: true, frontOfficeOpsEdit: false);
-        SeedRole(RoleCodes.Parent, leaveStaffView: false, leaveStaffAdd: false, leaveStudentView: true, leaveStudentAdd: true, myActions: true, notices: false, frontOfficeFull: false, frontOfficeOpsEdit: false);
-
         string menuCodes = string.Join("','", Menus.Select(m => m.Code));
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
@@ -59,60 +54,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = 'ADMIN' AND m.code IN ('{menuCodes}')
-  AND NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
-    WHERE rp.roleid = r.id AND rp.menuid = m.id
-  );
-""");
-    }
-
-    private void SeedRole(
-        string roleCode,
-        bool leaveStaffView,
-        bool leaveStaffAdd,
-        bool leaveStudentView,
-        bool leaveStudentAdd,
-        bool myActions,
-        bool notices,
-        bool frontOfficeFull,
-        bool frontOfficeOpsEdit)
-    {
-        InsertPerm(roleCode, MenuCodes.LeaveStaff, leaveStaffView, leaveStaffAdd, leaveStaffAdd, false);
-        InsertPerm(roleCode, MenuCodes.LeaveStudent, leaveStudentView, leaveStudentAdd, leaveStudentAdd, false);
-        InsertPerm(roleCode, MenuCodes.MyActions, myActions, myActions, myActions, false);
-        InsertPerm(roleCode, MenuCodes.Notices, notices, notices, notices, notices);
-
-        if (frontOfficeFull)
-        {
-            InsertPerm(roleCode, MenuCodes.FrontOffice, true, true, true, true);
-            InsertPerm(roleCode, MenuCodes.VisitorBook, true, true, true, true);
-            InsertPerm(roleCode, MenuCodes.PhoneLogs, true, true, true, true);
-            InsertPerm(roleCode, MenuCodes.Complaints, true, true, true, true);
-            InsertPerm(roleCode, MenuCodes.AdmissionInquiries, true, true, true, true);
-            InsertPerm(roleCode, MenuCodes.FrontOfficeSetup, true, true, true, true);
-        }
-        else if (frontOfficeOpsEdit)
-        {
-            InsertPerm(roleCode, MenuCodes.FrontOffice, true, false, false, false);
-            InsertPerm(roleCode, MenuCodes.VisitorBook, true, true, true, false);
-            InsertPerm(roleCode, MenuCodes.PhoneLogs, true, true, true, false);
-            InsertPerm(roleCode, MenuCodes.Complaints, true, true, true, false);
-            InsertPerm(roleCode, MenuCodes.AdmissionInquiries, true, true, true, false);
-            InsertPerm(roleCode, MenuCodes.FrontOfficeSetup, true, true, true, false);
-        }
-    }
-
-    private void InsertPerm(string roleCode, string menuCode, bool view, bool add, bool edit, bool delete)
-    {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        Execute.Sql($"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
-    (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, m.id, {(view ? "true" : "false")}, {(add ? "true" : "false")}, {(edit ? "true" : "false")}, {(delete ? "true" : "false")}, false, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = '{roleCode}' AND m.code = '{menuCode}'
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code IN ('{menuCodes}')
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id

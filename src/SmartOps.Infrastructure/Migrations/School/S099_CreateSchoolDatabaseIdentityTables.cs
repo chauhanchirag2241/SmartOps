@@ -5,32 +5,29 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 namespace SmartOps.Infrastructure.Migrations.School;
 
 /// <summary>
-/// Identity tables required inside each dedicated school database (<c>global</c> schema).
-/// Platform-only tables (e.g. <c>schools</c>) are intentionally excluded.
+/// School DB identity/management tables in <c>man</c> schema.
+/// Catalog tables (menus, dashboard_widgets, usertypes, schools) live only on the platform global DB.
+/// <c>roledashboardwidgetpermissions</c> is school-only (no FK to catalog widgets).
 /// </summary>
 [Tags("School")]
 [Migration(99, "School database — identity tables")]
 public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
 {
-    private static string G => DatabaseConfig.Schema_Global;
+    private static string M => DatabaseConfig.Schema_Man;
 
     public override void Up()
     {
-        if (!Schema.Schema(G).Exists())
+        if (!Schema.Schema(M).Exists())
         {
-            Create.Schema(G);
+            Create.Schema(M);
         }
 
         EnsureUsersTable();
         EnsureRolesTable();
-        EnsureMenusTable();
         EnsureUserRolesTable();
         EnsureRoleMenuPermissionsTable();
-        EnsureUserSchoolMappingsTable();
         EnsureRefreshTokensTable();
-        EnsureUserScopeVersionsTable();
-        EnsureDashboardWidgetsTables();
-        EnsureUserTypesTable();
+        EnsureRoleDashboardWidgetPermissionsTable();
         EnsureSchoolSettingsTable();
         EnsureSchoolBranchesTable();
         EnsureUserBranchMappingsTable();
@@ -38,39 +35,35 @@ public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
 
     public override void Down()
     {
-        Delete.Table(DatabaseConfig.TableUserBranchMappings).InSchema(G);
-        Delete.Table(DatabaseConfig.TableSchoolBranches).InSchema(G);
-        Delete.Table(DatabaseConfig.TableSchoolSettings).InSchema(G);
-        Delete.Table(DatabaseConfig.TableUserTypes).InSchema(G);
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} DROP CONSTRAINT IF EXISTS fk_role_dashboard_widget_permissions_role;");
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} DROP CONSTRAINT IF EXISTS fk_role_dashboard_widget_permissions_widget;");
-        Delete.Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).InSchema(G);
-        Delete.Table(DatabaseConfig.TableDashboardWidgets).InSchema(G);
-        Delete.Table(DatabaseConfig.TableUserScopeVersions).InSchema(G);
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRefreshTokens} DROP CONSTRAINT IF EXISTS fk_refresh_tokens_user;");
-        Delete.Table(DatabaseConfig.TableRefreshTokens).InSchema(G);
-        Delete.Table(DatabaseConfig.TableUserSchoolMappings).InSchema(G);
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRoleMenuPermissions} DROP CONSTRAINT IF EXISTS fk_role_menu_permissions_role;");
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableRoleMenuPermissions} DROP CONSTRAINT IF EXISTS fk_role_menu_permissions_menu;");
-        Delete.Table(DatabaseConfig.TableRoleMenuPermissions).InSchema(G);
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableUserRoles} DROP CONSTRAINT IF EXISTS fk_user_roles_user;");
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableUserRoles} DROP CONSTRAINT IF EXISTS fk_user_roles_role;");
-        Delete.Table(DatabaseConfig.TableUserRoles).InSchema(G);
-        Execute.Sql($"ALTER TABLE {G}.{DatabaseConfig.TableMenus} DROP CONSTRAINT IF EXISTS fk_menus_parent;");
-        Delete.Table(DatabaseConfig.TableMenus).InSchema(G);
-        Delete.Table(DatabaseConfig.TableRoles).InSchema(G);
-        Delete.Table(DatabaseConfig.TableUsers).InSchema(G);
+        Delete.Table(DatabaseConfig.TableUserBranchMappings).InSchema(M);
+        Delete.Table(DatabaseConfig.TableSchoolBranches).InSchema(M);
+        Delete.Table(DatabaseConfig.TableSchoolSettings).InSchema(M);
+        Execute.Sql($"ALTER TABLE {M}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} DROP CONSTRAINT IF EXISTS fk_role_dashboard_widget_permissions_role;");
+        Delete.Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).InSchema(M);
+        Execute.Sql($"ALTER TABLE {M}.{DatabaseConfig.TableRefreshTokens} DROP CONSTRAINT IF EXISTS fk_refresh_tokens_user;");
+        Delete.Table(DatabaseConfig.TableRefreshTokens).InSchema(M);
+        Execute.Sql($"ALTER TABLE {M}.{DatabaseConfig.TableRoleMenuPermissions} DROP CONSTRAINT IF EXISTS fk_role_menu_permissions_role;");
+        Delete.Table(DatabaseConfig.TableRoleMenuPermissions).InSchema(M);
+        Execute.Sql($"ALTER TABLE {M}.{DatabaseConfig.TableUserRoles} DROP CONSTRAINT IF EXISTS fk_user_roles_user;");
+        Execute.Sql($"ALTER TABLE {M}.{DatabaseConfig.TableUserRoles} DROP CONSTRAINT IF EXISTS fk_user_roles_role;");
+        Delete.Table(DatabaseConfig.TableUserRoles).InSchema(M);
+        Delete.Table(DatabaseConfig.TableRoles).InSchema(M);
+        Delete.Table(DatabaseConfig.TableUsers).InSchema(M);
     }
 
     private void EnsureUsersTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUsers).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableUsers).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableUsers).InSchema(G)
+        Create.Table(DatabaseConfig.TableUsers).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+            .WithColumn("firstname").AsString(50).NotNullable()
+            .WithColumn("lastname").AsString(50).NotNullable()
+            .WithColumn("mobile").AsString(20).Nullable()
+            .WithColumn("usertypeid").AsGuid().NotNullable()
             .WithColumn("username").AsString(100).NotNullable().Unique()
             .WithColumn("email").AsString(256).NotNullable().Unique()
             .WithColumn("passwordhash").AsCustom("text").NotNullable()
@@ -79,88 +72,59 @@ public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
             .WithColumn("accessfailedcount").AsInt32().NotNullable().WithDefaultValue(0)
             .WithColumn("lockoutenabled").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithAuditColumns();
+        // usertypeid soft-references platform global.usertypes (no local FK)
     }
 
     private void EnsureRolesTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableRoles).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableRoles).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableRoles).InSchema(G)
+        Create.Table(DatabaseConfig.TableRoles).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("name").AsString(100).NotNullable().Unique()
-            .WithColumn("code").AsString(50).NotNullable().Unique()
             .WithColumn("description").AsCustom("text").Nullable()
             .WithAuditColumns();
     }
 
-    private void EnsureMenusTable()
-    {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableMenus).Exists())
-        {
-            return;
-        }
-
-        Create.Table(DatabaseConfig.TableMenus).InSchema(G)
-            .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-            .WithColumn("name").AsString(150).NotNullable()
-            .WithColumn("code").AsString(50).NotNullable()
-            .WithColumn("parentmenuid").AsGuid().Nullable()
-            .WithColumn("route").AsString(300).Nullable()
-            .WithColumn("icon").AsString(100).Nullable()
-            .WithColumn("displayorder").AsInt32().NotNullable().WithDefaultValue(0)
-            .WithColumn("application").AsString(20).NotNullable().WithDefaultValue("COMMON")
-            .WithAuditColumns();
-
-        Create.UniqueConstraint("uq_menus_code_application")
-            .OnTable(DatabaseConfig.TableMenus).WithSchema(G)
-            .Columns("code", "application");
-
-        Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableMenus}
-    ADD CONSTRAINT fk_menus_parent FOREIGN KEY (parentmenuid)
-    REFERENCES {G}.{DatabaseConfig.TableMenus}(id) ON DELETE SET NULL;
-""");
-    }
-
     private void EnsureUserRolesTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUserRoles).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableUserRoles).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableUserRoles).InSchema(G)
+        Create.Table(DatabaseConfig.TableUserRoles).InSchema(M)
             .WithColumn("userid").AsGuid().NotNullable()
             .WithColumn("roleid").AsGuid().NotNullable()
             .WithAuditColumns();
 
         Create.PrimaryKey("pk_user_roles")
             .OnTable(DatabaseConfig.TableUserRoles)
-            .WithSchema(G)
+            .WithSchema(M)
             .Columns("userid", "roleid");
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableUserRoles}
-    ADD CONSTRAINT fk_user_roles_user FOREIGN KEY (userid) REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
+ALTER TABLE {M}.{DatabaseConfig.TableUserRoles}
+    ADD CONSTRAINT fk_user_roles_user FOREIGN KEY (userid) REFERENCES {M}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
 """);
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableUserRoles}
-    ADD CONSTRAINT fk_user_roles_role FOREIGN KEY (roleid) REFERENCES {G}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
+ALTER TABLE {M}.{DatabaseConfig.TableUserRoles}
+    ADD CONSTRAINT fk_user_roles_role FOREIGN KEY (roleid) REFERENCES {M}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
 """);
     }
 
     private void EnsureRoleMenuPermissionsTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableRoleMenuPermissions).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableRoleMenuPermissions).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableRoleMenuPermissions).InSchema(G)
+        Create.Table(DatabaseConfig.TableRoleMenuPermissions).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("roleid").AsGuid().NotNullable()
             .WithColumn("menuid").AsGuid().NotNullable()
@@ -173,56 +137,25 @@ ALTER TABLE {G}.{DatabaseConfig.TableUserRoles}
 
         Create.UniqueConstraint("uq_role_menu_permissions_role_menu")
             .OnTable(DatabaseConfig.TableRoleMenuPermissions)
-            .WithSchema(G)
+            .WithSchema(M)
             .Columns("roleid", "menuid");
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableRoleMenuPermissions}
+ALTER TABLE {M}.{DatabaseConfig.TableRoleMenuPermissions}
     ADD CONSTRAINT fk_role_menu_permissions_role FOREIGN KEY (roleid)
-    REFERENCES {G}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
+    REFERENCES {M}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
 """);
-
-        Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableRoleMenuPermissions}
-    ADD CONSTRAINT fk_role_menu_permissions_menu FOREIGN KEY (menuid)
-    REFERENCES {G}.{DatabaseConfig.TableMenus}(id) ON DELETE CASCADE;
-""");
-    }
-
-    private void EnsureUserSchoolMappingsTable()
-    {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUserSchoolMappings).Exists())
-        {
-            return;
-        }
-
-        Create.Table(DatabaseConfig.TableUserSchoolMappings).InSchema(G)
-            .WithColumn("userid").AsGuid().NotNullable()
-            .WithColumn("schoolid").AsGuid().NotNullable()
-            .WithColumn("role").AsString(100).NotNullable()
-            .WithColumn("usertypeid").AsGuid().Nullable()
-            .WithAuditColumns();
-
-        Create.PrimaryKey("pk_user_school_mappings")
-            .OnTable(DatabaseConfig.TableUserSchoolMappings)
-            .WithSchema(G)
-            .Columns("userid", "schoolid");
-
-        Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableUserSchoolMappings}
-    ADD CONSTRAINT fk_user_school_mappings_user FOREIGN KEY (userid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
-""");
+        // menuid soft-references platform global.menus (no local FK)
     }
 
     private void EnsureRefreshTokensTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableRefreshTokens).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableRefreshTokens).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableRefreshTokens).InSchema(G)
+        Create.Table(DatabaseConfig.TableRefreshTokens).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("userid").AsGuid().NotNullable()
             .WithColumn("token").AsCustom("text").NotNullable().Unique()
@@ -231,107 +164,47 @@ ALTER TABLE {G}.{DatabaseConfig.TableUserSchoolMappings}
             .WithAuditColumns();
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableRefreshTokens}
+ALTER TABLE {M}.{DatabaseConfig.TableRefreshTokens}
     ADD CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (userid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
+    REFERENCES {M}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
 """);
     }
 
-    private void EnsureUserScopeVersionsTable()
+    private void EnsureRoleDashboardWidgetPermissionsTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUserScopeVersions).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableUserScopeVersions).InSchema(G)
-            .WithColumn("userid").AsGuid().PrimaryKey().NotNullable()
-            .WithColumn("schoolid").AsGuid().NotNullable()
-            .WithColumn("version").AsInt32().NotNullable().WithDefaultValue(1)
-            .WithColumn("updatedon").AsDateTimeOffset().NotNullable()
-                .WithDefaultValue(RawSql.Insert("NOW()"));
+        Create.Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).InSchema(M)
+            .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+            .WithColumn("roleid").AsGuid().NotNullable()
+            .WithColumn("widgetid").AsGuid().NotNullable()
+            .WithColumn("canview").AsBoolean().NotNullable().WithDefaultValue(false)
+            .WithAuditColumns();
+
+        Create.UniqueConstraint("uq_role_dashboard_widget_permissions_role_widget")
+            .OnTable(DatabaseConfig.TableRoleDashboardWidgetPermissions)
+            .WithSchema(M)
+            .Columns("roleid", "widgetid");
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableUserScopeVersions}
-    ADD CONSTRAINT fk_userscopeversions_userid FOREIGN KEY (userid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
-""");
-
-        Create.Index("ix_userscopeversions_schoolid")
-            .OnTable(DatabaseConfig.TableUserScopeVersions).InSchema(G)
-            .OnColumn("schoolid").Ascending();
-    }
-
-    private void EnsureDashboardWidgetsTables()
-    {
-        if (!Schema.Schema(G).Table(DatabaseConfig.TableDashboardWidgets).Exists())
-        {
-            Create.Table(DatabaseConfig.TableDashboardWidgets).InSchema(G)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("code").AsString(80).NotNullable()
-                .WithColumn("name").AsString(120).NotNullable()
-                .WithColumn("category").AsString(40).NotNullable()
-                .WithColumn("requiredmenucode").AsString(80).NotNullable()
-                .WithColumn("displayorder").AsInt32().NotNullable().WithDefaultValue(0)
-                .WithColumn("defaultsize").AsString(20).NotNullable().WithDefaultValue("stat")
-                .WithAuditColumns();
-
-            Create.UniqueConstraint("uq_dashboard_widgets_code")
-                .OnTable(DatabaseConfig.TableDashboardWidgets)
-                .WithSchema(G)
-                .Columns("code");
-        }
-
-        if (!Schema.Schema(G).Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).Exists())
-        {
-            Create.Table(DatabaseConfig.TableRoleDashboardWidgetPermissions).InSchema(G)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("roleid").AsGuid().NotNullable()
-                .WithColumn("widgetid").AsGuid().NotNullable()
-                .WithColumn("canview").AsBoolean().NotNullable().WithDefaultValue(false)
-                .WithAuditColumns();
-
-            Create.UniqueConstraint("uq_role_dashboard_widget_permissions_role_widget")
-                .OnTable(DatabaseConfig.TableRoleDashboardWidgetPermissions)
-                .WithSchema(G)
-                .Columns("roleid", "widgetid");
-
-            Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
+ALTER TABLE {M}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
     ADD CONSTRAINT fk_role_dashboard_widget_permissions_role FOREIGN KEY (roleid)
-    REFERENCES {G}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
+    REFERENCES {M}.{DatabaseConfig.TableRoles}(id) ON DELETE CASCADE;
 """);
-
-            Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
-    ADD CONSTRAINT fk_role_dashboard_widget_permissions_widget FOREIGN KEY (widgetid)
-    REFERENCES {G}.{DatabaseConfig.TableDashboardWidgets}(id) ON DELETE CASCADE;
-""");
-        }
-    }
-
-    private void EnsureUserTypesTable()
-    {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUserTypes).Exists())
-        {
-            return;
-        }
-
-        Create.Table(DatabaseConfig.TableUserTypes).InSchema(G)
-            .WithColumn("id").AsGuid().PrimaryKey().NotNullable()
-            .WithColumn("code").AsString(50).NotNullable().Unique()
-            .WithColumn("name").AsString(100).NotNullable()
-            .WithAuditColumns();
+        // widgetid soft-references platform global.dashboard_widgets (no local FK; school-only table)
     }
 
     private void EnsureSchoolSettingsTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableSchoolSettings).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableSchoolSettings).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableSchoolSettings).InSchema(G)
+        Create.Table(DatabaseConfig.TableSchoolSettings).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("schoolid").AsGuid().NotNullable()
             .WithColumn("settingkey").AsString(100).NotNullable()
@@ -339,18 +212,18 @@ ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
             .WithAuditColumns();
 
         Create.UniqueConstraint("uq_schoolsettings_school_key")
-            .OnTable(DatabaseConfig.TableSchoolSettings).WithSchema(G)
+            .OnTable(DatabaseConfig.TableSchoolSettings).WithSchema(M)
             .Columns("schoolid", "settingkey");
     }
 
     private void EnsureSchoolBranchesTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableSchoolBranches).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableSchoolBranches).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableSchoolBranches).InSchema(G)
+        Create.Table(DatabaseConfig.TableSchoolBranches).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable()
             .WithColumn("schoolid").AsGuid().NotNullable()
             .WithColumn("name").AsString(200).NotNullable()
@@ -360,18 +233,18 @@ ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
             .WithAuditColumns();
 
         Create.Index("ix_schoolbranches_schoolid")
-            .OnTable(DatabaseConfig.TableSchoolBranches).InSchema(G)
+            .OnTable(DatabaseConfig.TableSchoolBranches).InSchema(M)
             .OnColumn("schoolid").Ascending();
     }
 
     private void EnsureUserBranchMappingsTable()
     {
-        if (Schema.Schema(G).Table(DatabaseConfig.TableUserBranchMappings).Exists())
+        if (Schema.Schema(M).Table(DatabaseConfig.TableUserBranchMappings).Exists())
         {
             return;
         }
 
-        Create.Table(DatabaseConfig.TableUserBranchMappings).InSchema(G)
+        Create.Table(DatabaseConfig.TableUserBranchMappings).InSchema(M)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("userid").AsGuid().NotNullable()
             .WithColumn("branchid").AsGuid().NotNullable()
@@ -380,21 +253,21 @@ ALTER TABLE {G}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
             .WithAuditColumns();
 
         Execute.Sql($"""
-ALTER TABLE {G}.{DatabaseConfig.TableUserBranchMappings}
+ALTER TABLE {M}.{DatabaseConfig.TableUserBranchMappings}
     ADD CONSTRAINT fk_userbranchmappings_user FOREIGN KEY (userid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
+    REFERENCES {M}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
 
-ALTER TABLE {G}.{DatabaseConfig.TableUserBranchMappings}
+ALTER TABLE {M}.{DatabaseConfig.TableUserBranchMappings}
     ADD CONSTRAINT fk_userbranchmappings_branch FOREIGN KEY (branchid)
-    REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id) ON DELETE CASCADE;
+    REFERENCES {M}.{DatabaseConfig.TableSchoolBranches}(id) ON DELETE CASCADE;
 """);
 
         Create.UniqueConstraint("uq_userbranchmappings_user_branch")
-            .OnTable(DatabaseConfig.TableUserBranchMappings).WithSchema(G)
+            .OnTable(DatabaseConfig.TableUserBranchMappings).WithSchema(M)
             .Columns("userid", "branchid");
 
         Create.Index("ix_userbranchmappings_userid")
-            .OnTable(DatabaseConfig.TableUserBranchMappings).InSchema(G)
+            .OnTable(DatabaseConfig.TableUserBranchMappings).InSchema(M)
             .OnColumn("userid").Ascending();
     }
 }

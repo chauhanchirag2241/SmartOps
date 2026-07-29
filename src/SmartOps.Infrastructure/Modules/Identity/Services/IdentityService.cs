@@ -184,7 +184,7 @@ public sealed class IdentityService : IIdentityService
         }
 
         IList<string> roles = await _userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
-        (Guid RoleId, string RoleName, string RoleCode)? primaryRole =
+        (Guid RoleId, string RoleName)? primaryRole =
             await _userRepository.GetPrimaryRoleAsync(user.Id, cancellationToken).ConfigureAwait(false);
 
         UserDto dto = user.ToUserDto();
@@ -192,7 +192,6 @@ public sealed class IdentityService : IIdentityService
         if (primaryRole is not null)
         {
             dto.RoleId = primaryRole.Value.RoleId;
-            dto.RoleCode = primaryRole.Value.RoleCode;
         }
 
         return Result<UserDto>.Success(dto);
@@ -209,7 +208,7 @@ public sealed class IdentityService : IIdentityService
             return Result<UserPermissionResponseDto>.Failure("User was not found.");
         }
 
-        (Guid RoleId, string RoleName, string RoleCode)? primaryRole =
+        (Guid RoleId, string RoleName)? primaryRole =
             await _userRepository.GetPrimaryRoleAsync(userId, cancellationToken).ConfigureAwait(false);
 
         if (primaryRole is null)
@@ -226,7 +225,6 @@ public sealed class IdentityService : IIdentityService
             UserId = userId,
             RoleId = primaryRole.Value.RoleId,
             RoleName = primaryRole.Value.RoleName,
-            RoleCode = primaryRole.Value.RoleCode,
             Permissions = permissions
         };
 

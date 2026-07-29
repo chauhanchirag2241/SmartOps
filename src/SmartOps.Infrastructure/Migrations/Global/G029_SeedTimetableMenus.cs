@@ -5,8 +5,8 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
-[Migration(31, "Global — seed timetable menus")]
-public sealed class G031_SeedTimetableMenus : Migration
+[Migration(29, "Global — seed timetable menus")]
+public sealed class G029_SeedTimetableMenus : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid TimetableParentId = Guid.Parse("10000000-0000-0000-0000-000000000070");
@@ -37,23 +37,6 @@ WHERE NOT EXISTS (
 """);
         }
 
-        foreach ((_, _, string code, _, _, _, _) in Menus)
-        {
-            InsertPerm(RoleCodes.SchoolAdmin, code, view: true, add: true, edit: true, delete: true, export: true);
-        }
-
-        string[] teacherRoles = [RoleCodes.Teacher, RoleCodes.Hod];
-        foreach (string role in teacherRoles)
-        {
-            InsertPerm(role, MenuCodes.Timetable, view: true, add: false, edit: false, delete: false, export: false);
-            InsertPerm(role, MenuCodes.PeriodMaster, view: true, add: false, edit: false, delete: false, export: false);
-            InsertPerm(role, MenuCodes.ClassTimetable, view: true, add: false, edit: false, delete: false, export: true);
-            InsertPerm(role, MenuCodes.MyTimetable, view: true, add: false, edit: false, delete: false, export: true);
-        }
-
-        InsertPerm(RoleCodes.Student, MenuCodes.Timetable, view: true, add: false, edit: false, delete: false, export: false);
-        InsertPerm(RoleCodes.Student, MenuCodes.MyTimetable, view: true, add: false, edit: false, delete: false, export: true);
-
         string menuCodes = string.Join("','", Menus.Select(m => m.Code));
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
@@ -61,24 +44,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{DateTimeOffset.UtcNow:O}', '{SeedActor}', '{DateTimeOffset.UtcNow:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = 'ADMIN' AND m.code IN ('{menuCodes}')
-  AND NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
-    WHERE rp.roleid = r.id AND rp.menuid = m.id
-  );
-""");
-    }
-
-    private void InsertPerm(string roleCode, string menuCode, bool view, bool add, bool edit, bool delete, bool export)
-    {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        Execute.Sql($"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
-    (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, m.id, {(view ? "true" : "false")}, {(add ? "true" : "false")}, {(edit ? "true" : "false")}, {(delete ? "true" : "false")}, {(export ? "true" : "false")}, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = '{roleCode}' AND m.code = '{menuCode}'
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code IN ('{menuCodes}')
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id

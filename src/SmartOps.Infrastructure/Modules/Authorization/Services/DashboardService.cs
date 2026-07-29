@@ -229,7 +229,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
         CancellationToken cancellationToken)
     {
         string studentFilter = BuildStudentExistsFilter(schema, "s");
-        string classFilter = BuildClassFilter(schema, "c");
+        string classFilter = BuildClassFilter("c", "cg");
         string employeeFilter = BuildemployeeFilter(schema, "t");
 
         string attendanceDateFilter = attendanceRange is null
@@ -240,7 +240,9 @@ WHERE id = @Id AND isactive = true LIMIT 1
 SELECT
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableStudents} s WHERE s.isactive = true {studentFilter}) AS TotalStudents,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableEmployees} t WHERE t.isactive = true {employeeFilter}) AS TotalEmployees,
-    (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableClasses} c WHERE c.isactive = true {classFilter}) AS TotalClasses,
+    (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableClasses} c
+        INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+        WHERE c.isactive = true {classFilter}) AS TotalClasses,
     (SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableAttendance} a
         WHERE {attendanceDateFilter} AND a.isactive = true
         {BuildAttendanceFilter(schema, "a")}) AS AttendanceMarkedToday
@@ -384,14 +386,16 @@ WHERE pr.payyear = @Year AND pr.paymonth = @Month AND pe.isactive = true {branch
         string sql = $"""
 SELECT
     s.id AS Id,
-    TRIM(CONCAT(s.firstname, ' ', s.lastname)) AS Name,
-    c.classname AS ClassName,
+    TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS Name,
+    cg.classname AS ClassName,
     c.section AS Section,
     s.createdon AS CreatedOn
 FROM {schema}.{DatabaseConfig.TableStudents} s
+INNER JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
 LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id
     AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid AND c.isactive = true
+LEFT JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 WHERE s.isactive = true {filter}
 ORDER BY s.createdon DESC
 LIMIT 5
@@ -419,10 +423,11 @@ LIMIT 5
         string filter = BuildemployeeFilter(schema, "t");
         string sql = $"""
 SELECT
-    TRIM(CONCAT(t.firstname, ' ', t.lastname)) AS Name
+    TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS Name
 FROM {schema}.{DatabaseConfig.TableEmployees} t
+INNER JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
 WHERE t.isactive = true {filter}
-ORDER BY t.firstname, t.lastname
+ORDER BY u.firstname, u.lastname
 LIMIT 5
 """;
 
@@ -449,19 +454,19 @@ LIMIT 5
             : _scope.AllowedClassIds.Count == 0
                 ? " AND 1 = 0"
                 : " AND h.classid = ANY(@ScopeClassIds)";
-        string branchFilter = BuildBranchColumnFilter("c");
+        string branchFilter = BuildBranchColumnFilter("cg");
         string sql = $"""
 SELECT
     h.title AS Title,
-    c.classname AS ClassName,
+    cg.classname AS ClassName,
     c.section AS Section,
     h.duedate AS DueDate
 FROM {schema}.{DatabaseConfig.TableHomework} h
 INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
+INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 WHERE h.isactive = true
   AND h.duedate >= CURRENT_DATE
   AND h.duedate <= CURRENT_DATE + 3
-  AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
   {classFilter}
   {branchFilter}
 ORDER BY h.duedate ASC
@@ -492,12 +497,12 @@ LIMIT 5
         DateOnly schoolToday,
         CancellationToken cancellationToken)
     {
-        string classFilter = BuildClassFilter(schema, "c");
+        string classFilter = BuildClassFilter("c", "cg");
         string studentScope = BuildStudentExistsFilter(schema, "st");
         string feeStudentScope = studentScope.Replace("st.", "st2.", StringComparison.Ordinal);
         string sql = $"""
 SELECT
-    c.classname AS ClassName,
+    cg.classname AS ClassName,
     c.section AS Section,
     COUNT(DISTINCT sa.studentid) AS StudentCount,
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 1) AS Present,
@@ -513,14 +518,15 @@ SELECT
         WHERE fp.isactive = true AND fp.paymentdate = @SchoolToday {feeStudentScope}
     ), 0) AS FeeCollectedToday
 FROM {schema}.{DatabaseConfig.TableClasses} c
+INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id
     AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
 LEFT JOIN {schema}.{DatabaseConfig.TableStudents} st ON st.id = sa.studentid AND st.isactive = true {studentScope}
 LEFT JOIN {schema}.{DatabaseConfig.TableAttendance} a ON a.classid = c.id AND a.studentid = sa.studentid
     AND a.attendancedate = @SchoolToday AND a.isactive = true
 WHERE c.isactive = true {classFilter}
-GROUP BY c.id, c.classname, c.section
-ORDER BY c.classname, c.section
+GROUP BY c.id, cg.classname, c.section
+ORDER BY cg.classname, c.section
 """;
 
         IEnumerable<ClassOverviewRow> rows = await connection.QueryAsync<ClassOverviewRow>(
@@ -735,14 +741,13 @@ WHERE id = @Id AND isactive = true LIMIT 1
 """;
     }
 
-    private string BuildClassFilter(string schema, string alias)
+    private string BuildClassFilter(string classAlias, string classGroupAlias)
     {
-        string yearFilter = AcademicYearClassFilter(alias);
-        string branchFilter = BuildBranchColumnFilter(alias);
+        string branchFilter = BuildBranchColumnFilter(classGroupAlias);
 
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope || UseSchoolWideFinance())
         {
-            return yearFilter + branchFilter;
+            return branchFilter;
         }
 
         if (_scope.AllowedClassIds.Count == 0)
@@ -750,11 +755,8 @@ WHERE id = @Id AND isactive = true LIMIT 1
             return " AND 1 = 0";
         }
 
-        return $" AND {alias}.id = ANY(@ScopeClassIds){yearFilter}{branchFilter}";
+        return $" AND {classAlias}.id = ANY(@ScopeClassIds){branchFilter}";
     }
-
-    private static string AcademicYearClassFilter(string classTableAlias) =>
-        $" AND (@ScopeAcademicYearId IS NULL OR {classTableAlias}.academicyearid = @ScopeAcademicYearId)";
 
     private string BuildemployeeFilter(string schema, string alias)
     {
@@ -785,12 +787,12 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
     private string BuildAttendanceFilter(string schema, string alias)
     {
-        string branchFilter = BuildBranchColumnFilter("c");
+        string branchFilter = BuildBranchColumnFilter("cg");
         string yearFilter = $"""
  AND EXISTS (
     SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+    INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
     WHERE c.id = {alias}.classid AND c.isactive = true
-      AND (@ScopeAcademicYearId IS NULL OR c.academicyearid = @ScopeAcademicYearId)
       {branchFilter}
 )
 """;

@@ -6,7 +6,7 @@ namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
 [Migration(3, "Global — menus")]
-public sealed class G003_CreateMenusTable : Migration
+public sealed class G003_CreatePermissionsTable : Migration
 {
     public override void Up()
     {

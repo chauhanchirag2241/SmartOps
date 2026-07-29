@@ -53,8 +53,6 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
     private readonly BranchOperationalSeedService _branchOperationalSeedService;
 
-    private readonly SchoolBranchSyncService _schoolBranchSyncService;
-
     private readonly PerSchoolDatabaseOptions _perSchoolDbOptions;
 
 
@@ -77,8 +75,6 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         BranchOperationalSeedService branchOperationalSeedService,
 
-        SchoolBranchSyncService schoolBranchSyncService,
-
         IOptions<PerSchoolDatabaseOptions> perSchoolDbOptions)
 
         : base(context, currentUser)
@@ -96,8 +92,6 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
         _defaultAdminProvisioner = defaultAdminProvisioner;
 
         _branchOperationalSeedService = branchOperationalSeedService;
-
-        _schoolBranchSyncService = schoolBranchSyncService;
 
         _perSchoolDbOptions = perSchoolDbOptions.Value;
 
@@ -133,6 +127,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
         {
 
+            // Schools registry only on platform. Branches SoT is school man.schoolbranches.
             await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSchools, school, tx)
 
                 .ConfigureAwait(false);
@@ -148,8 +143,6 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
                 branch.SchoolId = school.Id;
 
                 EnsureInsertAudit(branch, utcNow);
-
-                await InsertAsync(conn, DatabaseConfig.Schema_Global, BranchesTable, branch, tx).ConfigureAwait(false);
 
             }
 
@@ -188,6 +181,18 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
             await _tenantProvisioning
 
                 .ProvisionSchemaAsync(school.SchemaName, cancellationToken)
+
+                .ConfigureAwait(false);
+
+        }
+
+
+
+        if (!string.IsNullOrWhiteSpace(school.ConnectionString) && school.Branches.Count > 0)
+
+        {
+
+            await InsertBranchesIntoSchoolDatabaseAsync(school.ConnectionString, school.Branches, cancellationToken)
 
                 .ConfigureAwait(false);
 
@@ -273,9 +278,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
 
 
-        var branchSql = $"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable} WHERE schoolid = @SchoolId AND isactive = true ORDER BY isheadoffice DESC, name ASC";
-
-        school.Branches = (await connection.QueryAsync<SchoolBranchEntity>(branchSql, new { SchoolId = id }).ConfigureAwait(false)).ToList();
+        school.Branches = (await LoadSchoolBranchesAsync(school, cancellationToken).ConfigureAwait(false)).ToList();
 
         return school;
 
@@ -568,13 +571,9 @@ WHERE id = @Id;
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        IDbConnection connection = await Context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<SchoolBranchEntity>(
-            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
-               WHERE schoolid = @SchoolId AND isactive = true
-               ORDER BY isheadoffice DESC, name ASC",
-            new { SchoolId = schoolId }).ConfigureAwait(false);
-        return rows.ToList();
+        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("School not found.");
+        return school.Branches;
     }
 
     public async Task<SchoolBranchEntity> AddBranchAsync(
@@ -584,8 +583,14 @@ WHERE id = @Id;
         string? address,
         CancellationToken cancellationToken = default)
     {
-        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false)
+        var school = await GetSchoolRegistryAsync(schoolId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("School not found.");
+
+        if (string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "School has no dedicated database connection string; branches are stored on the school DB.");
+        }
 
         var utcNow = DateTime.UtcNow;
         var branch = new SchoolBranchEntity
@@ -600,17 +605,12 @@ WHERE id = @Id;
         };
         EnsureInsertAudit(branch, utcNow);
 
-        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await InsertAsync(connection, DatabaseConfig.Schema_Global, BranchesTable, branch).ConfigureAwait(false);
+        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+            .ConfigureAwait(false);
+        await InsertAsync(connection, DatabaseConfig.Schema_Man, BranchesTable, branch).ConfigureAwait(false);
 
-        if (!string.IsNullOrWhiteSpace(school.ConnectionString))
-        {
-            school.Branches = [branch];
-            await _schoolBranchSyncService
-                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
-                .ConfigureAwait(false);
-            await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
-        }
+        school.Branches = [branch];
+        await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
 
         return branch;
     }
@@ -623,9 +623,16 @@ WHERE id = @Id;
         string? address,
         CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var school = await GetSchoolRegistryAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (school is null || string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            return null;
+        }
+
+        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+            .ConfigureAwait(false);
         var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
-            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
+            $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
                WHERE id = @BranchId AND schoolid = @SchoolId AND isactive = true",
             new { BranchId = branchId, SchoolId = schoolId }).ConfigureAwait(false);
 
@@ -638,16 +645,8 @@ WHERE id = @Id;
         branch.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
         branch.Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
         ApplyUpdateAudit(branch, ResolveUpdateActor(), DateTime.UtcNow);
-        await UpdateAsync(connection, DatabaseConfig.Schema_Global, BranchesTable, branch, null, "Id")
+        await UpdateAsync(connection, DatabaseConfig.Schema_Man, BranchesTable, branch, null, "Id")
             .ConfigureAwait(false);
-
-        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false);
-        if (school is not null && !string.IsNullOrWhiteSpace(school.ConnectionString))
-        {
-            await _schoolBranchSyncService
-                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         return branch;
     }
@@ -657,9 +656,16 @@ WHERE id = @Id;
         Guid branchId,
         CancellationToken cancellationToken = default)
     {
-        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var school = await GetSchoolRegistryAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (school is null || string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            return false;
+        }
+
+        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+            .ConfigureAwait(false);
         var branch = await connection.QuerySingleOrDefaultAsync<SchoolBranchEntity>(
-            $@"SELECT * FROM {DatabaseConfig.Schema_Global}.{BranchesTable}
+            $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
                WHERE id = @BranchId AND schoolid = @SchoolId AND isactive = true",
             new { BranchId = branchId, SchoolId = schoolId }).ConfigureAwait(false);
 
@@ -676,22 +682,59 @@ WHERE id = @Id;
         var actorId = ResolveUpdateActor();
         var utcNow = DateTime.UtcNow;
         await connection.ExecuteAsync(
-            $@"UPDATE {DatabaseConfig.Schema_Global}.{BranchesTable}
+            $@"UPDATE {DatabaseConfig.Schema_Man}.{BranchesTable}
                SET isactive = false, updatedon = @UpdatedOn, updatedby = @UpdatedBy, versionno = versionno + 1
                WHERE id = @BranchId AND schoolid = @SchoolId",
             new { BranchId = branchId, SchoolId = schoolId, UpdatedOn = utcNow, UpdatedBy = actorId })
             .ConfigureAwait(false);
 
-        var school = await GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false);
-        if (school is not null && !string.IsNullOrWhiteSpace(school.ConnectionString))
-        {
-            await _schoolBranchSyncService
-                .EnsureSyncedAsync(schoolId, school.ConnectionString, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         return true;
     }
+
+    private async Task<SchoolEntity?> GetSchoolRegistryAsync(Guid id, CancellationToken cancellationToken)
+    {
+        IDbConnection connection = await Context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools} WHERE id = @Id AND isactive = true";
+        return await connection.QuerySingleOrDefaultAsync<SchoolEntity>(sql, new { Id = id }).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<SchoolBranchEntity>> LoadSchoolBranchesAsync(
+        SchoolEntity school,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            return Array.Empty<SchoolBranchEntity>();
+        }
+
+        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(school.ConnectionString, cancellationToken)
+            .ConfigureAwait(false);
+        var rows = await connection.QueryAsync<SchoolBranchEntity>(
+            $@"SELECT * FROM {DatabaseConfig.Schema_Man}.{BranchesTable}
+               WHERE schoolid = @SchoolId AND isactive = true
+               ORDER BY isheadoffice DESC, name ASC",
+            new { SchoolId = school.Id }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    private async Task InsertBranchesIntoSchoolDatabaseAsync(
+        string connectionString,
+        IEnumerable<SchoolBranchEntity> branches,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await OpenSchoolConnectionAsync(connectionString, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (SchoolBranchEntity branch in branches)
+        {
+            await InsertAsync(connection, DatabaseConfig.Schema_Man, BranchesTable, branch).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<NpgsqlConnection> OpenSchoolConnectionAsync(
+        string connectionString,
+        CancellationToken cancellationToken) =>
+        (NpgsqlConnection)await _connectionFactory.CreateConnectionAsync(connectionString, cancellationToken)
+            .ConfigureAwait(false);
 
     private async Task<NpgsqlConnection> OpenPlatformConnectionAsync(CancellationToken cancellationToken) =>
 

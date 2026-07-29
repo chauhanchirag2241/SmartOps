@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S124_FeeSemesterRestructure : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private const string ClassPeriodUnique = "uq_classacademicperiods_class_index";
+    private const string ClassPeriodUnique = "uq_classacademicperiods_classgroup_year_index";
     private const string FeePeriodUnique = "uq_classfeeperiodamounts_amount_period";
 
     public override void Up()
@@ -18,7 +18,7 @@ public sealed class S124_FeeSemesterRestructure : Migration
         {
             Create.Table(DatabaseConfig.TableClassAcademicPeriods).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("classid").AsGuid().NotNullable()
+                .WithColumn("classgroupid").AsGuid().NotNullable()
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                 // 1=Semester, 2=Term, 3=Quarter, 4=Custom
                 .WithColumn("periodtype").AsInt16().NotNullable()
@@ -30,8 +30,8 @@ public sealed class S124_FeeSemesterRestructure : Migration
 
             Execute.Sql($"""
 ALTER TABLE {S}.{DatabaseConfig.TableClassAcademicPeriods}
-    ADD CONSTRAINT fk_classacademicperiods_class FOREIGN KEY (classid)
-    REFERENCES {S}.{DatabaseConfig.TableClasses}(id),
+    ADD CONSTRAINT fk_classacademicperiods_classgroup FOREIGN KEY (classgroupid)
+    REFERENCES {S}.{DatabaseConfig.TableClassGroups}(id),
     ADD CONSTRAINT fk_classacademicperiods_year FOREIGN KEY (academicyearid)
     REFERENCES {S}.{DatabaseConfig.TableAcademicYears}(id),
     ADD CONSTRAINT ck_classacademicperiods_index CHECK (periodindex > 0),
@@ -39,19 +39,19 @@ ALTER TABLE {S}.{DatabaseConfig.TableClassAcademicPeriods}
     ADD CONSTRAINT ck_classacademicperiods_type CHECK (periodtype BETWEEN 1 AND 4);
 
 CREATE UNIQUE INDEX {ClassPeriodUnique}
-    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classid, periodindex)
+    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, academicyearid, periodindex)
     WHERE isactive = true;
 
-CREATE UNIQUE INDEX uq_classacademicperiods_class_name
-    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classid, LOWER(name))
+CREATE UNIQUE INDEX uq_classacademicperiods_classgroup_year_name
+    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, academicyearid, LOWER(name))
     WHERE isactive = true;
 """);
         }
 
-        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Exists()
-            && !Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Column("studentwisedifferentamount").Exists())
+        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeHead).Exists()
+            && !Schema.Schema(S).Table(DatabaseConfig.TableFeeHead).Column("studentwisedifferentamount").Exists())
         {
-            Alter.Table(DatabaseConfig.TableFeeTypes).InSchema(S)
+            Alter.Table(DatabaseConfig.TableFeeHead).InSchema(S)
                 .AddColumn("studentwisedifferentamount").AsBoolean().NotNullable().WithDefaultValue(false);
         }
 
@@ -79,7 +79,7 @@ CREATE UNIQUE INDEX {FeePeriodUnique}
 
         // Map legacy frequency values to PeriodWise (0) / OneTime (1).
         Execute.Sql($"""
-            UPDATE {S}.{DatabaseConfig.TableFeeTypes}
+            UPDATE {S}.{DatabaseConfig.TableFeeHead}
             SET frequency = CASE WHEN frequency = 4 THEN 1 ELSE 0 END
             WHERE frequency NOT IN (0, 1);
             """);
@@ -92,9 +92,9 @@ CREATE UNIQUE INDEX {FeePeriodUnique}
             Delete.Table(DatabaseConfig.TableClassFeePeriodAmounts).InSchema(S);
         }
 
-        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Column("studentwisedifferentamount").Exists())
+        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeHead).Column("studentwisedifferentamount").Exists())
         {
-            Delete.Column("studentwisedifferentamount").FromTable(DatabaseConfig.TableFeeTypes).InSchema(S);
+            Delete.Column("studentwisedifferentamount").FromTable(DatabaseConfig.TableFeeHead).InSchema(S);
         }
 
         if (Schema.Schema(S).Table(DatabaseConfig.TableClassAcademicPeriods).Exists())

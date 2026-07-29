@@ -36,12 +36,12 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}
+FROM {CatalogSchema}.{DatabaseConfig.TableMenus}
 WHERE isactive = true
 ORDER BY displayorder, name
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IDbConnection connection = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<Menu> rows = await connection.QueryAsync<Menu>(
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
@@ -63,37 +63,65 @@ ORDER BY displayorder, name
         string? application,
         CancellationToken cancellationToken)
     {
-        string applicationFilter = application is null
-            ? string.Empty
-            : "AND m.application IN (@Application, @Common)";
+        IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        string sql = $"""
+        string menusSql = $"""
+SELECT id AS Id, code AS Code, application AS Application
+FROM {CatalogSchema}.{DatabaseConfig.TableMenus}
+WHERE isactive = true
+""";
+        List<MenuLookupRow> menus = (await catalog.QueryAsync<MenuLookupRow>(
+            new CommandDefinition(menusSql, cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+
+        if (application is not null)
+        {
+            menus = menus
+                .Where(m => m.Application == application || m.Application == MenuApplications.Common)
+                .ToList();
+        }
+
+        if (menus.Count == 0)
+        {
+            return Array.Empty<MenuPermissionDto>();
+        }
+
+        string permsSql = $"""
 SELECT
-    m.code AS MenuCode,
+    rmp.menuid AS MenuId,
     bool_or(rmp.canview) AS CanView,
     bool_or(rmp.canadd) AS CanAdd,
     bool_or(rmp.canedit) AS CanEdit,
     bool_or(rmp.candelete) AS CanDelete,
     bool_or(rmp.canexport) AS CanExport
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rmp ON rmp.menuid = m.id
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = rmp.roleid
+FROM {IdentitySchema}.{DatabaseConfig.TableRoleMenuPermissions} rmp
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = rmp.roleid
 WHERE ur.userid = @UserId
   AND ur.isactive = true
   AND rmp.isactive = true
-  AND m.isactive = true
-  {applicationFilter}
-GROUP BY m.code
-ORDER BY m.code
+GROUP BY rmp.menuid
 """;
+        Dictionary<Guid, PermissionAggRow> perms = (await tenant.QueryAsync<PermissionAggRow>(
+            new CommandDefinition(permsSql, new { UserId = userId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToDictionary(p => p.MenuId);
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        IEnumerable<MenuPermissionDto> rows = await connection.QueryAsync<MenuPermissionDto>(
-            new CommandDefinition(
-                sql,
-                new { UserId = userId, Application = application, Common = MenuApplications.Common },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.ToList();
+        return menus
+            .Where(m => perms.ContainsKey(m.Id))
+            .Select(m =>
+            {
+                PermissionAggRow p = perms[m.Id];
+                return new MenuPermissionDto
+                {
+                    MenuCode = m.Code,
+                    CanView = p.CanView,
+                    CanAdd = p.CanAdd,
+                    CanEdit = p.CanEdit,
+                    CanDelete = p.CanDelete,
+                    CanExport = p.CanExport,
+                };
+            })
+            .OrderBy(m => m.MenuCode)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<MenuDto>> GetUserMenuTreeAsync(
@@ -101,45 +129,35 @@ ORDER BY m.code
         string application,
         CancellationToken cancellationToken = default)
     {
-        string sql = $"""
-SELECT DISTINCT
-    m.id AS Id,
-    m.name AS Name,
-    m.code AS Code,
-    m.parentmenuid AS ParentMenuId,
-    m.route AS Route,
-    m.icon AS Icon,
-    m.displayorder AS DisplayOrder
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rmp ON rmp.menuid = m.id
-INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = rmp.roleid
+        IDbConnection tenant = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        string visibleSql = $"""
+SELECT DISTINCT rmp.menuid AS MenuId
+FROM {IdentitySchema}.{DatabaseConfig.TableRoleMenuPermissions} rmp
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUserRoles} ur ON ur.roleid = rmp.roleid
 WHERE ur.userid = @UserId
   AND ur.isactive = true
   AND rmp.isactive = true
-  AND m.isactive = true
   AND rmp.canview = true
-  AND m.application IN (@Application, @Common)
-ORDER BY m.displayorder, m.name
 """;
+        HashSet<Guid> visibleIds = (await tenant.QueryAsync<Guid>(
+            new CommandDefinition(visibleSql, new { UserId = userId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet();
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        List<MenuRow> visibleRows = (await connection.QueryAsync<MenuRow>(
-            new CommandDefinition(
-                sql,
-                new { UserId = userId, Application = application, Common = MenuApplications.Common },
-                cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
-
-        if (visibleRows.Count == 0)
+        if (visibleIds.Count == 0)
         {
             return Array.Empty<MenuDto>();
         }
 
         IReadOnlyList<Menu> allMenus = await GetActiveForApplicationAsync(application, cancellationToken).ConfigureAwait(false);
-        HashSet<Guid> includedIds = visibleRows.Select(r => r.Id).ToHashSet();
+        HashSet<Guid> includedIds = allMenus
+            .Where(m => visibleIds.Contains(m.Id))
+            .Select(m => m.Id)
+            .ToHashSet();
 
-        foreach (MenuRow row in visibleRows)
+        foreach (Menu menu in allMenus.Where(m => includedIds.Contains(m.Id)))
         {
-            AddParentChain(allMenus, row.ParentMenuId, includedIds);
+            AddParentChain(allMenus, menu.ParentMenuId, includedIds);
         }
 
         List<MenuRow> treeRows = allMenus
@@ -201,12 +219,12 @@ SELECT
     false AS CanEdit,
     false AS CanDelete,
     false AS CanExport
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
+FROM {CatalogSchema}.{DatabaseConfig.TableMenus} m
 WHERE m.isactive = true
 ORDER BY m.displayorder, m.name
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IDbConnection connection = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<RoleMenuPermissionDto> rows = await connection.QueryAsync<RoleMenuPermissionDto>(
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
@@ -279,5 +297,29 @@ ORDER BY m.displayorder, m.name
         public string? Icon { get; set; }
 
         public int DisplayOrder { get; set; }
+    }
+
+    private sealed class MenuLookupRow
+    {
+        public Guid Id { get; set; }
+
+        public string Code { get; set; } = string.Empty;
+
+        public string Application { get; set; } = string.Empty;
+    }
+
+    private sealed class PermissionAggRow
+    {
+        public Guid MenuId { get; set; }
+
+        public bool CanView { get; set; }
+
+        public bool CanAdd { get; set; }
+
+        public bool CanEdit { get; set; }
+
+        public bool CanDelete { get; set; }
+
+        public bool CanExport { get; set; }
     }
 }

@@ -6,7 +6,7 @@ namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
 [Migration(5, "Global — role menu permissions")]
-public sealed class G005_CreateRoleMenuPermissionsTable : Migration
+public sealed class G005_CreateRolePermissionsTable : Migration
 {
     public override void Up()
     {

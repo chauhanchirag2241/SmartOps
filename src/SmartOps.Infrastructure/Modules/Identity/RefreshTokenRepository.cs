@@ -32,7 +32,7 @@ SELECT
     createdon AS CreatedOn,
     updatedby AS UpdatedBy,
     updatedon AS UpdatedOn
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRefreshTokens}
+FROM {IdentitySchema}.{DatabaseConfig.TableRefreshTokens}
 WHERE token = @Token AND isactive = true
 LIMIT 1
 """;
@@ -53,7 +53,7 @@ LIMIT 1
         EnsureInsertAudit(token, utcNow, token.UserId);
 
         string sql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRefreshTokens}
+INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRefreshTokens}
 (
     id,
     userid,
@@ -101,7 +101,7 @@ VALUES
             : existing.UserId;
 
         string sql = $"""
-UPDATE {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRefreshTokens}
+UPDATE {IdentitySchema}.{DatabaseConfig.TableRefreshTokens}
 SET
     isrevoked = true,
     updatedby = @UpdatedBy,

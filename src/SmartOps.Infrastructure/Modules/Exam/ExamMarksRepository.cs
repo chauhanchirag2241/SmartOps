@@ -3,6 +3,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.Exam;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
@@ -33,17 +34,22 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
 
         string sql = $"""
             SELECT st.id AS StudentId,
-                   TRIM(COALESCE(st.firstname, '') || ' ' || COALESCE(st.lastname, '')) AS StudentName,
+                   TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS StudentName,
                    COALESCE(sa.rollnumber, '') AS RollNo
             FROM {Schema}.{DatabaseConfig.TableStudents} st
-            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = @ClassId AND cl.isactive = true
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = st.userid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = @ClassId AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
                 ON sa.studentid = st.id
                AND sa.classid = @ClassId
-               AND sa.academicyearid = cl.academicyearid
                AND sa.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay
+                ON ay.id = sa.academicyearid
+               AND ay.isactive = true
+               AND ay.status = {(int)AcademicYearStatus.Current}
             WHERE st.isactive = true
-            ORDER BY sa.rollnumber NULLS LAST, st.firstname, st.lastname;
+            ORDER BY sa.rollnumber NULLS LAST, u.firstname, u.lastname;
             """;
 
         IEnumerable<ExamStudentRosterRow> rows = await connection.QueryAsync<ExamStudentRosterRow>(

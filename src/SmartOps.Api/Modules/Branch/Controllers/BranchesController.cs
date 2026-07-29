@@ -24,11 +24,11 @@ public sealed class BranchesController(
             return BadRequest("School context is required.");
         }
 
-        IList<string> roleCodes = await userRepository
-            .GetRoleCodesAsync(userId, cancellationToken)
+        string? userTypeCode = await userRepository
+            .GetUserTypeCodeAsync(userId, cancellationToken)
             .ConfigureAwait(false);
 
-        bool canViewAll = roleCodes.Any(c => RoleCodes.GlobalScopeRoles.Contains(c));
+        bool canViewAll = UserTypeCodes.IsGlobalScope(userTypeCode);
         IReadOnlyList<BranchDropdownItemDto> branches = canViewAll
             ? await branchRepository.GetBranchesBySchoolAsync(schoolId, cancellationToken).ConfigureAwait(false)
             : await branchRepository.GetUserBranchesAsync(userId, schoolId, cancellationToken).ConfigureAwait(false);

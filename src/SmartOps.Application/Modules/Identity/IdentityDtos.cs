@@ -80,8 +80,6 @@ public sealed class UserPermissionResponseDto
 
     public string RoleName { get; set; } = string.Empty;
 
-    public string RoleCode { get; set; } = string.Empty;
-
     public IReadOnlyList<MenuPermissionDto> Permissions { get; set; } = Array.Empty<MenuPermissionDto>();
 }
 
@@ -149,8 +147,6 @@ public sealed class RoleDto
 
     public string Name { get; set; } = string.Empty;
 
-    public string Code { get; set; } = string.Empty;
-
     public string? Description { get; set; }
 
     public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
@@ -163,8 +159,6 @@ public sealed class CreateRoleDto
 {
     public string Name { get; set; } = string.Empty;
 
-    public string Code { get; set; } = string.Empty;
-
     public string? Description { get; set; }
 
     public IReadOnlyList<RoleMenuPermissionDto> MenuPermissions { get; set; } = Array.Empty<RoleMenuPermissionDto>();
@@ -176,8 +170,6 @@ public sealed class CreateRoleDto
 public sealed class UpdateRoleDto
 {
     public string Name { get; set; } = string.Empty;
-
-    public string Code { get; set; } = string.Empty;
 
     public string? Description { get; set; }
 
@@ -277,6 +269,4 @@ public sealed class UserDto
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
 
     public Guid? RoleId { get; set; }
-
-    public string? RoleCode { get; set; }
 }

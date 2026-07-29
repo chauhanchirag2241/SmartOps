@@ -6,6 +6,8 @@ public interface IUserTypeRepository
 {
     Task<IReadOnlyList<UserTypeEntity>> GetAllActiveAsync(CancellationToken cancellationToken = default);
 
+    Task<Guid?> GetIdByNameAsync(string name, CancellationToken cancellationToken = default);
+
     Task<Guid?> GetIdByCodeAsync(string code, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetUserIdsByTypeCodesAsync(
@@ -22,6 +24,7 @@ public sealed class UserTypeSummary
 {
     public Guid UserTypeId { get; set; }
 
+    /// <summary>Same as Name (API compatibility for clients that still read code).</summary>
     public string Code { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;

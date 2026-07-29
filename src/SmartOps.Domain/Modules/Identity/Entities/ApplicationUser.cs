@@ -6,6 +6,14 @@ public sealed class ApplicationUser : AuditableEntity
 {
     public Guid Id { get; set; }
 
+    public string FirstName { get; set; } = string.Empty;
+
+    public string LastName { get; set; } = string.Empty;
+
+    public string? Mobile { get; set; }
+
+    public Guid UserTypeId { get; set; }
+
     public string Username { get; set; } = string.Empty;
 
     public string Email { get; set; } = string.Empty;

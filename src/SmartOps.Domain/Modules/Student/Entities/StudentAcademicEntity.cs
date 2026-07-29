@@ -9,6 +9,6 @@ public class StudentAcademicEntity : AuditableEntity
     public DateOnly? AdmissionDate { get; set; }
     public Guid AcademicYearId { get; set; }
     public Guid ClassId { get; set; }
-    public Guid? FeeStructureVersionId { get; set; }
+    public Guid? FeeStructureId { get; set; }
     public string? RollNumber { get; set; }
 }

@@ -5,8 +5,8 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
-[Migration(18, "Global — seed fees menus under Fee group")]
-public sealed class G018_SeedFeesMenu : Migration
+[Migration(16, "Global — seed fees menus under Fee group")]
+public sealed class G016_SeedFeesMenu : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
     private static readonly Guid FeesManagementParentId = Guid.Parse("10000000-0000-0000-0000-000000000040");
@@ -34,28 +34,7 @@ WHERE NOT EXISTS (
 """);
         }
 
-        string[] roleCodes = [RoleCodes.SchoolAdmin, RoleCodes.Accountant];
         string menuCodes = string.Join("','", Menus.Select(m => m.Code));
-
-        foreach (string roleCode in roleCodes)
-        {
-            bool canAdd = true;
-            bool canEdit = true;
-            bool canDelete = roleCode == RoleCodes.SchoolAdmin;
-
-            Execute.Sql($"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
-    (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, m.id, true, {(canAdd ? "true" : "false")}, {(canEdit ? "true" : "false")}, {(canDelete ? "true" : "false")}, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = '{roleCode}' AND m.code IN ('{menuCodes}')
-  AND NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
-    WHERE rp.roleid = r.id AND rp.menuid = m.id
-  );
-""");
-        }
 
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
@@ -63,7 +42,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE r.code = 'ADMIN' AND m.code IN ('{menuCodes}')
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code IN ('{menuCodes}')
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id

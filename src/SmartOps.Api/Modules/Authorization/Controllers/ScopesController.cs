@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Domain.Common.Constants;
 
@@ -14,40 +13,18 @@ namespace SmartOps.Api.Modules.Authorization.Controllers;
 [Authorize]
 public sealed class ScopesController(
     IScopeMappingRepository scopeMapping,
-    IUserProvisioningService userProvisioning,
     IUserScopeService userScopeService,
     ITenantProvider tenantProvider,
     DapperContext dapperContext) : ControllerBase
 {
     [HttpPost("parent-students")]
     [Authorize(Policy = MenuPolicies.Students.Edit)]
-    public async Task<IActionResult> AssignParentStudent(
-        [FromBody] AssignParentStudentDto request,
-        CancellationToken cancellationToken)
+    public IActionResult AssignParentStudent()
     {
-        if (!TryGetSchoolId(out Guid schoolId))
+        return StatusCode(StatusCodes.Status410Gone, new
         {
-            return BadRequest("School context is required.");
-        }
-
-        Guid? parentUserId = await userProvisioning
-            .ProvisionParentUserAsync(request.ParentEmail, request.ParentUsername, schoolId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!parentUserId.HasValue)
-        {
-            return BadRequest("Parent email is required.");
-        }
-
-        await scopeMapping.UpsertParentStudentMappingAsync(
-            dapperContext.OperationalSchema,
-            parentUserId.Value,
-            request.StudentId,
-            request.RelationType,
-            cancellationToken).ConfigureAwait(false);
-
-        await userScopeService.BumpScopeVersionAsync(parentUserId.Value, schoolId, cancellationToken).ConfigureAwait(false);
-        return Ok(new { parentUserId = parentUserId.Value });
+            message = "Parent portal users are not supported. Only student and employee users are provisioned."
+        });
     }
 
     [HttpPost("hod-departments")]

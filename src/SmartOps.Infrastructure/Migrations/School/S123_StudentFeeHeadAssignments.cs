@@ -14,9 +14,9 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
 
-    private const string AssignmentsUnique = "uq_studentfeeheadassignments_student_feetype_version";
+    private const string AssignmentsUnique = "uq_studentfeeheadassignments_student_feehead_structure";
     private const string AssignmentsIndex = "ix_studentfeeheadassignments_student_version";
-    private const string InstallmentsUnique = "uq_studentfeeinstallments_student_feetype_version_period";
+    private const string InstallmentsUnique = "uq_studentfeeinstallments_student_feehead_structure_period";
     private const string InstallmentsIndex = "ix_studentfeeinstallments_student_version";
 
     public override void Up()
@@ -26,8 +26,8 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
             Create.Table(DatabaseConfig.TableStudentFeeHeadAssignments).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("studentid").AsGuid().NotNullable()
-                .WithColumn("feestructureversionid").AsGuid().NotNullable()
-                .WithColumn("feetypeid").AsGuid().NotNullable()
+                .WithColumn("feestructureid").AsGuid().NotNullable()
+                .WithColumn("feeheadid").AsGuid().NotNullable()
                 .WithColumn("isincluded").AsBoolean().NotNullable().WithDefaultValue(true)
                 .WithColumn("customannualamount").AsDecimal(12, 2).Nullable()
                 .WithAuditColumns();
@@ -38,7 +38,7 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
         {
             Create.UniqueConstraint(AssignmentsUnique)
                 .OnTable(DatabaseConfig.TableStudentFeeHeadAssignments).WithSchema(S)
-                .Columns("studentid", "feetypeid", "feestructureversionid");
+                .Columns("studentid", "feeheadid", "feestructureid");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentFeeHeadAssignments).Index(AssignmentsIndex).Exists())
@@ -46,7 +46,7 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
             Create.Index(AssignmentsIndex)
                 .OnTable(DatabaseConfig.TableStudentFeeHeadAssignments).InSchema(S)
                 .OnColumn("studentid").Ascending()
-                .OnColumn("feestructureversionid").Ascending();
+                .OnColumn("feestructureid").Ascending();
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentFeeInstallments).Exists())
@@ -54,9 +54,9 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
             Create.Table(DatabaseConfig.TableStudentFeeInstallments).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("studentid").AsGuid().NotNullable()
-                .WithColumn("feestructureversionid").AsGuid().NotNullable()
+                .WithColumn("feestructureid").AsGuid().NotNullable()
                 .WithColumn("classfeeinstallmentid").AsGuid().Nullable()
-                .WithColumn("feetypeid").AsGuid().NotNullable()
+                .WithColumn("feeheadid").AsGuid().NotNullable()
                 .WithColumn("periodindex").AsInt32().NotNullable()
                 .WithColumn("periodlabel").AsString(100).NotNullable()
                 .WithColumn("periodstart").AsDate().NotNullable()
@@ -70,7 +70,7 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
         {
             Create.UniqueConstraint(InstallmentsUnique)
                 .OnTable(DatabaseConfig.TableStudentFeeInstallments).WithSchema(S)
-                .Columns("studentid", "feetypeid", "feestructureversionid", "periodindex");
+                .Columns("studentid", "feeheadid", "feestructureid", "periodindex");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentFeeInstallments).Index(InstallmentsIndex).Exists())
@@ -78,7 +78,7 @@ public sealed class S123_StudentFeeHeadAssignments : Migration
             Create.Index(InstallmentsIndex)
                 .OnTable(DatabaseConfig.TableStudentFeeInstallments).InSchema(S)
                 .OnColumn("studentid").Ascending()
-                .OnColumn("feestructureversionid").Ascending();
+                .OnColumn("feestructureid").Ascending();
         }
     }
 

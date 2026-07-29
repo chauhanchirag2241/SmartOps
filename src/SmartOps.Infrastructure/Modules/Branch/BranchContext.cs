@@ -61,11 +61,11 @@ public sealed class BranchContext : IBranchContext
             return;
         }
 
-        IList<string> roleCodes = await _userRepository
-            .GetRoleCodesAsync(userId.Value, cancellationToken)
+        string? userTypeCode = await _userRepository
+            .GetUserTypeCodeAsync(userId.Value, cancellationToken)
             .ConfigureAwait(false);
 
-        CanViewAllBranches = roleCodes.Any(c => RoleCodes.GlobalScopeRoles.Contains(c));
+        CanViewAllBranches = UserTypeCodes.IsGlobalScope(userTypeCode);
 
         if (CanViewAllBranches)
         {

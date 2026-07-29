@@ -30,7 +30,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
 
     public async Task<Result<IList<ClassFeeSummaryDto>>> GetClassSummariesAsync(
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default)
     {
         if (academicYearId == Guid.Empty)
@@ -38,7 +38,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<IList<ClassFeeSummaryDto>>.Failure("Academic year is required.");
         }
 
-        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureId, ct).ConfigureAwait(false);
         if (versionId == Guid.Empty)
         {
             return Result<IList<ClassFeeSummaryDto>>.Failure(
@@ -55,7 +55,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
     public async Task<Result<ClassFeeAmountsResponseDto>> GetClassAmountsAsync(
         Guid classId,
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default)
     {
         if (classId == Guid.Empty || academicYearId == Guid.Empty)
@@ -63,28 +63,34 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Class and academic year are required.");
         }
 
-        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        Guid classGroupId = await _repo.ResolveClassGroupIdAsync(classId, ct).ConfigureAwait(false);
+        if (classGroupId == Guid.Empty)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure("Class not found.");
+        }
+
+        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureId, ct).ConfigureAwait(false);
         if (versionId == Guid.Empty)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure(
                 "No published fee structure for this academic year. Publish the fee structure first.");
         }
 
-        FeeStructureVersionEntity? version = await _feeStructureRepo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
+        FeeStructureEntity? version = await _feeStructureRepo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee structure version not found.");
         }
 
         await _installmentService
-            .EnsureMissingInstallmentsForClassVersionAsync(classId, versionId, academicYearId, ct)
+            .EnsureMissingInstallmentsForClassVersionAsync(classGroupId, versionId, academicYearId, ct)
             .ConfigureAwait(false);
 
         IList<ClassFeeSummaryRow> summaries = await _repo.GetClassSummariesAsync(academicYearId, versionId, ct).ConfigureAwait(false);
-        ClassFeeSummaryRow? summary = summaries.FirstOrDefault(s => s.ClassId == classId);
-        IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classId, versionId, ct).ConfigureAwait(false);
+        ClassFeeSummaryRow? summary = summaries.FirstOrDefault(s => s.ClassId == classGroupId);
+        IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classGroupId, academicYearId, versionId, ct).ConfigureAwait(false);
         IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
-            .GetByClassAsync(classId, ct)
+            .GetByClassAsync(classGroupId, academicYearId, ct)
             .ConfigureAwait(false);
 
         IList<ClassFeeAmountItemDto> items = rows
@@ -92,11 +98,11 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             .ToList();
 
         bool classHasConfiguredAmounts = await _repo
-            .ClassHasConfiguredAmountsAsync(classId, versionId, ct)
+            .ClassHasConfiguredAmountsAsync(classGroupId, academicYearId, versionId, ct)
             .ConfigureAwait(false);
 
         return Result<ClassFeeAmountsResponseDto>.Success(new ClassFeeAmountsResponseDto(
-            classId,
+            classGroupId,
             summary?.ClassName ?? "Class",
             academicYearId,
             versionId,
@@ -117,7 +123,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         SaveClassFeeAmountsRequestDto request,
         CancellationToken ct = default)
     {
-        if (classId == Guid.Empty || request.AcademicYearId == Guid.Empty || request.FeeStructureVersionId == Guid.Empty)
+        if (classId == Guid.Empty || request.AcademicYearId == Guid.Empty || request.FeeStructureId == Guid.Empty)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure("Class, academic year and fee structure version are required.");
         }
@@ -126,14 +132,20 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee amounts are required.");
         }
 
-        FeeStructureVersionEntity? version = await _feeStructureRepo.GetVersionByIdAsync(request.FeeStructureVersionId, ct).ConfigureAwait(false);
+        Guid classGroupId = await _repo.ResolveClassGroupIdAsync(classId, ct).ConfigureAwait(false);
+        if (classGroupId == Guid.Empty)
+        {
+            return Result<ClassFeeAmountsResponseDto>.Failure("Class not found.");
+        }
+
+        FeeStructureEntity? version = await _feeStructureRepo.GetVersionByIdAsync(request.FeeStructureId, ct).ConfigureAwait(false);
         if (version is null)
         {
             return Result<ClassFeeAmountsResponseDto>.Failure("Fee structure version not found.");
         }
 
         bool classHasConfiguredAmounts = await _repo
-            .ClassHasConfiguredAmountsAsync(classId, request.FeeStructureVersionId, ct)
+            .ClassHasConfiguredAmountsAsync(classGroupId, request.AcademicYearId, request.FeeStructureId, ct)
             .ConfigureAwait(false);
         if (!IsClassAmountsEditable(version.Status, classHasConfiguredAmounts))
         {
@@ -144,12 +156,12 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         }
 
         IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
-            .GetByClassAsync(classId, ct)
+            .GetByClassAsync(classGroupId, request.AcademicYearId, ct)
             .ConfigureAwait(false);
-        IList<ClassFeeAmountRow> feeTypes = await _repo
-            .GetAmountsByClassAsync(classId, request.FeeStructureVersionId, ct)
+        IList<ClassFeeAmountRow> feeHeads = await _repo
+            .GetAmountsByClassAsync(classGroupId, request.AcademicYearId, request.FeeStructureId, ct)
             .ConfigureAwait(false);
-        Dictionary<Guid, ClassFeeAmountRow> feeTypeById = feeTypes.ToDictionary(x => x.FeeTypeId);
+        Dictionary<Guid, ClassFeeAmountRow> feeHeadById = feeHeads.ToDictionary(x => x.FeeHeadId);
 
         HashSet<int> validPeriodIndexes = periods.Select(p => p.PeriodIndex).ToHashSet();
         foreach (SaveClassFeeAmountItemDto item in request.Amounts)
@@ -162,8 +174,8 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             {
                 return Result<ClassFeeAmountsResponseDto>.Failure("A fee amount references an invalid academic period.");
             }
-            if (feeTypeById.TryGetValue(item.FeeTypeId, out ClassFeeAmountRow? feeType)
-                && (FeeCollectionType)feeType.CollectionType == FeeCollectionType.PeriodWise)
+            if (feeHeadById.TryGetValue(item.FeeHeadId, out ClassFeeAmountRow? feeHead)
+                && (FeeCollectionType)feeHead.CollectionType == FeeCollectionType.PeriodWise)
             {
                 if (periods.Count == 0)
                 {
@@ -176,7 +188,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
                 if (!submittedIndexes.SetEquals(validPeriodIndexes))
                 {
                     return Result<ClassFeeAmountsResponseDto>.Failure(
-                        $"Enter an amount for every academic period for fee head '{feeType.FeeTypeName}'.");
+                        $"Enter an amount for every academic period for fee head '{feeHead.FeeHeadName}'.");
                 }
             }
         }
@@ -184,17 +196,17 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         IList<ClassFeeAmountUpsertRow> amounts = request.Amounts
             .Select(a => new ClassFeeAmountUpsertRow
             {
-                FeeTypeId = a.FeeTypeId,
-                Amount = feeTypeById.TryGetValue(a.FeeTypeId, out ClassFeeAmountRow? amountFeeType)
-                    && (FeeCollectionType)amountFeeType.CollectionType == FeeCollectionType.PeriodWise
+                FeeHeadId = a.FeeHeadId,
+                Amount = feeHeadById.TryGetValue(a.FeeHeadId, out ClassFeeAmountRow? amountFeeHead)
+                    && (FeeCollectionType)amountFeeHead.CollectionType == FeeCollectionType.PeriodWise
                     ? (a.PeriodAmounts ?? []).Sum(p => p.Amount)
                     : a.Amount,
-                PeriodAmounts = feeTypeById.TryGetValue(a.FeeTypeId, out ClassFeeAmountRow? feeType)
-                    && (FeeCollectionType)feeType.CollectionType == FeeCollectionType.PeriodWise
+                PeriodAmounts = feeHeadById.TryGetValue(a.FeeHeadId, out ClassFeeAmountRow? feeHead)
+                    && (FeeCollectionType)feeHead.CollectionType == FeeCollectionType.PeriodWise
                     ? (a.PeriodAmounts ?? [])
                     .Select(p => new ClassFeePeriodAmountRow
                     {
-                        FeeTypeId = a.FeeTypeId,
+                        FeeHeadId = a.FeeHeadId,
                         PeriodIndex = p.PeriodIndex,
                         Amount = p.Amount,
                     })
@@ -203,22 +215,22 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             })
             .ToList();
 
-        await _repo.UpsertAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, amounts, ct).ConfigureAwait(false);
+        await _repo.UpsertAmountsAsync(classGroupId, request.AcademicYearId, request.FeeStructureId, amounts, ct).ConfigureAwait(false);
 
         if (await _installmentRepo.IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
         {
             await _installmentService
-                .RegenerateForClassVersionAsync(classId, request.FeeStructureVersionId, request.AcademicYearId, ct)
+                .RegenerateForClassVersionAsync(classGroupId, request.FeeStructureId, request.AcademicYearId, ct)
                 .ConfigureAwait(false);
         }
 
-        return await GetClassAmountsAsync(classId, request.AcademicYearId, request.FeeStructureVersionId, ct).ConfigureAwait(false);
+        return await GetClassAmountsAsync(classGroupId, request.AcademicYearId, request.FeeStructureId, ct).ConfigureAwait(false);
     }
 
     public async Task<Result<IList<ClassFeeInstallmentPreviewDto>>> GetInstallmentPreviewAsync(
         Guid classId,
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default)
     {
         if (classId == Guid.Empty || academicYearId == Guid.Empty)
@@ -226,24 +238,30 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Class and academic year are required.");
         }
 
-        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureVersionId, ct).ConfigureAwait(false);
+        Guid classGroupId = await _repo.ResolveClassGroupIdAsync(classId, ct).ConfigureAwait(false);
+        if (classGroupId == Guid.Empty)
+        {
+            return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Class not found.");
+        }
+
+        Guid versionId = await ResolveVersionIdAsync(academicYearId, feeStructureId, ct).ConfigureAwait(false);
         if (versionId == Guid.Empty)
         {
             return Result<IList<ClassFeeInstallmentPreviewDto>>.Failure("Fee structure version not found.");
         }
 
         await _installmentService
-            .EnsureMissingInstallmentsForClassVersionAsync(classId, versionId, academicYearId, ct)
+            .EnsureMissingInstallmentsForClassVersionAsync(classGroupId, versionId, academicYearId, ct)
             .ConfigureAwait(false);
 
         IList<ClassFeeInstallmentRow> rows = await _installmentRepo
-            .GetByClassVersionAsync(classId, versionId, ct)
+            .GetByClassVersionAsync(classGroupId, versionId, ct)
             .ConfigureAwait(false);
         IList<ClassFeeInstallmentPreviewDto> dtos = rows
             .Select(r => new ClassFeeInstallmentPreviewDto(
                 r.Id,
-                r.FeeTypeId,
-                r.FeeTypeName,
+                r.FeeHeadId,
+                r.FeeHeadName,
                 FeeLabelHelper.CollectionTypeLabel((FeeCollectionType)r.CollectionType),
                 r.PeriodIndex,
                 r.PeriodLabel,
@@ -264,8 +282,8 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             return Result<ClassFeeAmountsResponseDto>.Failure("Class and academic year are required.");
         }
 
-        FeeStructureVersionEntity? admissionVersion = await _feeStructureRepo
-            .GetAdmissionVersionForYearAsync(academicYearId, ct)
+        FeeStructureEntity? admissionVersion = await _feeStructureRepo
+            .GetAdmissionFeeStructureAsync(ct)
             .ConfigureAwait(false);
         if (admissionVersion is null)
         {
@@ -296,7 +314,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         }
 
         bool classHasConfiguredAmounts = await _repo
-            .ClassHasConfiguredAmountsAsync(classId, admissionVersion.Id, ct)
+            .ClassHasConfiguredAmountsAsync(result.Value.ClassId, academicYearId, admissionVersion.Id, ct)
             .ConfigureAwait(false);
         if (!classHasConfiguredAmounts)
         {
@@ -325,15 +343,15 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
     /// <summary>
     /// When no version is specified (e.g. student admission preview), use active or latest published — never draft.
     /// </summary>
-    private async Task<Guid> ResolveVersionIdAsync(Guid academicYearId, Guid? feeStructureVersionId, CancellationToken ct)
+    private async Task<Guid> ResolveVersionIdAsync(Guid academicYearId, Guid? feeStructureId, CancellationToken ct)
     {
-        if (feeStructureVersionId.HasValue && feeStructureVersionId.Value != Guid.Empty)
+        if (feeStructureId.HasValue && feeStructureId.Value != Guid.Empty)
         {
-            return feeStructureVersionId.Value;
+            return feeStructureId.Value;
         }
 
-        FeeStructureVersionEntity? admissionVersion = await _feeStructureRepo
-            .GetAdmissionVersionForYearAsync(academicYearId, ct)
+        FeeStructureEntity? admissionVersion = await _feeStructureRepo
+            .GetAdmissionFeeStructureAsync(ct)
             .ConfigureAwait(false);
         return admissionVersion?.Id ?? Guid.Empty;
     }
@@ -346,8 +364,8 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             : r.Amount;
         var category = (FeeCategory)r.Category;
         return new ClassFeeAmountItemDto(
-            r.FeeTypeId,
-            r.FeeTypeName,
+            r.FeeHeadId,
+            r.FeeHeadName,
             category,
             FeeLabelHelper.CategoryLabel(category),
             collectionType,

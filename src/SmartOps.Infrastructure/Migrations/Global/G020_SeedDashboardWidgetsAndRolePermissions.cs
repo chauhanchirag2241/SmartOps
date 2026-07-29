@@ -4,9 +4,13 @@ using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
+/// <summary>
+/// Seeds dashboard widget catalog on platform only.
+/// Role↔widget permissions are seeded per school DB (not on global).
+/// </summary>
 [Tags("Global")]
-[Migration(22, "Global — seed dashboard widgets and default role widget permissions")]
-public sealed class G022_SeedDashboardWidgetsAndRolePermissions : Migration
+[Migration(20, "Global — seed dashboard widgets catalog")]
+public sealed class G020_SeedDashboardWidgetsAndRolePermissions : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
 
@@ -42,86 +46,13 @@ WHERE NOT EXISTS (
 );
 """);
         }
-
-        SeedRoleWidgets(RoleCodes.SchoolAdmin, DashboardWidgetCodes.All.ToArray());
-        SeedRoleWidgets(RoleCodes.Admin, DashboardWidgetCodes.All.ToArray());
-
-        SeedRoleWidgets(RoleCodes.Hod,
-        [
-            DashboardWidgetCodes.StudentsStat,
-            DashboardWidgetCodes.EmployeesStat,
-            DashboardWidgetCodes.ClassesStat,
-            DashboardWidgetCodes.SubjectsStat,
-            DashboardWidgetCodes.AttendanceRate,
-            DashboardWidgetCodes.AttendanceDetail,
-            DashboardWidgetCodes.RecentStudents,
-            DashboardWidgetCodes.EmployeesList,
-            DashboardWidgetCodes.ClassesOverview,
-            DashboardWidgetCodes.AlertsActions
-        ]);
-
-        SeedRoleWidgets(RoleCodes.Teacher,
-        [
-            DashboardWidgetCodes.StudentsStat,
-            DashboardWidgetCodes.AttendanceRate,
-            DashboardWidgetCodes.AttendanceDetail,
-            DashboardWidgetCodes.RecentStudents,
-            DashboardWidgetCodes.HomeworkDue,
-            DashboardWidgetCodes.AlertsActions
-        ]);
-
-        SeedRoleWidgets(RoleCodes.Accountant,
-        [
-            DashboardWidgetCodes.SalaryDisbursed,
-            DashboardWidgetCodes.SalaryStatus,
-            DashboardWidgetCodes.AlertsActions
-        ]);
-
-        SeedRoleWidgets(RoleCodes.Parent,
-        [
-            DashboardWidgetCodes.StudentsStat,
-            DashboardWidgetCodes.AttendanceRate,
-            DashboardWidgetCodes.AttendanceDetail,
-            DashboardWidgetCodes.RecentStudents,
-            DashboardWidgetCodes.AlertsActions
-        ]);
-
-        SeedRoleWidgets(RoleCodes.Student,
-        [
-            DashboardWidgetCodes.AttendanceRate,
-            DashboardWidgetCodes.AttendanceDetail,
-            DashboardWidgetCodes.AlertsActions
-        ]);
-    }
-
-    private void SeedRoleWidgets(string roleCode, string[] widgetCodes)
-    {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        string codes = string.Join("','", widgetCodes);
-
-        Execute.Sql($"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
-    (id, roleid, widgetid, canview, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, w.id, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets} w
-WHERE r.code = '{roleCode}'
-  AND w.code IN ('{codes}')
-  AND w.isactive = true
-  AND NOT EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions} rp
-    WHERE rp.roleid = r.id AND rp.widgetid = w.id
-  );
-""");
     }
 
     public override void Down()
     {
         Execute.Sql($"""
-DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleDashboardWidgetPermissions}
-WHERE widgetid IN (SELECT id FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets}
-    WHERE code IN ('{string.Join("','", DashboardWidgetCodes.All)}'));
-DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets};
+DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableDashboardWidgets}
+WHERE code IN ('{string.Join("','", DashboardWidgetCodes.All)}');
 """);
     }
 

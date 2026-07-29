@@ -380,12 +380,13 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
                    c.complaintdate AS ComplaintDate, c.isanonymous AS IsAnonymous,
                    c.complainantname AS ComplainantName, c.phone AS Phone, c.description AS Description,
                    c.assignedtoemployeeid AS AssignedToEmployeeId,
-                   TRIM(e.firstname || ' ' || e.lastname) AS AssignedToEmployeeName,
+                   TRIM(eu.firstname || ' ' || eu.lastname) AS AssignedToEmployeeName,
                    c.status AS Status, c.actiontaken AS ActionTaken, c.note AS Note,
                    c.documentpath AS DocumentPath, c.isactive AS IsActive
             FROM {Schema}.{DatabaseConfig.TableComplaints} c
             LEFT JOIN {Schema}.{DatabaseConfig.TableComplaintTypes} t ON t.id = c.complainttypeid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = c.assignedtoemployeeid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} eu ON eu.id = e.userid
             WHERE 1 = 1{BuildIsActiveClause(activeFilter, "c")}
             """);
         var parameters = new DynamicParameters();
@@ -408,12 +409,13 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
                    c.complaintdate AS ComplaintDate, c.isanonymous AS IsAnonymous,
                    c.complainantname AS ComplainantName, c.phone AS Phone, c.description AS Description,
                    c.assignedtoemployeeid AS AssignedToEmployeeId,
-                   TRIM(e.firstname || ' ' || e.lastname) AS AssignedToEmployeeName,
+                   TRIM(eu.firstname || ' ' || eu.lastname) AS AssignedToEmployeeName,
                    c.status AS Status, c.actiontaken AS ActionTaken, c.note AS Note,
                    c.documentpath AS DocumentPath, c.isactive AS IsActive
             FROM {Schema}.{DatabaseConfig.TableComplaints} c
             LEFT JOIN {Schema}.{DatabaseConfig.TableComplaintTypes} t ON t.id = c.complainttypeid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = c.assignedtoemployeeid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} eu ON eu.id = e.userid
             WHERE c.id = @Id;
             """;
         return await connection.QuerySingleOrDefaultAsync<ComplaintListRow>(
@@ -479,11 +481,12 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
                    a.email AS Email, a.address AS Address, a.studentname AS StudentName, a.classlabel AS ClassLabel,
                    a.inquirydate AS InquiryDate, a.nextfollowupdate AS NextFollowUpDate,
                    a.assignedtoemployeeid AS AssignedToEmployeeId,
-                   TRIM(e.firstname || ' ' || e.lastname) AS AssignedToEmployeeName,
+                   TRIM(eu.firstname || ' ' || eu.lastname) AS AssignedToEmployeeName,
                    a.reference AS Reference, a.status AS Status, a.description AS Description,
                    a.autofollowup AS AutoFollowUp, a.streamgroup AS StreamGroup, a.isactive AS IsActive
             FROM {Schema}.{DatabaseConfig.TableAdmissionInquiries} a
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = a.assignedtoemployeeid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} eu ON eu.id = e.userid
             WHERE 1 = 1{BuildIsActiveClause(activeFilter, "a")}
             """);
         var parameters = new DynamicParameters();
@@ -506,11 +509,12 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
                    a.email AS Email, a.address AS Address, a.studentname AS StudentName, a.classlabel AS ClassLabel,
                    a.inquirydate AS InquiryDate, a.nextfollowupdate AS NextFollowUpDate,
                    a.assignedtoemployeeid AS AssignedToEmployeeId,
-                   TRIM(e.firstname || ' ' || e.lastname) AS AssignedToEmployeeName,
+                   TRIM(eu.firstname || ' ' || eu.lastname) AS AssignedToEmployeeName,
                    a.reference AS Reference, a.status AS Status, a.description AS Description,
                    a.autofollowup AS AutoFollowUp, a.streamgroup AS StreamGroup, a.isactive AS IsActive
             FROM {Schema}.{DatabaseConfig.TableAdmissionInquiries} a
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = a.assignedtoemployeeid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} eu ON eu.id = e.userid
             WHERE a.id = @Id;
             """;
         return await connection.QuerySingleOrDefaultAsync<AdmissionInquiryListRow>(
@@ -593,10 +597,11 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
             .GetActiveBranchFilterAsync(_branchContext, "e", ct)
             .ConfigureAwait(false);
         string sql = $"""
-            SELECT e.id AS Id, TRIM(e.firstname || ' ' || e.lastname) AS Name
+            SELECT e.id AS Id, TRIM(u.firstname || ' ' || u.lastname) AS Name
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             WHERE e.isactive = true{branchFilter}
-            ORDER BY e.firstname ASC, e.lastname ASC;
+            ORDER BY u.firstname ASC, u.lastname ASC;
             """;
         var items = await connection.QueryAsync<DropdownDto>(
             new CommandDefinition(sql, new { ActiveBranchId = activeBranchId }, cancellationToken: ct))

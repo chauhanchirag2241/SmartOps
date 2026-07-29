@@ -9,8 +9,8 @@ public record ClassFeeSummaryDto(
     decimal TotalAmount);
 
 public record ClassFeeAmountItemDto(
-    Guid FeeTypeId,
-    string FeeTypeName,
+    Guid FeeHeadId,
+    string FeeHeadName,
     FeeCategory Category,
     string CategoryLabel,
     FeeCollectionType CollectionType,
@@ -23,8 +23,8 @@ public record ClassFeeAmountItemDto(
 
 public record ClassFeeInstallmentPreviewDto(
     Guid InstallmentId,
-    Guid FeeTypeId,
-    string FeeTypeName,
+    Guid FeeHeadId,
+    string FeeHeadName,
     string CollectionTypeLabel,
     int PeriodIndex,
     string PeriodLabel,
@@ -36,7 +36,7 @@ public record ClassFeeAmountsResponseDto(
     Guid ClassId,
     string ClassName,
     Guid AcademicYearId,
-    Guid FeeStructureVersionId,
+    Guid FeeStructureId,
     int VersionNumber,
     string VersionStatusLabel,
     bool IsEditable,
@@ -54,10 +54,10 @@ public record ClassFeePeriodAmountDto(int PeriodIndex, decimal Amount);
 
 public record SaveClassFeeAmountsRequestDto(
     Guid AcademicYearId,
-    Guid FeeStructureVersionId,
+    Guid FeeStructureId,
     IList<SaveClassFeeAmountItemDto> Amounts);
 
 public record SaveClassFeeAmountItemDto(
-    Guid FeeTypeId,
+    Guid FeeHeadId,
     decimal Amount,
     IList<ClassFeePeriodAmountDto> PeriodAmounts);

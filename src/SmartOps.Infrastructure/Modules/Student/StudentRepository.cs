@@ -174,31 +174,33 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             string enrollmentJoin = _scope.ActiveAcademicYearId.HasValue ? "INNER JOIN" : "LEFT JOIN";
 
             var schema = Context.OperationalSchema;
+            var global = IdentitySchema;
             var students = DatabaseConfig.TableStudents;
             var academics = DatabaseConfig.TableStudentAcademics;
             var attendance = DatabaseConfig.TableAttendance;
             var classFeeAmounts = DatabaseConfig.TableClassFeeAmounts;
-            var feeTypes = DatabaseConfig.TableFeeTypes;
+            var feeHeads = DatabaseConfig.TableFeeHead;
             var feePayments = DatabaseConfig.TableFeePayments;
 
             var countSql = $@"
             SELECT COUNT(*)
             FROM {schema}.{students} s
+            INNER JOIN {global}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
             {whereClause};";
 
             var querySql = $@"
             SELECT
                 s.id AS Id,
                 a.classid AS ClassId,
-                TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS Name,
-                COALESCE(s.email, 'N/A') AS Email,
+                TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS Name,
+                COALESCE(u.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
                 a.rollnumber AS RollNumber,
                 CASE
-                    WHEN c.classname IS NOT NULL THEN 
-                        c.classname || ' — ' || 
-                        CASE c.section 
-                            WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE 'N/A' 
+                    WHEN cg.classname IS NOT NULL THEN
+                        cg.classname || ' — ' ||
+                        CASE c.section
+                            WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE 'N/A'
                         END
                     ELSE 'N/A'
                 END AS Class,
@@ -212,11 +214,12 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 s.isactive AS IsActive,
                 COALESCE(a.isactive, false) AS EnrollmentIsActive
             FROM {schema}.{students} s
+            INNER JOIN {global}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
             {enrollmentJoin} (
                 SELECT sa.studentid,
                        sa.classid,
                        sa.rollnumber,
-                       sa.feestructureversionid,
+                       sa.feestructureid,
                        sa.academicyearid,
                        sa.isactive,
                        ROW_NUMBER() OVER(
@@ -226,7 +229,9 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 WHERE {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause()}
             ) a ON s.id = a.studentid AND a.rn = 1
             LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c
-                ON c.id = a.classid AND c.academicyearid = a.academicyearid
+                ON c.id = a.classid
+            LEFT JOIN {schema}.{DatabaseConfig.TableClassGroups} cg
+                ON cg.id = c.classgroupid
             LEFT JOIN LATERAL (
                 SELECT CAST(ROUND(
                     100.0 * COUNT(*) FILTER (WHERE att.status IN (1, 4))
@@ -240,19 +245,19 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             LEFT JOIN LATERAL (
                 SELECT SUM(cfa.amount) AS total_fees
                 FROM {schema}.{classFeeAmounts} cfa
-                INNER JOIN {schema}.{feeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-                WHERE cfa.classid = a.classid
-                  AND cfa.feestructureversionid = a.feestructureversionid
+                INNER JOIN {schema}.{feeHeads} ft ON ft.id = cfa.feeheadid AND ft.isactive = true
+                WHERE cfa.classgroupid = c.classgroupid
+                  AND cfa.feestructureid = a.feestructureid
                   AND cfa.isactive = true
-                  AND {StudentFeeHeadAssignmentSql.FeeTypeIncludedPredicate(schema, "cfa.feetypeid", "s.id", "a.feestructureversionid")}
-            ) fee_totals ON a.classid IS NOT NULL AND a.feestructureversionid IS NOT NULL
+                  AND {StudentFeeHeadAssignmentSql.FeeHeadIncludedPredicate(schema, "cfa.feeheadid", "s.id", "a.feestructureid")}
+            ) fee_totals ON c.classgroupid IS NOT NULL AND a.feestructureid IS NOT NULL
             LEFT JOIN LATERAL (
                 SELECT SUM(fp.amount) AS paid
                 FROM {schema}.{feePayments} fp
                 WHERE fp.studentid = s.id
-                  AND fp.feestructureversionid = a.feestructureversionid
+                  AND fp.feestructureid = a.feestructureid
                   AND fp.isactive = true
-            ) paid_totals ON a.feestructureversionid IS NOT NULL
+            ) paid_totals ON a.feestructureid IS NOT NULL
             {whereClause}
             ORDER BY {orderBy}";
 
@@ -344,27 +349,6 @@ WHERE id = @StudentId AND isactive = true
         }).ConfigureAwait(false);
     }
 
-    public async Task SetStudentParentUserIdAsync(Guid parentId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        string sql = $"""
-UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudentParents}
-SET userid = @UserId, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1
-WHERE id = @ParentId AND isactive = true
-""";
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    ParentId = parentId,
-                    UserId = userId,
-                    Now = DateTime.UtcNow,
-                    Actor = ResolveUpdateActor()
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
     public async Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -445,19 +429,20 @@ WHERE id = @ParentId AND isactive = true
                 AND EXISTS (
                     SELECT 1
                     FROM {g}.{DatabaseConfig.TableStudentAcademics} sa
+                    INNER JOIN {g}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
                     LEFT JOIN LATERAL (
                         SELECT SUM(cfa.amount) AS total_fees
                         FROM {g}.{DatabaseConfig.TableClassFeeAmounts} cfa
-                        INNER JOIN {g}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-                        WHERE cfa.classid = sa.classid
-                          AND cfa.feestructureversionid = sa.feestructureversionid
+                        INNER JOIN {g}.{DatabaseConfig.TableFeeHead} ft ON ft.id = cfa.feeheadid AND ft.isactive = true
+                        WHERE cfa.classgroupid = cl.classgroupid
+                          AND cfa.feestructureid = sa.feestructureid
                           AND cfa.isactive = true
                     ) ft ON true
                     LEFT JOIN LATERAL (
                         SELECT SUM(fp.amount) AS paid
                         FROM {g}.{DatabaseConfig.TableFeePayments} fp
                         WHERE fp.studentid = sa.studentid
-                          AND fp.feestructureversionid = sa.feestructureversionid
+                          AND fp.feestructureid = sa.feestructureid
                           AND fp.isactive = true
                     ) pt ON true
                     WHERE sa.studentid = s.id
@@ -470,7 +455,7 @@ WHERE id = @ParentId AND isactive = true
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            where += " AND (s.firstname ILIKE @SearchTerm OR s.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
+            where += " AND (u.firstname ILIKE @SearchTerm OR u.lastname ILIKE @SearchTerm OR s.admissionno ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 
@@ -500,7 +485,7 @@ WHERE id = @ParentId AND isactive = true
 
         if (IsSortKey(sortColumn, "student", "name"))
         {
-            return $"s.firstname {direction}, s.lastname {direction}, s.id ASC";
+            return $"u.firstname {direction}, u.lastname {direction}, s.id ASC";
         }
 
         if (IsSortKey(sortColumn, "admNo"))
@@ -510,7 +495,7 @@ WHERE id = @ParentId AND isactive = true
 
         if (IsSortKey(sortColumn, "class"))
         {
-            return $"c.classname {direction}, c.section {direction}, s.id ASC";
+            return $"cg.classname {direction}, c.section {direction}, s.id ASC";
         }
 
         return "s.createdon DESC, s.id ASC";
@@ -546,9 +531,13 @@ WHERE id = @ParentId AND isactive = true
     private string BuildStudentDetailSql(bool includeInactive)
     {
         var g = Context.OperationalSchema;
-        var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
+        var global = IdentitySchema;
+        var activeFilter = includeInactive ? string.Empty : " AND s.isactive = true";
         return $@"
-            SELECT * FROM {g}.{DatabaseConfig.TableStudents} WHERE id = @Id{activeFilter};
+            SELECT s.*, u.firstname AS FirstName, u.lastname AS LastName, u.email AS Email, u.mobile AS Mobile
+            FROM {g}.{DatabaseConfig.TableStudents} s
+            INNER JOIN {global}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
+            WHERE s.id = @Id{activeFilter};
             SELECT * FROM {g}.{DatabaseConfig.TableStudentParents} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics}
             WHERE studentid = @Id
@@ -592,14 +581,14 @@ WHERE id = @ParentId AND isactive = true
         {
             foreach (var academic in student.Academics)
             {
-                if (!academic.FeeStructureVersionId.HasValue || academic.FeeStructureVersionId == Guid.Empty)
+                if (!academic.FeeStructureId.HasValue || academic.FeeStructureId == Guid.Empty)
                 {
                     var admissionVersion = await _feeStructureRepo
-                        .GetAdmissionVersionForYearAsync(academic.AcademicYearId, CancellationToken.None)
+                        .GetAdmissionFeeStructureAsync(CancellationToken.None)
                         .ConfigureAwait(false);
                     if (admissionVersion is not null)
                     {
-                        academic.FeeStructureVersionId = admissionVersion.Id;
+                        academic.FeeStructureId = admissionVersion.Id;
                     }
                 }
 
@@ -634,11 +623,11 @@ WHERE id = @ParentId AND isactive = true
         }
 
         StudentAcademicEntity? admissionAcademic = student.Academics.FirstOrDefault();
-        Guid? feeVersionId = admissionAcademic?.FeeStructureVersionId;
+        Guid? feeVersionId = admissionAcademic?.FeeStructureId;
         if (!feeVersionId.HasValue || feeVersionId.Value == Guid.Empty)
         {
             feeVersionId = student.Academics
-                .Select(a => a.FeeStructureVersionId)
+                .Select(a => a.FeeStructureId)
                 .FirstOrDefault(v => v.HasValue && v.Value != Guid.Empty);
         }
 
@@ -648,7 +637,7 @@ WHERE id = @ParentId AND isactive = true
             {
                 assignment.Id = Guid.NewGuid();
                 assignment.StudentId = studentId;
-                assignment.FeeStructureVersionId = feeVersionId.Value;
+                assignment.FeeStructureId = feeVersionId.Value;
                 EnsureInsertAudit(assignment, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
@@ -675,11 +664,11 @@ WHERE id = @ParentId AND isactive = true
             return;
         }
 
-        Guid versionId = academic.FeeStructureVersionId ?? Guid.Empty;
+        Guid versionId = academic.FeeStructureId ?? Guid.Empty;
         if (versionId == Guid.Empty)
         {
             var admissionVersion = await _feeStructureRepo
-                .GetAdmissionVersionForYearAsync(academic.AcademicYearId, cancellationToken)
+                .GetAdmissionFeeStructureAsync(cancellationToken)
                 .ConfigureAwait(false);
             versionId = admissionVersion?.Id ?? Guid.Empty;
         }
@@ -689,11 +678,17 @@ WHERE id = @ParentId AND isactive = true
             return;
         }
 
+        Guid classGroupId = await ResolveClassGroupIdAsync(academic.ClassId, cancellationToken).ConfigureAwait(false);
+        if (classGroupId == Guid.Empty)
+        {
+            return;
+        }
+
         IList<StudentFeeHeadAssignmentEntity> assignments = student.FeeHeadAssignments;
         await _studentFeeInstallmentRepo
             .GenerateForStudentAdmissionAsync(
                 studentId,
-                academic.ClassId,
+                classGroupId,
                 versionId,
                 academic.AcademicYearId,
                 assignments,
@@ -746,9 +741,9 @@ WHERE id = @ParentId AND isactive = true
                         academic.Id = existingAcademic.Id;
                     }
 
-                    if (!academic.FeeStructureVersionId.HasValue || academic.FeeStructureVersionId.Value == Guid.Empty)
+                    if (!academic.FeeStructureId.HasValue || academic.FeeStructureId.Value == Guid.Empty)
                     {
-                        academic.FeeStructureVersionId = existingAcademic.FeeStructureVersionId;
+                        academic.FeeStructureId = existingAcademic.FeeStructureId;
                     }
                 }
 
@@ -757,15 +752,15 @@ WHERE id = @ParentId AND isactive = true
                     bool classValid = await connection.QuerySingleAsync<bool>(
                         $"""
                         SELECT EXISTS(
-                            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-                            WHERE id = @ClassId AND academicyearid = @AcademicYearId AND isactive = true);
+                            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
+                            WHERE c.id = @ClassId AND c.isactive = true);
                         """,
-                        new { academic.ClassId, academic.AcademicYearId },
+                        new { academic.ClassId },
                         transaction).ConfigureAwait(false);
                     if (!classValid)
                     {
                         throw new InvalidOperationException(
-                            "Selected class does not belong to the chosen academic year.");
+                            "Selected class is not active.");
                     }
                 }
 
@@ -871,7 +866,7 @@ WHERE id = @ParentId AND isactive = true
         string sql = $"""
             SELECT id AS Id, studentid AS StudentId, admissiondate AS AdmissionDate,
                    academicyearid AS AcademicYearId, classid AS ClassId,
-                   feestructureversionid AS FeeStructureVersionId, rollnumber AS RollNumber,
+                   feestructureid AS FeeStructureId, rollnumber AS RollNumber,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -923,18 +918,18 @@ WHERE id = @ParentId AND isactive = true
         bool classValid = await connection.QuerySingleAsync<bool>(
             $"""
             SELECT EXISTS(
-                SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
-                WHERE id = @ClassId AND academicyearid = @TargetYearId AND isactive = true);
+                SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+                WHERE c.id = @ClassId AND c.isactive = true);
             """,
-            new { ClassId = targetClassId, TargetYearId = targetAcademicYearId }).ConfigureAwait(false);
+            new { ClassId = targetClassId }).ConfigureAwait(false);
 
         if (!classValid)
         {
-            return "No classes in target year. Create classes first.";
+            return "Selected target class is not active.";
         }
 
         var admissionFeeStructure = await _feeStructureRepo
-            .GetAdmissionVersionForYearAsync(targetAcademicYearId, cancellationToken)
+            .GetAdmissionFeeStructureAsync(cancellationToken)
             .ConfigureAwait(false);
         if (admissionFeeStructure is null)
         {
@@ -942,7 +937,7 @@ WHERE id = @ParentId AND isactive = true
         }
 
         bool classHasConfiguredAmounts = await _classFeeAmountRepo
-            .ClassHasConfiguredAmountsAsync(targetClassId, admissionFeeStructure.Id, cancellationToken)
+            .ClassHasConfiguredAmountsAsync(targetClassId, targetAcademicYearId, admissionFeeStructure.Id, cancellationToken)
             .ConfigureAwait(false);
         if (!classHasConfiguredAmounts)
         {
@@ -1023,7 +1018,7 @@ WHERE id = @ParentId AND isactive = true
         }
 
         var targetFeeVersion = await _feeStructureRepo
-            .GetAdmissionVersionForYearAsync(targetAcademicYearId, cancellationToken)
+            .GetAdmissionFeeStructureAsync(cancellationToken)
             .ConfigureAwait(false);
         if (targetFeeVersion is null)
         {
@@ -1042,7 +1037,7 @@ WHERE id = @ParentId AND isactive = true
         var pendingFeeTransfers = new List<(
             Guid StudentId,
             Guid SourceClassId,
-            Guid SourceFeeStructureVersionId,
+            Guid SourceFeeStructureId,
             Guid TargetClassId)>();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -1052,15 +1047,15 @@ WHERE id = @ParentId AND isactive = true
                 bool classValid = await conn.QuerySingleAsync<bool>(
                     $"""
                     SELECT EXISTS(
-                        SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses}
-                        WHERE id = @ClassId AND academicyearid = @TargetYearId AND isactive = true);
+                        SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+                        WHERE c.id = @ClassId AND c.isactive = true);
                     """,
-                    new { ClassId = entry.TargetClassId, TargetYearId = targetAcademicYearId },
+                    new { ClassId = entry.TargetClassId },
                     tx).ConfigureAwait(false);
 
                 if (!classValid)
                 {
-                    errors.Add($"Student {entry.StudentId}: target class is invalid for the target academic year.");
+                    errors.Add($"Student {entry.StudentId}: target class is not active.");
                     continue;
                 }
 
@@ -1133,7 +1128,7 @@ WHERE id = @ParentId AND isactive = true
                         SET classid = @ClassId,
                             rollnumber = @RollNumber,
                             admissiondate = @AdmissionDate,
-                            feestructureversionid = @FeeStructureVersionId,
+                            feestructureid = @FeeStructureId,
                             isactive = true,
                             updatedby = @UpdatedBy,
                             updatedon = @UpdatedOn,
@@ -1146,7 +1141,7 @@ WHERE id = @ParentId AND isactive = true
                             ClassId = entry.TargetClassId,
                             RollNumber = rollNumber,
                             AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
-                            FeeStructureVersionId = targetFeeVersion.Id,
+                            FeeStructureId = targetFeeVersion.Id,
                             UpdatedBy = actorId,
                             UpdatedOn = utcNow
                         },
@@ -1162,7 +1157,7 @@ WHERE id = @ParentId AND isactive = true
                         ClassId = entry.TargetClassId,
                         AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
                         RollNumber = rollNumber,
-                        FeeStructureVersionId = targetFeeVersion.Id
+                        FeeStructureId = targetFeeVersion.Id
                     };
                     EnsureInsertAudit(newRecord, utcNow, actorId);
                     await InsertAsync(conn, schema, DatabaseConfig.TableStudentAcademics, newRecord, tx)
@@ -1173,7 +1168,7 @@ WHERE id = @ParentId AND isactive = true
                 pendingFeeTransfers.Add((
                     entry.StudentId,
                     sourceRecord.ClassId,
-                    sourceRecord.FeeStructureVersionId ?? Guid.Empty,
+                    sourceRecord.FeeStructureId ?? Guid.Empty,
                     entry.TargetClassId));
             }
         }).ConfigureAwait(false);
@@ -1211,29 +1206,31 @@ WHERE id = @ParentId AND isactive = true
         Guid studentId,
         Guid sourceAcademicYearId,
         Guid sourceClassId,
-        Guid sourceFeeStructureVersionId,
+        Guid sourceFeeStructureId,
         Guid targetClassId,
-        Guid targetFeeStructureVersionId,
+        Guid targetFeeStructureId,
         Guid targetAcademicYearId,
         CancellationToken cancellationToken)
     {
-        if (sourceFeeStructureVersionId == Guid.Empty || targetFeeStructureVersionId == Guid.Empty)
+        if (sourceFeeStructureId == Guid.Empty || targetFeeStructureId == Guid.Empty)
         {
             return 0m;
         }
 
         decimal paid = await _feeCollectionRepo
-            .GetStudentPaidTotalAsync(studentId, sourceFeeStructureVersionId, cancellationToken)
+            .GetStudentPaidTotalAsync(studentId, sourceFeeStructureId, cancellationToken)
             .ConfigureAwait(false);
         FeeCollectionStudentRow? sourceRow = await _feeCollectionRepo
             .GetStudentRowAsync(studentId, sourceAcademicYearId, cancellationToken)
             .ConfigureAwait(false);
 
         decimal total = sourceRow?.TotalFees ?? 0m;
-        if (total <= 0 && sourceClassId != Guid.Empty)
+        Guid sourceClassGroupId = sourceRow?.ClassGroupId
+            ?? await ResolveClassGroupIdAsync(sourceClassId, cancellationToken).ConfigureAwait(false);
+        if (total <= 0 && sourceClassGroupId != Guid.Empty)
         {
             total = await _feeCollectionRepo
-                .GetStudentTotalFeesAsync(sourceClassId, sourceFeeStructureVersionId, cancellationToken)
+                .GetStudentTotalFeesAsync(sourceClassGroupId, sourceFeeStructureId, sourceAcademicYearId, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -1246,16 +1243,22 @@ WHERE id = @ParentId AND isactive = true
         await _studentFeeInstallmentRepo
             .CopyFeeHeadAssignmentsFromVersionAsync(
                 studentId,
-                sourceFeeStructureVersionId,
-                targetFeeStructureVersionId,
+                sourceFeeStructureId,
+                targetFeeStructureId,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        Guid targetClassGroupId = await ResolveClassGroupIdAsync(targetClassId, cancellationToken).ConfigureAwait(false);
+        if (targetClassGroupId == Guid.Empty)
+        {
+            return 0m;
+        }
 
         await _studentFeeInstallmentRepo
             .EnsureCurrentYearInstallmentsAsync(
                 studentId,
-                targetClassId,
-                targetFeeStructureVersionId,
+                targetClassGroupId,
+                targetFeeStructureId,
                 targetAcademicYearId,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1263,14 +1266,30 @@ WHERE id = @ParentId AND isactive = true
         await _studentFeeInstallmentRepo
             .AddCarriedForwardBalanceAsync(
                 studentId,
-                targetClassId,
-                targetFeeStructureVersionId,
+                targetClassGroupId,
+                targetFeeStructureId,
                 targetAcademicYearId,
                 pending,
                 cancellationToken)
             .ConfigureAwait(false);
 
         return pending;
+    }
+
+    private async Task<Guid> ResolveClassGroupIdAsync(Guid classId, CancellationToken cancellationToken)
+    {
+        if (classId == Guid.Empty)
+        {
+            return Guid.Empty;
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<Guid?>(
+            new CommandDefinition(
+                $@"SELECT classgroupid FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
+                   WHERE id = @ClassId;",
+                new { ClassId = classId },
+                cancellationToken: cancellationToken)).ConfigureAwait(false) ?? Guid.Empty;
     }
 
     #endregion

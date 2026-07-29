@@ -17,7 +17,10 @@ public interface IAcademicYearRepository
         string? sortDirection = null,
         AcademicYearFilter filter = AcademicYearFilter.Active,
         CancellationToken cancellationToken = default);
-    /// <param name="currentAndFutureOnly">When true, excludes archived (past) years; keeps current and future years.</param>
+    /// <param name="currentAndFutureOnly">
+    /// When false, returns every active year (Current, Draft, Archived) for the header switcher.
+    /// When true, keeps Current and Draft plus Archived years that start on/after the current year (excludes past Archived).
+    /// </param>
     Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(
         bool currentAndFutureOnly = false,
         CancellationToken cancellationToken = default);

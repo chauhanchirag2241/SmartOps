@@ -4,55 +4,56 @@ public interface IClassFeeInstallmentRepository
 {
     Task<IList<ClassFeeInstallmentRow>> GetByClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default);
 
     Task<IList<ClassFeeAmountForInstallmentRow>> GetClassAmountsForVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
+        Guid academicYearId,
         CancellationToken ct = default);
 
     Task<IList<Guid>> GetClassIdsWithAmountsForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default);
 
-    Task<bool> VersionHasInstallmentPaymentsAsync(Guid feeStructureVersionId, CancellationToken ct = default);
+    Task<bool> VersionHasInstallmentPaymentsAsync(Guid feeStructureId, CancellationToken ct = default);
 
-    Task RegenerateForClassFeeTypeAsync(
+    Task RegenerateForClassFeeHeadAsync(
         Guid classId,
-        Guid feeStructureVersionId,
-        Guid feeTypeId,
+        Guid feeStructureId,
+        Guid feeHeadId,
         Guid academicYearId,
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods,
         CancellationToken ct = default);
 
     Task RegenerateForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 
     Task RegenerateForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 
     Task<IList<InstallmentPaidRow>> GetPaidByInstallmentAsync(
         Guid studentId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default);
 
     Task<bool> InstallmentBelongsToClassVersionAsync(
         Guid installmentId,
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default);
 
     Task<bool> IsInstallmentSchemaReadyAsync(CancellationToken ct = default);
 
     Task EnsureMissingInstallmentsForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 }
@@ -60,8 +61,8 @@ public interface IClassFeeInstallmentRepository
 public sealed class ClassFeeInstallmentRow
 {
     public Guid Id { get; init; }
-    public Guid FeeTypeId { get; init; }
-    public string FeeTypeName { get; init; } = string.Empty;
+    public Guid FeeHeadId { get; init; }
+    public string FeeHeadName { get; init; } = string.Empty;
     public int Category { get; init; }
     public int CollectionType { get; init; }
     public int PeriodIndex { get; init; }
@@ -73,8 +74,8 @@ public sealed class ClassFeeInstallmentRow
 
 public sealed class ClassFeeAmountForInstallmentRow
 {
-    public Guid FeeTypeId { get; init; }
-    public string FeeTypeName { get; init; } = string.Empty;
+    public Guid FeeHeadId { get; init; }
+    public string FeeHeadName { get; init; } = string.Empty;
     public int Category { get; init; }
     public int CollectionType { get; init; }
     public decimal Amount { get; init; }
@@ -84,6 +85,6 @@ public sealed class ClassFeeAmountForInstallmentRow
 public sealed class InstallmentPaidRow
 {
     public Guid InstallmentId { get; init; }
-    public Guid FeeTypeId { get; init; }
+    public Guid FeeHeadId { get; init; }
     public decimal PaidAmount { get; init; }
 }

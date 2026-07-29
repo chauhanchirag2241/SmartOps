@@ -6,13 +6,13 @@ public interface IClassFeeAmountService
 {
     Task<Result<IList<ClassFeeSummaryDto>>> GetClassSummariesAsync(
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default);
 
     Task<Result<ClassFeeAmountsResponseDto>> GetClassAmountsAsync(
         Guid classId,
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default);
 
     /// <summary>Active fee structure only — for student admission preview (never draft/published-only).</summary>
@@ -29,6 +29,6 @@ public interface IClassFeeAmountService
     Task<Result<IList<ClassFeeInstallmentPreviewDto>>> GetInstallmentPreviewAsync(
         Guid classId,
         Guid academicYearId,
-        Guid? feeStructureVersionId,
+        Guid? feeStructureId,
         CancellationToken ct = default);
 }

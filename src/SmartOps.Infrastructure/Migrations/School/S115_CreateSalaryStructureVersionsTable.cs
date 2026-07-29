@@ -32,7 +32,7 @@ public sealed class S115_CreateSalaryStructureVersionsTable : Migration
         Execute.Sql($"""
 ALTER TABLE {S}.{DatabaseConfig.TableSalaryStructureVersions}
     ADD CONSTRAINT fk_salarystructureversions_branchid FOREIGN KEY (branchid)
-    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+    REFERENCES {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolBranches}(id);
 
 CREATE INDEX ix_salarystructureversions_branchid ON {S}.{DatabaseConfig.TableSalaryStructureVersions} (branchid);
 """);

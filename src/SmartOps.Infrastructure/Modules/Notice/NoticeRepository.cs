@@ -27,7 +27,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
             ? _tenantSchema.GetOperationalSchema()
             : DatabaseConfig.Schema_School;
 
-    private static string G => DatabaseConfig.Schema_Global;
+    private string G => IdentitySchema;
 
     public async Task<Guid> CreateAsync(NoticeEntity entity, CancellationToken ct = default)
     {
@@ -171,17 +171,12 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT COALESCE(t.userid, u.id) AS Id,
-                   TRIM(COALESCE(t.firstname, '') || ' ' || COALESCE(t.lastname, '')) AS Name,
-                   t.email AS Subtitle
+            SELECT DISTINCT t.userid AS Id,
+                   TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS Name,
+                   u.email AS Subtitle
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
-            LEFT JOIN {G}.{DatabaseConfig.TableUsers} u
-                ON u.isactive = true
-               AND t.userid IS NULL
-               AND t.email IS NOT NULL
-               AND lower(trim(u.email)) = lower(trim(t.email))
+            INNER JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             WHERE t.isactive = true
-              AND COALESCE(t.userid, u.id) IS NOT NULL
             ORDER BY Name;
             """;
         var rows = await connection.QueryAsync<NoticeAudienceRow>(new CommandDefinition(sql, cancellationToken: ct))
@@ -189,112 +184,33 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
         return rows.ToList();
     }
 
-    public async Task<IList<NoticeAudienceRow>> GetParentAudienceAsync(Guid? classId, CancellationToken ct = default)
+    public Task<IList<NoticeAudienceRow>> GetParentAudienceAsync(Guid? classId, CancellationToken ct = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string classFilter = classId.HasValue ? "AND sa.classid = @ClassId" : string.Empty;
-        string sql = $"""
-            SELECT DISTINCT p.Id, p.Name, p.Subtitle
-            FROM (
-                SELECT psm.parentuserid AS Id,
-                       COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name,
-                       STRING_AGG(DISTINCT TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')), ', ') AS Subtitle
-                FROM {Schema}.{DatabaseConfig.TableParentStudentMappings} psm
-                INNER JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = psm.parentuserid AND u.isactive = true
-                INNER JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = psm.studentid AND s.isactive = true
-                INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-                WHERE psm.isactive = true {classFilter}
-                GROUP BY psm.parentuserid, u.username, u.email
-                UNION
-                SELECT sp.userid AS Id,
-                       COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name,
-                       STRING_AGG(DISTINCT TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')), ', ') AS Subtitle
-                FROM {Schema}.{DatabaseConfig.TableStudentParents} sp
-                INNER JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = sp.userid AND u.isactive = true
-                INNER JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = sp.studentid AND s.isactive = true
-                INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-                WHERE sp.isactive = true AND sp.userid IS NOT NULL {classFilter}
-                GROUP BY sp.userid, u.username, u.email
-            ) p
-            ORDER BY p.Name;
-            """;
-        var rows = await connection.QueryAsync<NoticeAudienceRow>(
-            new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct)).ConfigureAwait(false);
-        return rows.ToList();
+        // Parent portal accounts are no longer provisioned; there is no parent audience to target.
+        return Task.FromResult<IList<NoticeAudienceRow>>(Array.Empty<NoticeAudienceRow>());
     }
 
     public async Task<IList<NoticeAudienceRow>> GetSchoolUserAudienceAsync(Guid schoolId, CancellationToken ct = default)
     {
+        _ = schoolId;
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT DISTINCT u.id AS Id,
                    COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name,
                    u.email AS Subtitle
             FROM {G}.{DatabaseConfig.TableUsers} u
-            INNER JOIN {G}.{DatabaseConfig.TableUserSchoolMappings} usm ON usm.userid = u.id AND usm.isactive = true
-            WHERE u.isactive = true AND usm.schoolid = @SchoolId
+            WHERE u.isactive = true
             ORDER BY Name;
             """;
         var rows = await connection.QueryAsync<NoticeAudienceRow>(
-            new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: ct)).ConfigureAwait(false);
+            new CommandDefinition(sql, cancellationToken: ct)).ConfigureAwait(false);
         return rows.ToList();
     }
 
-    public async Task<IList<NoticeFeeParentRow>> GetPendingFeeParentTargetsAsync(Guid academicYearId, CancellationToken ct = default)
+    public Task<IList<NoticeFeeParentRow>> GetPendingFeeParentTargetsAsync(Guid academicYearId, CancellationToken ct = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            WITH pending_students AS (
-                SELECT s.id AS studentid,
-                       TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) AS studentname,
-                       GREATEST(
-                           COALESCE(fee_totals.total_fees, 0) - COALESCE(paid_totals.paid, 0),
-                           0) AS pendingamount
-                FROM {Schema}.{DatabaseConfig.TableStudents} s
-                INNER JOIN (
-                    SELECT sa.studentid, sa.classid, sa.feestructureversionid,
-                           ROW_NUMBER() OVER (PARTITION BY sa.studentid ORDER BY sa.isactive DESC, sa.createdon DESC) AS rn
-                    FROM {Schema}.{DatabaseConfig.TableStudentAcademics} sa
-                    WHERE sa.academicyearid = @AcademicYearId
-                ) sa ON sa.studentid = s.id AND sa.rn = 1
-                LEFT JOIN LATERAL (
-                    SELECT COALESCE(
-                        NULLIF((SELECT SUM(sfi.amount) FROM {Schema}.{DatabaseConfig.TableStudentFeeInstallments} sfi
-                                WHERE sfi.studentid = s.id AND sfi.feestructureversionid = sa.feestructureversionid AND sfi.isactive = true), 0),
-                        (SELECT SUM(cfi.amount) FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
-                         WHERE cfi.classid = sa.classid AND cfi.feestructureversionid = sa.feestructureversionid AND cfi.isactive = true),
-                        0) AS total_fees
-                ) fee_totals ON true
-                LEFT JOIN LATERAL (
-                    SELECT SUM(fp.amount) AS paid
-                    FROM {Schema}.{DatabaseConfig.TableFeePayments} fp
-                    WHERE fp.studentid = s.id AND fp.feestructureversionid = sa.feestructureversionid AND fp.isactive = true
-                ) paid_totals ON true
-                WHERE s.isactive = true
-            ),
-            parent_links AS (
-                SELECT psm.parentuserid, ps.studentname, ps.pendingamount
-                FROM {Schema}.{DatabaseConfig.TableParentStudentMappings} psm
-                INNER JOIN pending_students ps ON ps.studentid = psm.studentid
-                WHERE psm.isactive = true AND ps.pendingamount > 0
-                UNION ALL
-                SELECT sp.userid, ps.studentname, ps.pendingamount
-                FROM {Schema}.{DatabaseConfig.TableStudentParents} sp
-                INNER JOIN pending_students ps ON ps.studentid = sp.studentid
-                WHERE sp.isactive = true AND sp.userid IS NOT NULL AND ps.pendingamount > 0
-            )
-            SELECT pl.parentuserid AS ParentUserId,
-                   COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS ParentName,
-                   SUM(pl.pendingamount) AS PendingAmount,
-                   STRING_AGG(DISTINCT pl.studentname || ' (₹' || TRIM(TO_CHAR(pl.pendingamount, '999999999.99')) || ')', ', ') AS StudentSummary
-            FROM parent_links pl
-            INNER JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = pl.parentuserid AND u.isactive = true
-            GROUP BY pl.parentuserid, u.username, u.email
-            ORDER BY ParentName;
-            """;
-        var rows = await connection.QueryAsync<NoticeFeeParentRow>(
-            new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: ct)).ConfigureAwait(false);
-        return rows.ToList();
+        // Parent portal accounts are no longer provisioned; there is no parent fee-reminder audience to target.
+        return Task.FromResult<IList<NoticeFeeParentRow>>(Array.Empty<NoticeFeeParentRow>());
     }
 
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct = default)

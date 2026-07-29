@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using SmartOps.Application.Abstractions;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Infrastructure.Migrations.Global;
 
 namespace SmartOps.Infrastructure.MultiTenancy;
@@ -150,36 +151,26 @@ SELECT EXISTS (
         await using NpgsqlConnection schoolDb = new(connectionString);
         await schoolDb.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        string g = DatabaseConfig.Schema_Global;
-        int menuCount = await schoolDb.ExecuteScalarAsync<int>(
-            new CommandDefinition(
-                $"""
-SELECT COUNT(*)::int
-FROM {g}.{DatabaseConfig.TableMenus}
-WHERE isactive = true
-""",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        bool hasEmployeesMenu = await schoolDb.ExecuteScalarAsync<bool>(
+        string man = DatabaseConfig.Schema_Man;
+        bool hasAdminRole = await schoolDb.ExecuteScalarAsync<bool>(
             new CommandDefinition(
                 $"""
 SELECT EXISTS (
-    SELECT 1 FROM {g}.{DatabaseConfig.TableMenus}
-    WHERE code = 'EMPLOYEES' AND isactive = true
+    SELECT 1 FROM {man}.{DatabaseConfig.TableRoles}
+    WHERE lower(trim(name)) = lower(trim(@Name)) AND isactive = true
 )
 """,
+                new { Name = RoleNames.Admin },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        if (menuCount > 0 && hasEmployeesMenu)
+        if (hasAdminRole)
         {
             return;
         }
 
         _logger.LogWarning(
-            "School {SchoolId} dedicated database is missing identity menu seed data (menus={MenuCount}, employeesMenu={HasEmployees}); seeding from platform.",
-            schoolId,
-            menuCount,
-            hasEmployeesMenu);
+            "School {SchoolId} dedicated database is missing Admin role; running slim identity seed.",
+            schoolId);
 
         await using NpgsqlConnection platform = (NpgsqlConnection)await _connectionFactory
             .CreatePlatformConnectionAsync(cancellationToken)

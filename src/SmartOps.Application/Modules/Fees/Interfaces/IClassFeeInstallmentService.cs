@@ -4,18 +4,18 @@ public interface IClassFeeInstallmentService
 {
     Task RegenerateForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 
     Task RegenerateForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 
     Task EnsureMissingInstallmentsForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default);
 }

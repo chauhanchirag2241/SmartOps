@@ -15,24 +15,24 @@ public sealed class StudentFeeHeadAssignmentRepository : BaseRepository, IStuden
     {
     }
 
-    public async Task<IReadOnlySet<Guid>?> GetIncludedFeeTypeIdsAsync(
+    public async Task<IReadOnlySet<Guid>?> GetIncludedFeeHeadIdsAsync(
         Guid studentId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT feetypeid AS FeeTypeId, isincluded AS IsIncluded
+            SELECT feeheadid AS FeeHeadId, isincluded AS IsIncluded
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentFeeHeadAssignments}
             WHERE studentid = @StudentId
-              AND feestructureversionid = @FeeStructureVersionId
+              AND feestructureid = @FeeStructureId
               AND isactive = true;
             """;
 
         IEnumerable<AssignmentRow> rows = await connection
             .QueryAsync<AssignmentRow>(new CommandDefinition(
                 sql,
-                new { StudentId = studentId, FeeStructureVersionId = feeStructureVersionId },
+                new { StudentId = studentId, FeeStructureId = feeStructureId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
 
@@ -42,12 +42,12 @@ public sealed class StudentFeeHeadAssignmentRepository : BaseRepository, IStuden
             return null;
         }
 
-        return list.Where(r => r.IsIncluded).Select(r => r.FeeTypeId).ToHashSet();
+        return list.Where(r => r.IsIncluded).Select(r => r.FeeHeadId).ToHashSet();
     }
 
     private sealed class AssignmentRow
     {
-        public Guid FeeTypeId { get; init; }
+        public Guid FeeHeadId { get; init; }
         public bool IsIncluded { get; init; }
     }
 }

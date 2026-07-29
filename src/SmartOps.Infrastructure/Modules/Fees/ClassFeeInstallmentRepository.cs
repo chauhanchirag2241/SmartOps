@@ -68,7 +68,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     public async Task<IList<ClassFeeInstallmentRow>> GetByClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default)
     {
         if (!await IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
@@ -79,8 +79,8 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT cfi.id AS Id,
-                   cfi.feetypeid AS FeeTypeId,
-                   ft.name AS FeeTypeName,
+                   cfi.feeheadid AS FeeHeadId,
+                   ft.name AS FeeHeadName,
                    ft.category AS Category,
                    ft.frequency AS CollectionType,
                    cfi.periodindex AS PeriodIndex,
@@ -89,16 +89,16 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                    cfi.periodend AS PeriodEnd,
                    cfi.amount AS Amount
             FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
-            INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfi.feetypeid AND ft.isactive = true
-            WHERE cfi.classid = @ClassId
-              AND cfi.feestructureversionid = @FeeStructureVersionId
+            INNER JOIN {Schema}.{DatabaseConfig.TableFeeHead} ft ON ft.id = cfi.feeheadid AND ft.isactive = true
+            WHERE cfi.classgroupid = @ClassGroupId
+              AND cfi.feestructureid = @FeeStructureId
               AND cfi.isactive = true
             ORDER BY ft.name, cfi.periodindex;
             """;
         IEnumerable<ClassFeeInstallmentRow> rows = await connection
             .QueryAsync<ClassFeeInstallmentRow>(new CommandDefinition(
                 sql,
-                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                new { ClassGroupId = classId, FeeStructureId = feeStructureId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
@@ -106,20 +106,22 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     public async Task<IList<ClassFeeAmountForInstallmentRow>> GetClassAmountsForVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
+        Guid academicYearId,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT ft.id AS FeeTypeId,
-                   ft.name AS FeeTypeName,
+            SELECT ft.id AS FeeHeadId,
+                   ft.name AS FeeHeadName,
                    ft.category AS Category,
                    ft.frequency AS CollectionType,
                    cfa.amount AS Amount
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-            INNER JOIN {Schema}.{DatabaseConfig.TableFeeTypes} ft ON ft.id = cfa.feetypeid AND ft.isactive = true
-            WHERE cfa.classid = @ClassId
-              AND cfa.feestructureversionid = @FeeStructureVersionId
+            INNER JOIN {Schema}.{DatabaseConfig.TableFeeHead} ft ON ft.id = cfa.feeheadid AND ft.isactive = true
+            WHERE cfa.classgroupid = @ClassGroupId
+              AND cfa.feestructureid = @FeeStructureId
+              AND cfa.academicyearid = @AcademicYearId
               AND cfa.isactive = true
               AND (
                   ft.category = {(int)FeeCategory.Discount}
@@ -135,43 +137,44 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         List<ClassFeeAmountForInstallmentRow> rows = (await connection
             .QueryAsync<ClassFeeAmountForInstallmentRow>(new CommandDefinition(
                 sql,
-                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                new { ClassGroupId = classId, FeeStructureId = feeStructureId, AcademicYearId = academicYearId },
                 cancellationToken: ct))
             .ConfigureAwait(false)).ToList();
 
         string periodSql = $"""
-            SELECT cfa.feetypeid AS FeeTypeId,
+            SELECT cfa.feeheadid AS FeeHeadId,
                    cfpa.periodindex AS PeriodIndex,
                    cfpa.amount AS Amount
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
             INNER JOIN {Schema}.{DatabaseConfig.TableClassFeePeriodAmounts} cfpa
               ON cfpa.classfeeamountid = cfa.id AND cfpa.isactive = true
-            WHERE cfa.classid = @ClassId
-              AND cfa.feestructureversionid = @FeeStructureVersionId
+            WHERE cfa.classgroupid = @ClassGroupId
+              AND cfa.feestructureid = @FeeStructureId
+              AND cfa.academicyearid = @AcademicYearId
               AND cfa.isactive = true;
             """;
         List<ClassFeePeriodAmountRow> periodAmounts = (await connection
             .QueryAsync<ClassFeePeriodAmountRow>(new CommandDefinition(
                 periodSql,
-                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+                new { ClassGroupId = classId, FeeStructureId = feeStructureId, AcademicYearId = academicYearId },
                 cancellationToken: ct))
             .ConfigureAwait(false)).ToList();
         foreach (ClassFeeAmountForInstallmentRow row in rows)
         {
-            row.PeriodAmounts = periodAmounts.Where(p => p.FeeTypeId == row.FeeTypeId).ToList();
+            row.PeriodAmounts = periodAmounts.Where(p => p.FeeHeadId == row.FeeHeadId).ToList();
         }
         return rows;
     }
 
     public async Task<IList<Guid>> GetClassIdsWithAmountsForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT cfa.classid
+            SELECT DISTINCT cfa.classgroupid
             FROM {Schema}.{DatabaseConfig.TableClassFeeAmounts} cfa
-            WHERE cfa.feestructureversionid = @FeeStructureVersionId
+            WHERE cfa.feestructureid = @FeeStructureId
               AND cfa.isactive = true
               AND (
                   cfa.amount > 0
@@ -183,12 +186,12 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                         AND cfpa.amount > 0));
             """;
         IEnumerable<Guid> rows = await connection
-            .QueryAsync<Guid>(new CommandDefinition(sql, new { FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
+            .QueryAsync<Guid>(new CommandDefinition(sql, new { FeeStructureId = feeStructureId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
 
-    public async Task<bool> VersionHasInstallmentPaymentsAsync(Guid feeStructureVersionId, CancellationToken ct = default)
+    public async Task<bool> VersionHasInstallmentPaymentsAsync(Guid feeStructureId, CancellationToken ct = default)
     {
         if (!await IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
         {
@@ -201,20 +204,20 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 SELECT 1
                 FROM {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa
                 INNER JOIN {Schema}.{DatabaseConfig.TableFeePayments} fp ON fp.id = fpa.paymentid AND fp.isactive = true
-                WHERE fp.feestructureversionid = @FeeStructureVersionId
+                WHERE fp.feestructureid = @FeeStructureId
                   AND fpa.isactive = true
                   AND fpa.installmentid IS NOT NULL
             );
             """;
         return await connection.ExecuteScalarAsync<bool>(
-            new CommandDefinition(sql, new { FeeStructureVersionId = feeStructureVersionId }, cancellationToken: ct))
+            new CommandDefinition(sql, new { FeeStructureId = feeStructureId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task RegenerateForClassFeeTypeAsync(
+    public async Task RegenerateForClassFeeHeadAsync(
         Guid classId,
-        Guid feeStructureVersionId,
-        Guid feeTypeId,
+        Guid feeStructureId,
+        Guid feeHeadId,
         Guid academicYearId,
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods,
         CancellationToken ct = default)
@@ -228,18 +231,18 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             string deactivateSql = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableClassFeeInstallments}
                 SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
-                WHERE classid = @ClassId
-                  AND feestructureversionid = @FeeStructureVersionId
-                  AND feetypeid = @FeeTypeId
+                WHERE classgroupid = @ClassGroupId
+                  AND feestructureid = @FeeStructureId
+                  AND feeheadid = @FeeHeadId
                   AND isactive = true;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                 deactivateSql,
                 new
                 {
-                    ClassId = classId,
-                    FeeStructureVersionId = feeStructureVersionId,
-                    FeeTypeId = feeTypeId,
+                    ClassGroupId = classId,
+                    FeeStructureId = feeStructureId,
+                    FeeHeadId = feeHeadId,
                     UpdatedBy = actorId,
                     UpdatedOn = utcNow
                 },
@@ -249,9 +252,9 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             // Unique index ignores isactive — remove inactive rows so new periods can be inserted.
             string deleteInactiveSql = $"""
                 DELETE FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
-                WHERE cfi.classid = @ClassId
-                  AND cfi.feestructureversionid = @FeeStructureVersionId
-                  AND cfi.feetypeid = @FeeTypeId
+                WHERE cfi.classgroupid = @ClassGroupId
+                  AND cfi.feestructureid = @FeeStructureId
+                  AND cfi.feeheadid = @FeeHeadId
                   AND cfi.isactive = false
                   AND NOT EXISTS (
                       SELECT 1
@@ -262,7 +265,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                 deleteInactiveSql,
-                new { ClassId = classId, FeeStructureVersionId = feeStructureVersionId, FeeTypeId = feeTypeId },
+                new { ClassGroupId = classId, FeeStructureId = feeStructureId, FeeHeadId = feeHeadId },
                 transaction: tx,
                 cancellationToken: ct)).ConfigureAwait(false);
 
@@ -271,9 +274,9 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 var entity = new ClassFeeInstallmentEntity
                 {
                     Id = Guid.NewGuid(),
-                    FeeStructureVersionId = feeStructureVersionId,
-                    ClassId = classId,
-                    FeeTypeId = feeTypeId,
+                    FeeStructureId = feeStructureId,
+                    ClassGroupId = classId,
+                    FeeHeadId = feeHeadId,
                     AcademicYearId = academicYearId,
                     PeriodIndex = period.PeriodIndex,
                     PeriodLabel = period.PeriodLabel,
@@ -284,11 +287,11 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 EnsureInsertAudit(entity, utcNow, actorId);
                 string insertSql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableClassFeeInstallments}
-                        (id, feestructureversionid, classid, feetypeid, academicyearid,
+                        (id, feestructureid, classgroupid, feeheadid, academicyearid,
                          periodindex, periodlabel, periodstart, periodend, amount,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
-                        (@Id, @FeeStructureVersionId, @ClassId, @FeeTypeId, @AcademicYearId,
+                        (@Id, @FeeStructureId, @ClassGroupId, @FeeHeadId, @AcademicYearId,
                          @PeriodIndex, @PeriodLabel, @PeriodStart, @PeriodEnd, @Amount,
                          @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                     """;
@@ -300,26 +303,26 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     public Task RegenerateForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default) =>
-        RegenerateForClassVersionInternalAsync(classId, feeStructureVersionId, academicYearId, ct);
+        RegenerateForClassVersionInternalAsync(classId, feeStructureId, academicYearId, ct);
 
     public async Task RegenerateForVersionAsync(
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default)
     {
-        IList<Guid> classIds = await GetClassIdsWithAmountsForVersionAsync(feeStructureVersionId, ct).ConfigureAwait(false);
+        IList<Guid> classIds = await GetClassIdsWithAmountsForVersionAsync(feeStructureId, ct).ConfigureAwait(false);
         foreach (Guid classId in classIds)
         {
-            await RegenerateForClassVersionInternalAsync(classId, feeStructureVersionId, academicYearId, ct).ConfigureAwait(false);
+            await RegenerateForClassVersionInternalAsync(classId, feeStructureId, academicYearId, ct).ConfigureAwait(false);
         }
     }
 
     public async Task<IList<InstallmentPaidRow>> GetPaidByInstallmentAsync(
         Guid studentId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default)
     {
         if (!await IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
@@ -330,20 +333,20 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT fpa.installmentid AS InstallmentId,
-                   fpa.feetypeid AS FeeTypeId,
+                   fpa.feeheadid AS FeeHeadId,
                    COALESCE(SUM(fpa.amount), 0) AS PaidAmount
             FROM {Schema}.{DatabaseConfig.TableFeePaymentAllocations} fpa
             INNER JOIN {Schema}.{DatabaseConfig.TableFeePayments} fp ON fp.id = fpa.paymentid AND fp.isactive = true
             WHERE fp.studentid = @StudentId
-              AND fp.feestructureversionid = @FeeStructureVersionId
+              AND fp.feestructureid = @FeeStructureId
               AND fpa.isactive = true
               AND fpa.installmentid IS NOT NULL
-            GROUP BY fpa.installmentid, fpa.feetypeid;
+            GROUP BY fpa.installmentid, fpa.feeheadid;
             """;
         IEnumerable<InstallmentPaidRow> rows = await connection
             .QueryAsync<InstallmentPaidRow>(new CommandDefinition(
                 sql,
-                new { StudentId = studentId, FeeStructureVersionId = feeStructureVersionId },
+                new { StudentId = studentId, FeeStructureId = feeStructureId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
@@ -352,7 +355,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
     public async Task<bool> InstallmentBelongsToClassVersionAsync(
         Guid installmentId,
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         CancellationToken ct = default)
     {
         if (!await IsInstallmentSchemaReadyAsync(ct).ConfigureAwait(false))
@@ -365,20 +368,20 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             SELECT EXISTS (
                 SELECT 1 FROM {Schema}.{DatabaseConfig.TableClassFeeInstallments}
                 WHERE id = @InstallmentId
-                  AND classid = @ClassId
-                  AND feestructureversionid = @FeeStructureVersionId
+                  AND classgroupid = @ClassGroupId
+                  AND feestructureid = @FeeStructureId
                   AND isactive = true
             );
             """;
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
             sql,
-            new { InstallmentId = installmentId, ClassId = classId, FeeStructureVersionId = feeStructureVersionId },
+            new { InstallmentId = installmentId, ClassGroupId = classId, FeeStructureId = feeStructureId },
             cancellationToken: ct)).ConfigureAwait(false);
     }
 
     public async Task EnsureMissingInstallmentsForClassVersionAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct = default)
     {
@@ -389,7 +392,8 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
         IList<ClassFeeAmountForInstallmentRow> amounts = await GetClassAmountsForVersionAsync(
                 classId,
-                feeStructureVersionId,
+                feeStructureId,
+                academicYearId,
                 ct)
             .ConfigureAwait(false);
         if (amounts.Count == 0)
@@ -397,10 +401,10 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             return;
         }
 
-        IList<ClassFeeInstallmentRow> existing = await GetByClassVersionAsync(classId, feeStructureVersionId, ct)
+        IList<ClassFeeInstallmentRow> existing = await GetByClassVersionAsync(classId, feeStructureId, ct)
             .ConfigureAwait(false);
-        var existingByFeeType = existing
-            .GroupBy(e => e.FeeTypeId)
+        var existingByFeeHead = existing
+            .GroupBy(e => e.FeeHeadId)
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.PeriodIndex).ToList());
 
         foreach (ClassFeeAmountForInstallmentRow row in amounts)
@@ -416,7 +420,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
             }
 
             List<ClassFeeInstallmentRow> current =
-                existingByFeeType.GetValueOrDefault(row.FeeTypeId) ?? [];
+                existingByFeeHead.GetValueOrDefault(row.FeeHeadId) ?? [];
             bool matches = current.Count == periods.Count
                 && current.Zip(periods.OrderBy(p => p.PeriodIndex)).All(pair =>
                     pair.First.PeriodIndex == pair.Second.PeriodIndex
@@ -429,10 +433,10 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 continue;
             }
 
-            await RegenerateForClassFeeTypeAsync(
+            await RegenerateForClassFeeHeadAsync(
                 classId,
-                feeStructureVersionId,
-                row.FeeTypeId,
+                feeStructureId,
+                row.FeeHeadId,
                 academicYearId,
                 periods,
                 ct).ConfigureAwait(false);
@@ -441,7 +445,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     private async Task RegenerateForClassVersionInternalAsync(
         Guid classId,
-        Guid feeStructureVersionId,
+        Guid feeStructureId,
         Guid academicYearId,
         CancellationToken ct)
     {
@@ -451,7 +455,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         }
 
         IList<ClassFeeAmountForInstallmentRow> amounts =
-            await GetClassAmountsForVersionAsync(classId, feeStructureVersionId, ct).ConfigureAwait(false);
+            await GetClassAmountsForVersionAsync(classId, feeStructureId, academicYearId, ct).ConfigureAwait(false);
         foreach (ClassFeeAmountForInstallmentRow row in amounts)
         {
             IList<FeeInstallmentGenerator.InstallmentPeriod> periods = await BuildPeriodsForRowAsync(
@@ -459,10 +463,10 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                 academicYearId,
                 row,
                 ct).ConfigureAwait(false);
-            await RegenerateForClassFeeTypeAsync(
+            await RegenerateForClassFeeHeadAsync(
                 classId,
-                feeStructureVersionId,
-                row.FeeTypeId,
+                feeStructureId,
+                row.FeeHeadId,
                 academicYearId,
                 periods,
                 ct).ConfigureAwait(false);
@@ -513,13 +517,13 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
                    p.startdate AS Start,
                    p.enddate AS End
             FROM {Schema}.{DatabaseConfig.TableClassAcademicPeriods} p
-            WHERE p.classid = @ClassId
+            WHERE p.classgroupid = @ClassGroupId
               AND p.isactive = true
             ORDER BY p.periodindex;
             """;
         IEnumerable<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)> rows = await connection
             .QueryAsync<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)>(
-                new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct))
+                new CommandDefinition(sql, new { ClassGroupId = classId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows
             .Select(r => new FeeInstallmentGenerator.PeriodWindow(

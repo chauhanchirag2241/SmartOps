@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Homework.Interfaces;
 using SmartOps.Application.Modules.Authorization.Interfaces;
@@ -36,10 +37,6 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         _tenantSchema.IsTenantScoped
             ? _tenantSchema.GetOperationalSchema()
             : DatabaseConfig.Schema_School;
-
-    /// <summary>Display label for classes (matches class dropdown).</summary>
-    private const string ClassDisplayNameSql =
-        "c.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
 
     public async Task<Guid> CreateAsync(HomeworkEntity homework, CancellationToken ct = default)
     {
@@ -117,7 +114,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", ct)
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
@@ -127,8 +124,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                    h.isactive, h.versionno, h.createdby, h.createdon, h.updatedby, h.updatedon
             FROM {Schema}.{DatabaseConfig.TableHomework} h
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             WHERE h.id = @Id AND h.isactive = true
-              {HomeworkAcademicYearSql.FilterOnClass("c")}{branchFilter};
+              {HomeworkAcademicYearSql.FilterOnClassGroup()}{branchFilter};
             """;
 
         return await connection.QuerySingleOrDefaultAsync<HomeworkEntity>(
@@ -155,10 +153,10 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var where = new StringBuilder($"h.isactive = true{HomeworkAcademicYearSql.FilterOnClass("c")}");
+        var where = new StringBuilder($"h.isactive = true{HomeworkAcademicYearSql.FilterOnClassGroup()}");
         var parameters = new DynamicParameters();
         parameters.Add("ScopeAcademicYearId", _scope.ActiveAcademicYearId);
-        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "c", ct)
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "cg", ct)
             .ConfigureAwait(false);
 
         if (classId.HasValue && classId.Value != Guid.Empty)
@@ -184,7 +182,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                    h.title AS Title,
                    h.description AS Description,
                    h.classid AS ClassId,
-                   COALESCE({ClassDisplayNameSql}, '') AS ClassName,
+                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName,
                    h.subjectid AS SubjectId,
                    COALESCE(s.subjectname, '') AS SubjectName,
                    h.assigndate AS AssignDate,
@@ -198,11 +196,12 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                    COALESCE(COUNT(d.id), 0)::int AS Total
             FROM {Schema}.{DatabaseConfig.TableHomework} h
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = h.subjectid AND s.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableHomeworkDetails} d
                 ON d.homeworkid = h.id AND d.isactive = true
             WHERE {where}
-            GROUP BY h.id, h.title, h.description, h.classid, c.classname, c.section, h.subjectid, s.subjectname,
+            GROUP BY h.id, h.title, h.description, h.classid, cg.classname, c.section, h.subjectid, s.subjectname,
                      h.assigndate, h.duedate, h.priority, h.marks, h.submissiontype, h.createdon
             ORDER BY h.duedate DESC, h.createdon DESC;
             """;
@@ -227,26 +226,30 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", ct)
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
-        string yearFilter = HomeworkAcademicYearSql.FilterOnClass("c");
+        string yearFilter = HomeworkAcademicYearSql.FilterOnClassGroup();
+        string classJoins = $"""
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            """;
 
         string sql = $"""
             SELECT
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
-                    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+                    {classJoins}
                     WHERE h.isactive = true{yearFilter}{branchFilter}) AS TotalAssigned,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
-                    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+                    {classJoins}
                     WHERE h.isactive = true AND h.duedate = @Today{yearFilter}{branchFilter}) AS DueToday,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomeworkDetails} d
                     INNER JOIN {Schema}.{DatabaseConfig.TableHomework} h ON h.id = d.homeworkid AND h.isactive = true
-                    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+                    {classJoins}
                     WHERE d.isactive = true AND d.status IN (1, 2){yearFilter}{branchFilter}) AS TotalSubmissions,
                 (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableHomework} h
-                    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
+                    {classJoins}
                     WHERE h.isactive = true AND h.duedate < @Today{yearFilter}{branchFilter}
                       AND EXISTS (
                           SELECT 1 FROM {Schema}.{DatabaseConfig.TableHomeworkDetails} d
@@ -409,19 +412,20 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "c", ct)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", ct)
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
             SELECT
-                COALESCE({ClassDisplayNameSql}, '') AS ClassName,
+                COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName,
                 COALESCE(s.subjectname, '') AS SubjectName
             FROM {Schema}.{DatabaseConfig.TableHomework} h
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = h.subjectid AND s.isactive = true
             WHERE h.id = @HomeworkId AND h.isactive = true
-              {HomeworkAcademicYearSql.FilterOnClass("c")}{branchFilter};
+              {HomeworkAcademicYearSql.FilterOnClassGroup()}{branchFilter};
             """;
 
         return await connection.QuerySingleOrDefaultAsync<HomeworkMetaRow>(
@@ -441,29 +445,36 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "cl", ct)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", ct)
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
             SELECT st.id AS StudentId,
-                   TRIM(COALESCE(st.firstname, '') || ' ' || COALESCE(st.lastname, '')) AS StudentName,
+                   TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS StudentName,
                    COALESCE(sa.rollnumber, '') AS RollNo
             FROM {Schema}.{DatabaseConfig.TableStudents} st
-            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = @ClassId AND cl.isactive = true{branchFilter}
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = st.userid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = @ClassId AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid{branchFilter}
             INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
                 ON sa.studentid = st.id
                AND sa.classid = @ClassId
-               AND sa.academicyearid = cl.academicyearid
+               AND sa.academicyearid = @ScopeAcademicYearId
                AND sa.isactive = true
             WHERE st.isactive = true
-            ORDER BY sa.rollnumber NULLS LAST, st.firstname, st.lastname;
+            ORDER BY sa.rollnumber NULLS LAST, u.firstname, u.lastname;
             """;
 
         IEnumerable<HomeworkStudentRow> rows = await connection.QueryAsync<HomeworkStudentRow>(
                 new CommandDefinition(
                     sql,
-                    new { ClassId = classId, ActiveBranchId = activeBranchId },
+                    new
+                    {
+                        ClassId = classId,
+                        ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                        ActiveBranchId = activeBranchId
+                    },
                     cancellationToken: ct))
             .ConfigureAwait(false);
 

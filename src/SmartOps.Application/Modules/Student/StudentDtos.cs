@@ -67,7 +67,7 @@ public class CreateStudentPreviousSchoolDto
 
 public class CreateStudentFeeHeadSelectionDto
 {
-    public Guid FeeTypeId { get; set; }
+    public Guid FeeHeadId { get; set; }
     public bool IsIncluded { get; set; } = true;
     /// <summary>Per-student annual amount override; omit to use class default.</summary>
     public decimal? CustomAnnualAmount { get; set; }
@@ -153,10 +153,10 @@ public static class StudentMappingExtensions
                 TcNumber = ps.TcNumber
             }).ToList(),
             FeeHeadAssignments = dto.FeeHeadSelections
-                .Where(s => s.FeeTypeId != Guid.Empty)
+                .Where(s => s.FeeHeadId != Guid.Empty)
                 .Select(s => new StudentFeeHeadAssignmentEntity
                 {
-                    FeeTypeId = s.FeeTypeId,
+                    FeeHeadId = s.FeeHeadId,
                     IsIncluded = s.IsIncluded,
                     CustomAnnualAmount = s.CustomAnnualAmount is > 0 ? s.CustomAnnualAmount : null
                 })

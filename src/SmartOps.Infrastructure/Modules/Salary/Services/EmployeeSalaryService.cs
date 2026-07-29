@@ -45,7 +45,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             dtos.Add(new EmployeeSalaryListItemDto(
                 row.EmployeeRecordId,
                 row.EmployeeName,
-                row.EmployeeId,
+                row.EmployeeCode,
                 string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
                 row.Designation,
                 net,
@@ -187,7 +187,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             return new EmployeeSalaryDetailDto(
                 context.EmployeeRecordId,
                 context.EmployeeName,
-                context.EmployeeId,
+                context.EmployeeCode,
                 string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,
                 context.Designation,
                 null,
@@ -209,7 +209,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
         return new EmployeeSalaryDetailDto(
             context.EmployeeRecordId,
             context.EmployeeName,
-            context.EmployeeId,
+            context.EmployeeCode,
             string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,
             context.Designation,
             context.EmployeeSalaryId,

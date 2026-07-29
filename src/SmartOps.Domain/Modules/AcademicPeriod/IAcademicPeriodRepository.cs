@@ -8,6 +8,7 @@ public interface IAcademicPeriodRepository
 
     Task<IReadOnlyList<ClassAcademicPeriodEntity>> GetByClassAsync(
         Guid classId,
+        Guid academicYearId,
         CancellationToken cancellationToken = default);
 
     Task SaveAsync(
@@ -18,5 +19,6 @@ public interface IAcademicPeriodRepository
 
     Task<bool> HasPaidInstallmentsAsync(
         Guid classId,
+        Guid academicYearId,
         CancellationToken cancellationToken = default);
 }

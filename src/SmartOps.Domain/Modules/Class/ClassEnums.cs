@@ -25,16 +25,6 @@ public enum StreamGroup
 }
 
 /// <summary>
-/// Shift: Morning = 1, Afternoon = 2, Evening = 3
-/// </summary>
-public enum Shift
-{
-    Morning = 1,
-    Afternoon = 2,
-    Evening = 3
-}
-
-/// <summary>
 /// Medium: English = 1, Hindi = 2, Gujarati = 3
 /// </summary>
 public enum Medium

@@ -7,34 +7,41 @@ namespace SmartOps.Infrastructure.Persistence.Factories;
 
 public sealed class DbConnectionFactory : IDbConnectionFactory
 {
-    private readonly string _platformConnectionString;
+    private readonly string _globalDatabaseConnectionString;
 
     public DbConnectionFactory(IConfiguration configuration)
     {
-        string? cs = configuration.GetConnectionString("PlatformDb")
+        string? cs = configuration.GetConnectionString("GlobalDatabase")
+            ?? configuration.GetConnectionString("PlatformDb")
             ?? configuration.GetConnectionString("GlobalDb");
         if (string.IsNullOrWhiteSpace(cs))
         {
-            throw new InvalidOperationException("Connection string 'PlatformDb' or 'GlobalDb' is not configured.");
+            throw new InvalidOperationException(
+                "Connection string 'GlobalDatabase', 'PlatformDb', or 'GlobalDb' is not configured.");
         }
 
-        _platformConnectionString = cs;
+        _globalDatabaseConnectionString = cs;
+    }
+
+    public Task<IDbConnection> CreateGlobalDatabaseConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        return OpenConnectionAsync(_globalDatabaseConnectionString, cancellationToken);
     }
 
     public Task<IDbConnection> CreatePlatformConnectionAsync(CancellationToken cancellationToken = default)
     {
-        return OpenConnectionAsync(_platformConnectionString, cancellationToken);
+        return CreateGlobalDatabaseConnectionAsync(cancellationToken);
     }
 
     public Task<IDbConnection> CreateGlobalConnectionAsync(CancellationToken cancellationToken = default)
     {
-        return CreatePlatformConnectionAsync(cancellationToken);
+        return CreateGlobalDatabaseConnectionAsync(cancellationToken);
     }
 
     public Task<IDbConnection> CreateTenantConnectionAsync(string tenantId, CancellationToken cancellationToken = default)
     {
         _ = tenantId;
-        return CreatePlatformConnectionAsync(cancellationToken);
+        return CreateGlobalDatabaseConnectionAsync(cancellationToken);
     }
 
     public Task<IDbConnection> CreateConnectionAsync(string connectionString, CancellationToken cancellationToken = default)
@@ -50,7 +57,7 @@ public sealed class DbConnectionFactory : IDbConnectionFactory
     public Task<string> GetPlatformConnectionStringAsync(CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
-        return Task.FromResult(_platformConnectionString);
+        return Task.FromResult(_globalDatabaseConnectionString);
     }
 
     private static async Task<IDbConnection> OpenConnectionAsync(

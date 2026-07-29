@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Timetable;
 using SmartOps.Domain.Modules.Timetable.Entities;
@@ -136,11 +137,12 @@ SELECT
     sub.subjectname AS SubjectName,
     sub.subjectcode AS SubjectCode,
     s.employeeid AS EmployeeId,
-    NULLIF(TRIM(CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.lastname, ''))), '') AS EmployeeName,
+    NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), '') AS EmployeeName,
     s.roomno AS RoomNo
 FROM {Schema}.{DatabaseConfig.TableClassTimetableSlots} s
 LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} sub ON sub.id = s.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = s.employeeid
+LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 WHERE s.timetableid = @TimetableId AND s.isactive = true;";
         var rows = await connection.QueryAsync<TimetableSlotDetailRow>(sql, new { TimetableId = timetableId })
             .ConfigureAwait(false);
@@ -225,13 +227,13 @@ self_win AS (
 SELECT
     s.timetableid AS TimetableId,
     r.classid AS ClassId,
-    c.classname AS ClassName,
+    {DashboardClassLabel.DisplayNameSql} AS ClassName,
     r.effectivefrom AS EffectiveFrom,
     s.dayofweek AS DayOfWeek,
     s.periodid AS PeriodId,
     p.name AS PeriodName,
     s.employeeid AS EmployeeId,
-    NULLIF(TRIM(CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.lastname, ''))), '') AS EmployeeName,
+    NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), '') AS EmployeeName,
     s.roomno AS RoomNo,
     s.subjectid AS SubjectId,
     sub.subjectname AS SubjectName
@@ -239,8 +241,10 @@ FROM ranked r
 INNER JOIN {Schema}.{DatabaseConfig.TableClassTimetableSlots} s ON s.timetableid = r.id AND s.isactive = true
 CROSS JOIN self_win w
 LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = r.classid
+LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {Schema}.{DatabaseConfig.TablePeriods} p ON p.id = s.periodid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = s.employeeid
+LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} sub ON sub.id = s.subjectid
 WHERE r.id <> @ExcludeTimetableId
   AND r.effectivefrom < w.endfrom
@@ -316,7 +320,7 @@ SELECT
     s.id AS SlotId,
     s.timetableid AS TimetableId,
     cv.classid AS ClassId,
-    c.classname AS ClassName,
+    {DashboardClassLabel.DisplayNameSql} AS ClassName,
     cv.effectivefrom AS EffectiveFrom,
     s.dayofweek AS DayOfWeek,
     s.periodid AS PeriodId,
@@ -330,21 +334,23 @@ SELECT
     sub.subjectname AS SubjectName,
     sub.subjectcode AS SubjectCode,
     s.employeeid AS EmployeeId,
-    NULLIF(TRIM(CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.lastname, ''))), '') AS EmployeeName,
+    NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), '') AS EmployeeName,
     s.roomno AS RoomNo
 FROM current_versions cv
 INNER JOIN {Schema}.{DatabaseConfig.TableClassTimetableSlots} s
     ON s.timetableid = cv.id AND s.isactive = true AND s.employeeid IS NOT NULL
 LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = cv.classid
+LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {Schema}.{DatabaseConfig.TablePeriods} p ON p.id = s.periodid
 LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} sub ON sub.id = s.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} e ON e.id = s.employeeid
+LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 WHERE COALESCE(p.isbreak, false) = false
   AND (@FilterClasses = false OR cv.classid = ANY(@ClassIds))
   AND (@FilterSubjects = false OR s.subjectid = ANY(@SubjectIds))
   AND (@FilterDays = false OR s.dayofweek = ANY(@DaysOfWeek))
   AND (@FilterEmployees = false OR s.employeeid = ANY(@EmployeeIds))
-ORDER BY e.firstname, e.lastname, p.periodorder, s.dayofweek;";
+ORDER BY u.firstname, u.lastname, p.periodorder, s.dayofweek;";
 
         var rows = await connection.QueryAsync<TimetableSlotDetailRow>(sql, new
         {

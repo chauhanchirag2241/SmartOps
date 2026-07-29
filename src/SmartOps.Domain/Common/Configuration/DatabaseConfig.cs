@@ -1,8 +1,24 @@
 namespace SmartOps.Domain.Common.Configuration;
 
+/// <summary>
+/// Database / schema / table name constants.
+/// Schemas:
+/// <list type="bullet">
+/// <item><see cref="Schema_Global"/> — platform DB (<c>smartops_global</c>) catalog + ConfigUI identity</item>
+/// <item><see cref="Schema_Man"/> — school DB management/identity (users, roles, permissions, branches, schoolsettings)</item>
+/// <item><see cref="Schema_School"/> — school DB operational data</item>
+/// </list>
+/// </summary>
 public static class DatabaseConfig
 {
+    /// <summary>Platform database schema (menus, widgets, schools, usertypes, ConfigUI users).</summary>
     public const string Schema_Global = "global";
+
+    /// <summary>School database identity/management schema (users, roles, permissions, branches, settings).</summary>
+    public const string Schema_Man = "man";
+
+    /// <summary>School database operational schema (students, fees, attendance, …).</summary>
+    public const string Schema_School = "school";
 
     public const string SystemUserId = "11111111-1111-1111-1111-111111111111";
 
@@ -16,12 +32,9 @@ public static class DatabaseConfig
     public const string TableSchools = "schools";
     public const string TableSchoolBranches = "schoolbranches";
     public const string TableUserBranchMappings = "userbranchmappings";
-    public const string TableUserSchoolMappings = "userschoolmappings";
     public const string TableUserTypes = "usertypes";
     public const string TableSchoolSettings = "schoolsettings";
     public const string TableRefreshTokens = "refreshtokens";
-    public const string TableUserScopeVersions = "userscopeversions";
-    public const string TableAuthorizationAuditLog = "authorizationauditlog";
     public const string TableEntityAuditLogs = "entity_audit_logs";
 
     // Students Module
@@ -37,6 +50,8 @@ public static class DatabaseConfig
     // Class Module
     public const string TableAcademicYears = "academicyears";
     public const string TableClassAcademicPeriods = "classacademicperiods";
+    public const string TableShifts = "shifts";
+    public const string TableClassGroups = "classgroups";
     public const string TableClasses = "classes";
 
     // Subject Module
@@ -50,11 +65,7 @@ public static class DatabaseConfig
     public const string TableParentStudentMappings = "parentstudentmappings";
     public const string TableStaffScopeAssignments = "staffscopeassignments";
 
-    // School template schema (tenant tables cloned from here)
-    public const string Schema_School = "school";
-
     public const string TableSettings = "settings";
-    public const string TableAlerts = "alerts";
     public const string TableAttendance = "attendance";
     public const string TableStaffAttendance = "staffattendance";
     public const string TableEmployeeFaceEnrollments = "employeefaceenrollments";
@@ -62,9 +73,8 @@ public static class DatabaseConfig
     public const string TableHomeworkDetails = "homeworkdetails";
 
     // Fees Module
-    public const string TableFeeStructureVersions = "feestructureversions";
-    public const string TableFeeTypes = "feetypes";
-    public const string TableFeeSettings = "feesettings";
+    public const string TableFeeStructure = "feestructure";
+    public const string TableFeeHead = "feehead";
     public const string TableClassFeeAmounts = "classfeeamounts";
     public const string TableClassFeePeriodAmounts = "classfeeperiodamounts";
     public const string TableClassFeeInstallments = "classfeeinstallments";

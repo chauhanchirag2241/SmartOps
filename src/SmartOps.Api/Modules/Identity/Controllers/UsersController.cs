@@ -90,6 +90,7 @@ public sealed class UsersController(
         {
             Username = username,
             Email = email,
+            UserTypeId = request.UserTypeId ?? UserTypeCodes.Ids.OfficeStaff,
             IsActive = request.IsActive,
             LockoutEnabled = request.LockoutEnabled,
         };
@@ -98,9 +99,6 @@ public sealed class UsersController(
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await userRepository.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await userRepository
-            .AddUserToSchoolAsync(user.Id, schoolId, "Member", request.UserTypeId, cancellationToken)
-            .ConfigureAwait(false);
 
         try
         {
@@ -124,7 +122,7 @@ public sealed class UsersController(
         {
             type = (await userTypeRepository.GetAllActiveAsync(cancellationToken).ConfigureAwait(false))
                 .Where(t => t.Id == request.UserTypeId.Value)
-                .Select(t => new UserTypeSummary { UserTypeId = t.Id, Code = t.Code, Name = t.Name })
+                .Select(t => new UserTypeSummary { UserTypeId = t.Id, Code = t.Name, Name = t.Name })
                 .FirstOrDefault();
         }
 
@@ -156,7 +154,7 @@ public sealed class UsersController(
 
         await userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
         await userRepository
-            .SetUserTypeForSchoolAsync(id, schoolId, request.UserTypeId, cancellationToken)
+            .SetUserTypeAsync(id, request.UserTypeId, cancellationToken)
             .ConfigureAwait(false);
 
         if (request.BranchIds.Count > 0)

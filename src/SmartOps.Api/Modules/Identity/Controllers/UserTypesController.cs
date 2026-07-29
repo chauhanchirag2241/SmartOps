@@ -20,7 +20,7 @@ public sealed class UserTypesController(IUserTypeRepository userTypeRepository) 
             .ConfigureAwait(false);
 
         IReadOnlyList<UserTypeListItemDto> result = types
-            .Select(t => new UserTypeListItemDto(t.Id, t.Code, t.Name))
+            .Select(t => new UserTypeListItemDto(t.Id, t.Name, t.Name))
             .ToList();
 
         return Ok(result);

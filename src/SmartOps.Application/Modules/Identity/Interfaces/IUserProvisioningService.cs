@@ -6,33 +6,28 @@ namespace SmartOps.Application.Modules.Identity.Interfaces;
 
 public interface IUserProvisioningService
 {
-    Task<ProvisionUserResult?> ProvisionSchoolUserAsync(
+    Task<ProvisionUserResult> ProvisionSchoolUserAsync(
         ProvisionUserRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<Guid?> ProvisionEmployeeUserAsync(
+    Task<Guid> ProvisionEmployeeUserAsync(
         EmployeeEntity employee,
         Guid schoolId,
         CancellationToken cancellationToken = default);
 
-    Task<Guid?> ProvisionStudentUserAsync(
+    Task<Guid> ProvisionStudentUserAsync(
         StudentEntity student,
         Guid schoolId,
         CancellationToken cancellationToken = default);
 
-    Task<Guid?> ProvisionParentUserAsync(
-        string email,
-        string? username,
-        Guid schoolId,
-        CancellationToken cancellationToken = default,
-        DateOnly? dateOfBirth = null);
-
     Task<Guid?> ProvisionStaffUserAsync(
         string email,
         string? username,
+        string firstName,
+        string lastName,
+        string? mobile,
         string personaRoleLabel,
+        string userTypeCode,
         Guid schoolId,
-        DateOnly dateOfBirth,
-        bool portalAccess = true,
         CancellationToken cancellationToken = default);
 }

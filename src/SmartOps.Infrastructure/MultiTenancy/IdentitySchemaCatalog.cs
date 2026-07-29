@@ -3,7 +3,8 @@ using SmartOps.Domain.Common.Configuration;
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 /// <summary>
-/// Identity tables copied into each dedicated school database <c>global</c> schema.
+/// School-local identity/management tables in the dedicated school database <c>man</c> schema.
+/// Catalog tables (menus, dashboard_widgets, usertypes) remain on the platform <c>global</c> database.
 /// </summary>
 internal static class IdentitySchemaCatalog
 {
@@ -11,15 +12,12 @@ internal static class IdentitySchemaCatalog
     [
         DatabaseConfig.TableUsers,
         DatabaseConfig.TableRoles,
-        DatabaseConfig.TableMenus,
         DatabaseConfig.TableUserRoles,
         DatabaseConfig.TableRoleMenuPermissions,
-        DatabaseConfig.TableDashboardWidgets,
         DatabaseConfig.TableRoleDashboardWidgetPermissions,
-        DatabaseConfig.TableUserTypes,
-        DatabaseConfig.TableUserSchoolMappings,
         DatabaseConfig.TableSchoolSettings,
+        DatabaseConfig.TableSchoolBranches,
+        DatabaseConfig.TableUserBranchMappings,
         DatabaseConfig.TableRefreshTokens,
-        DatabaseConfig.TableUserScopeVersions,
     ];
 }

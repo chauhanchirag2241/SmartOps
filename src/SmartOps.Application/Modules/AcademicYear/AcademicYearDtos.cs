@@ -27,7 +27,6 @@ public static class AcademicYearMappingExtensions
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             IsActive = true,
-            IsCurrent = false,
             Status = AcademicYearStatus.Draft,
         };
     }

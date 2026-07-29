@@ -2,8 +2,10 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Leave;
 using SmartOps.Domain.Modules.Leave.Entities;
 using SmartOps.Infrastructure.Persistence;
@@ -29,10 +31,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             ? _tenantSchema.GetOperationalSchema()
             : DatabaseConfig.Schema_School;
 
-    private static string G => DatabaseConfig.Schema_Global;
-
-    private const string ClassDisplayNameSql =
-        "cl.classname || CASE cl.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
+    private string G => IdentitySchema;
 
     public async Task<Guid> CreateAsync(LeaveRequestEntity entity, CancellationToken ct = default)
     {
@@ -156,17 +155,20 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         var sb = new StringBuilder($"""
             SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.employeeid AS EmployeeId,
-                   t.firstname AS TeacherFirstName, t.lastname AS TeacherLastName,
-                   lr.studentid AS StudentId, s.firstname AS StudentFirstName, s.lastname AS StudentLastName,
-                   {ClassDisplayNameSql} AS ClassName,
+                   tu.firstname AS TeacherFirstName, tu.lastname AS TeacherLastName,
+                   lr.studentid AS StudentId, su.firstname AS StudentFirstName, su.lastname AS StudentLastName,
+                   {DashboardClassLabel.DisplayNameSql} AS ClassName,
                    lr.requestedbyuserid AS RequestedByUserId, u.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
                    lr.status AS Status, lr.createdon AS CreatedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = lr.studentid
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} su ON su.id = s.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = lr.requestedbyuserid
             WHERE lr.isactive = true AND lr.requesttype = @RequestType
             """);
@@ -231,9 +233,9 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT lr.id AS Id, lr.requesttype AS RequestType, lr.employeeid AS EmployeeId,
-                   t.firstname AS TeacherFirstName, t.lastname AS TeacherLastName,
-                   lr.studentid AS StudentId, s.firstname AS StudentFirstName, s.lastname AS StudentLastName,
-                   {ClassDisplayNameSql} AS ClassName,
+                   tu.firstname AS TeacherFirstName, tu.lastname AS TeacherLastName,
+                   lr.studentid AS StudentId, su.firstname AS StudentFirstName, su.lastname AS StudentLastName,
+                   {DashboardClassLabel.DisplayNameSql} AS ClassName,
                    lr.requestedbyuserid AS RequestedByUserId, ru.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
                    lr.status AS Status, lr.reason AS Reason,
@@ -242,9 +244,12 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    lr.createdon AS CreatedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudents} s ON s.id = lr.studentid
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} su ON su.id = s.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} ru ON ru.id = lr.requestedbyuserid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} au ON au.id = lr.approvedbyuserid
             WHERE lr.id = @Id AND lr.isactive = true;
@@ -334,59 +339,34 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
 
     public async Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default)
     {
+        _ = schoolId;
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT DISTINCT u.id AS Id,
                    COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name
             FROM {G}.{DatabaseConfig.TableUsers} u
-            INNER JOIN {G}.{DatabaseConfig.TableUserRoles} ur ON ur.userid = u.id AND ur.isactive = true
-            INNER JOIN {G}.{DatabaseConfig.TableRoles} r ON r.id = ur.roleid AND r.isactive = true
-            INNER JOIN {G}.{DatabaseConfig.TableUserSchoolMappings} usm ON usm.userid = u.id AND usm.isactive = true
-            WHERE u.isactive = true AND usm.schoolid = @SchoolId
-              AND (r.code = 'SCHOOL_ADMIN' OR r.code = 'ADMIN')
+            WHERE u.isactive = true
+              AND u.usertypeid = '{UserTypeCodes.Ids.OfficeStaff}'
             ORDER BY Name;
             """;
-        var rows = await connection.QueryAsync<SchoolAdminUserRow>(new CommandDefinition(sql, new { SchoolId = schoolId }, cancellationToken: ct))
+        var rows = await connection.QueryAsync<SchoolAdminUserRow>(new CommandDefinition(sql, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
 
-    public async Task<bool> IsParentLinkedToStudentAsync(Guid parentUserId, Guid studentId, CancellationToken ct = default)
+    public Task<bool> IsParentLinkedToStudentAsync(Guid parentUserId, Guid studentId, CancellationToken ct = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT COUNT(1) FROM {Schema}.{DatabaseConfig.TableParentStudentMappings}
-            WHERE parentuserid = @ParentUserId AND studentid = @StudentId AND isactive = true;
-            """;
-        int count = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            sql, new { ParentUserId = parentUserId, StudentId = studentId }, cancellationToken: ct)).ConfigureAwait(false);
-        if (count > 0)
-        {
-            return true;
-        }
-
-        string sql2 = $"""
-            SELECT COUNT(1) FROM {Schema}.{DatabaseConfig.TableStudentParents}
-            WHERE userid = @ParentUserId AND studentid = @StudentId AND isactive = true;
-            """;
-        count = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            sql2, new { ParentUserId = parentUserId, StudentId = studentId }, cancellationToken: ct)).ConfigureAwait(false);
-        return count > 0;
+        // Parent portal accounts are no longer provisioned; there is no user-linked-to-student data source left.
+        return Task.FromResult(false);
     }
 
     public async Task<IList<Guid>> GetActiveTeacherUserIdsAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT DISTINCT COALESCE(t.userid, u.id) AS UserId
+            SELECT DISTINCT t.userid AS UserId
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
-            LEFT JOIN {G}.{DatabaseConfig.TableUsers} u
-                ON u.isactive = true
-               AND t.userid IS NULL
-               AND t.email IS NOT NULL
-               AND lower(trim(u.email)) = lower(trim(t.email))
-            WHERE t.isactive = true
-              AND COALESCE(t.userid, u.id) IS NOT NULL;
+            WHERE t.isactive = true;
             """;
         var ids = await connection.QueryAsync<Guid>(new CommandDefinition(sql, cancellationToken: ct)).ConfigureAwait(false);
         return ids.Distinct().ToList();
@@ -408,52 +388,15 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             .ConfigureAwait(false);
     }
 
-    public async Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default)
+    public Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT DISTINCT psm.parentuserid
-            FROM {Schema}.{DatabaseConfig.TableParentStudentMappings} psm
-            INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
-                ON sa.studentid = psm.studentid AND sa.isactive = true AND sa.classid = @ClassId
-            WHERE psm.isactive = true
-            UNION
-            SELECT DISTINCT sp.userid
-            FROM {Schema}.{DatabaseConfig.TableStudentParents} sp
-            INNER JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa
-                ON sa.studentid = sp.studentid AND sa.isactive = true AND sa.classid = @ClassId
-            WHERE sp.isactive = true AND sp.userid IS NOT NULL;
-            """;
-        var ids = await connection.QueryAsync<Guid>(new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct))
-            .ConfigureAwait(false);
-        return ids.Distinct().ToList();
+        // Parent portal accounts are no longer provisioned; there is no parent-to-class data source left.
+        return Task.FromResult<IList<Guid>>(Array.Empty<Guid>());
     }
 
-    public async Task<IList<LinkedStudentRow>> GetLinkedStudentsForParentAsync(Guid parentUserId, CancellationToken ct = default)
+    public Task<IList<LinkedStudentRow>> GetLinkedStudentsForParentAsync(Guid parentUserId, CancellationToken ct = default)
     {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT DISTINCT s.id AS Id, s.firstname AS FirstName, s.lastname AS LastName,
-                   {ClassDisplayNameSql} AS ClassName
-            FROM {Schema}.{DatabaseConfig.TableStudents} s
-            INNER JOIN {Schema}.{DatabaseConfig.TableParentStudentMappings} psm
-                ON psm.studentid = s.id AND psm.parentuserid = @ParentUserId AND psm.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
-            WHERE s.isactive = true
-            UNION
-            SELECT DISTINCT s.id, s.firstname, s.lastname, {ClassDisplayNameSql}
-            FROM {Schema}.{DatabaseConfig.TableStudents} s
-            INNER JOIN {Schema}.{DatabaseConfig.TableStudentParents} sp
-                ON sp.studentid = s.id AND sp.userid = @ParentUserId AND sp.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.studentid = s.id AND sa.isactive = true
-            LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
-            WHERE s.isactive = true;
-            """;
-
-        var rows = await connection.QueryAsync<LinkedStudentRow>(
-            new CommandDefinition(sql, new { ParentUserId = parentUserId }, cancellationToken: ct))
-            .ConfigureAwait(false);
-        return rows.ToList();
+        // Parent portal accounts are no longer provisioned; there are no linked students to return.
+        return Task.FromResult<IList<LinkedStudentRow>>(Array.Empty<LinkedStudentRow>());
     }
 }

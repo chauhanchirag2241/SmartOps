@@ -19,11 +19,10 @@ public sealed class FeeStructureController : ControllerBase
     [Authorize(Policy = MenuPolicies.FeesStructure.View)]
     [ProducesResponseType(typeof(IList<FeeStructureVersionListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetVersions(
-        [FromQuery] Guid? academicYearId,
         [FromQuery] string? status,
         CancellationToken ct)
     {
-        var result = await _service.GetVersionsAsync(academicYearId, status, ct).ConfigureAwait(false);
+        var result = await _service.GetVersionsAsync(status, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
@@ -88,49 +87,31 @@ public sealed class FeeStructureController : ControllerBase
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
     }
 
-    [HttpPost("versions/{versionId:guid}/types")]
+    [HttpPost("versions/{versionId:guid}/heads")]
     [Authorize(Policy = MenuPolicies.FeesStructure.Add)]
-    [ProducesResponseType(typeof(FeeTypeDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> CreateFeeType(Guid versionId, [FromBody] CreateFeeTypeRequestDto request, CancellationToken ct)
+    [ProducesResponseType(typeof(FeeHeadDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateFeeHead(Guid versionId, [FromBody] CreateFeeHeadRequestDto request, CancellationToken ct)
     {
-        var body = request with { FeeStructureVersionId = versionId };
-        var result = await _service.CreateFeeTypeAsync(body, ct).ConfigureAwait(false);
+        var body = request with { FeeStructureId = versionId };
+        var result = await _service.CreateFeeHeadAsync(body, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
-    [HttpPut("types/{id:guid}")]
+    [HttpPut("heads/{id:guid}")]
     [Authorize(Policy = MenuPolicies.FeesStructure.Edit)]
-    [ProducesResponseType(typeof(FeeTypeDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpdateFeeType(Guid id, [FromBody] UpdateFeeTypeRequestDto request, CancellationToken ct)
+    [ProducesResponseType(typeof(FeeHeadDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateFeeHead(Guid id, [FromBody] UpdateFeeHeadRequestDto request, CancellationToken ct)
     {
-        var result = await _service.UpdateFeeTypeAsync(id, request, ct).ConfigureAwait(false);
+        var result = await _service.UpdateFeeHeadAsync(id, request, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
-    [HttpDelete("types/{id:guid}")]
+    [HttpDelete("heads/{id:guid}")]
     [Authorize(Policy = MenuPolicies.FeesStructure.Delete)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> DeleteFeeType(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteFeeHead(Guid id, CancellationToken ct)
     {
-        var result = await _service.DeleteFeeTypeAsync(id, ct).ConfigureAwait(false);
+        var result = await _service.DeleteFeeHeadAsync(id, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
-    }
-
-    [HttpGet("settings")]
-    [Authorize(Policy = MenuPolicies.FeesStructure.View)]
-    [ProducesResponseType(typeof(FeeSettingsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetSettings(CancellationToken ct)
-    {
-        var result = await _service.GetSettingsAsync(ct).ConfigureAwait(false);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
-
-    [HttpPut("settings")]
-    [Authorize(Policy = MenuPolicies.FeesStructure.Edit)]
-    [ProducesResponseType(typeof(FeeSettingsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpsertSettings([FromBody] UpsertFeeSettingsRequestDto request, CancellationToken ct)
-    {
-        var result = await _service.UpsertSettingsAsync(request, ct).ConfigureAwait(false);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 }

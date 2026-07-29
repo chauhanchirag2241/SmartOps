@@ -38,17 +38,18 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT t.id AS EmployeeRecordId,
-                   TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
-                   t.employeeid AS EmployeeId,
+                   TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
+                   t.employeecode AS EmployeeCode,
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
                    es.id AS EmployeeSalaryId,
                    es.salarystructureversionid AS SalaryStructureVersionId
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
                 ON es.employeeid = t.id AND es.isactive = true
             WHERE t.isactive = true
-            {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (TRIM(t.firstname || ' ' || t.lastname) ILIKE @Search OR COALESCE(t.employeeid, '') ILIKE @Search)")}
+            {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (TRIM(u.firstname || ' ' || u.lastname) ILIKE @Search OR COALESCE(t.employeecode, '') ILIKE @Search)")}
             {(departmentId.HasValue ? "AND t.departmentid = @DepartmentId" : string.Empty)}
             {(string.IsNullOrWhiteSpace(designation) ? string.Empty : "AND t.designation ILIKE @Designation")}
             ORDER BY EmployeeName;
@@ -89,8 +90,8 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT t.id AS EmployeeRecordId,
-                   TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
-                   t.employeeid AS EmployeeId,
+                   TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
+                   t.employeecode AS EmployeeCode,
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
                    t.bankname AS BankName,
@@ -100,6 +101,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
                    es.salarystructureversionid AS SalaryStructureVersionId,
                    es.effectivedate AS EffectiveDate
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
                 ON es.employeeid = t.id AND es.isactive = true
             WHERE t.id = @EmployeeId AND t.isactive = true;

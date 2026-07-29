@@ -102,7 +102,12 @@ public sealed class ExceptionHandlingMiddleware
             string? constraint = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
             message = constraint?.Contains("admission", StringComparison.OrdinalIgnoreCase) == true
                 ? "Admission number already exists."
-                : "Duplicate value is not allowed.";
+                : constraint?.Contains("employeecode", StringComparison.OrdinalIgnoreCase) == true
+                    || constraint?.Contains("employeeid", StringComparison.OrdinalIgnoreCase) == true
+                    ? "Employee code already exists."
+                    : constraint?.Contains("username", StringComparison.OrdinalIgnoreCase) == true
+                        ? "Username already exists."
+                        : "Duplicate value is not allowed.";
             return true;
         }
 

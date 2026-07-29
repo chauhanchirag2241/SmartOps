@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S109_CreateScopeMappingTables : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private static string G => DatabaseConfig.Schema_Global;
+    private static string G => DatabaseConfig.Schema_Man;
 
     public override void Up()
     {
@@ -83,32 +83,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableHodDepartmentAssignments}
                 .OnColumn("userid").Ascending();
         }
 
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableParentStudentMappings).Exists())
-        {
-            Create.Table(DatabaseConfig.TableParentStudentMappings).InSchema(S)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("parentuserid").AsGuid().NotNullable()
-                .WithColumn("studentid").AsGuid().NotNullable()
-                    .ForeignKey("fk_parentstudentmappings_studentid", S, DatabaseConfig.TableStudents, "id")
-                .WithColumn("relationtype").AsString(50).NotNullable().WithDefaultValue("Parent")
-                .WithColumn("isprimary").AsBoolean().NotNullable().WithDefaultValue(true)
-                .WithAuditColumns();
-
-            Execute.Sql($"""
-ALTER TABLE {S}.{DatabaseConfig.TableParentStudentMappings}
-    ADD CONSTRAINT fk_parentstudentmappings_parentuserid FOREIGN KEY (parentuserid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE CASCADE;
-""");
-
-            Create.UniqueConstraint("uq_parentstudentmappings")
-                .OnTable(DatabaseConfig.TableParentStudentMappings).WithSchema(S)
-                .Columns("parentuserid", "studentid");
-
-            Create.Index("ix_parentstudentmappings_parentuserid")
-                .OnTable(DatabaseConfig.TableParentStudentMappings).InSchema(S)
-                .OnColumn("parentuserid").Ascending();
-        }
-
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStaffScopeAssignments).Exists())
         {
             Create.Table(DatabaseConfig.TableStaffScopeAssignments).InSchema(S)
@@ -134,7 +108,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStaffScopeAssignments}
     public override void Down()
     {
         Delete.Table(DatabaseConfig.TableStaffScopeAssignments).InSchema(S);
-        Delete.Table(DatabaseConfig.TableParentStudentMappings).InSchema(S);
         Delete.Table(DatabaseConfig.TableHodDepartmentAssignments).InSchema(S);
         Delete.Table(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S);
     }

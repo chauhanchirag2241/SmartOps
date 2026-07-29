@@ -71,17 +71,18 @@ public sealed class BranchOperationalSeedService
             .ConfigureAwait(false);
 
         string s = DatabaseConfig.Schema_School;
-        string g = DatabaseConfig.Schema_Global;
+        // Branches SoT is school DB man.schoolbranches (not platform global).
+        string man = DatabaseConfig.Schema_Man;
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
         foreach (SchoolBranchEntity branch in school.Branches)
         {
             await connection.ExecuteAsync(
                 $"""
-INSERT INTO {g}.{DatabaseConfig.TableSchoolBranches}
+INSERT INTO {man}.{DatabaseConfig.TableSchoolBranches}
     (id, schoolid, name, email, address, isheadoffice, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT @Id, @SchoolId, @Name, @Email, @Address, @IsHeadOffice, true, 1, @Actor, @Now, @Actor, @Now
-WHERE NOT EXISTS (SELECT 1 FROM {g}.{DatabaseConfig.TableSchoolBranches} WHERE id = @Id);
+WHERE NOT EXISTS (SELECT 1 FROM {man}.{DatabaseConfig.TableSchoolBranches} WHERE id = @Id);
 """,
                 new
                 {

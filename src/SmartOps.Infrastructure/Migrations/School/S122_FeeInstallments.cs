@@ -5,30 +5,23 @@ using SmartOps.Infrastructure.Migrations.Extensions;
 namespace SmartOps.Infrastructure.Migrations.School;
 
 [Tags("School")]
-[Migration(122, "School template — fee installments and amount basis")]
+[Migration(122, "School template — fee installments")]
 public sealed class S122_FeeInstallments : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private const string InstallmentUnique = "uq_classfeeinstallments_class_feetype_version_period";
-    private const string InstallmentClassIndex = "ix_classfeeinstallments_class_version";
+    private const string InstallmentUnique = "uq_classfeeinstallments_classgroup_feehead_structure_period";
+    private const string InstallmentClassIndex = "ix_classfeeinstallments_classgroup_version";
     private const string AllocationInstallmentIndex = "ix_feepaymentallocations_installmentid";
 
     public override void Up()
     {
-        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Exists()
-            && !Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Column("amountbasis").Exists())
-        {
-            Alter.Table(DatabaseConfig.TableFeeTypes).InSchema(S)
-                .AddColumn("amountbasis").AsInt16().NotNullable().WithDefaultValue(0);
-        }
-
         if (!Schema.Schema(S).Table(DatabaseConfig.TableClassFeeInstallments).Exists())
         {
             Create.Table(DatabaseConfig.TableClassFeeInstallments).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("feestructureversionid").AsGuid().NotNullable()
-                .WithColumn("classid").AsGuid().NotNullable()
-                .WithColumn("feetypeid").AsGuid().NotNullable()
+                .WithColumn("feestructureid").AsGuid().NotNullable()
+                .WithColumn("classgroupid").AsGuid().NotNullable()
+                .WithColumn("feeheadid").AsGuid().NotNullable()
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                 .WithColumn("periodindex").AsInt32().NotNullable()
                 .WithColumn("periodlabel").AsString(100).NotNullable()
@@ -43,15 +36,15 @@ public sealed class S122_FeeInstallments : Migration
         {
             Create.UniqueConstraint(InstallmentUnique)
                 .OnTable(DatabaseConfig.TableClassFeeInstallments).WithSchema(S)
-                .Columns("classid", "feetypeid", "feestructureversionid", "periodindex");
+                .Columns("classgroupid", "feeheadid", "feestructureid", "periodindex");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableClassFeeInstallments).Index(InstallmentClassIndex).Exists())
         {
             Create.Index(InstallmentClassIndex)
                 .OnTable(DatabaseConfig.TableClassFeeInstallments).InSchema(S)
-                .OnColumn("classid").Ascending()
-                .OnColumn("feestructureversionid").Ascending();
+                .OnColumn("classgroupid").Ascending()
+                .OnColumn("feestructureid").Ascending();
         }
 
         if (Schema.Schema(S).Table(DatabaseConfig.TableFeePaymentAllocations).Exists()
@@ -85,11 +78,6 @@ public sealed class S122_FeeInstallments : Migration
         if (Schema.Schema(S).Table(DatabaseConfig.TableClassFeeInstallments).Exists())
         {
             Delete.Table(DatabaseConfig.TableClassFeeInstallments).InSchema(S);
-        }
-
-        if (Schema.Schema(S).Table(DatabaseConfig.TableFeeTypes).Column("amountbasis").Exists())
-        {
-            Delete.Column("amountbasis").FromTable(DatabaseConfig.TableFeeTypes).InSchema(S);
         }
     }
 }

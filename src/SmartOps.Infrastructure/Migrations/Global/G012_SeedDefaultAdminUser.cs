@@ -1,7 +1,8 @@
 using FluentMigrator;
 using Microsoft.AspNetCore.Identity;
-using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Modules.Identity.Entities;
 
 namespace SmartOps.Infrastructure.Migrations.Global;
 
@@ -20,12 +21,13 @@ public sealed class G012_SeedDefaultAdminUser : Migration
         string passwordHash = hasher.HashPassword(tempUser, AdminPassword);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid userId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        Guid adminTypeId = UserTypeCodes.Ids.Admin;
 
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
-    (id, username, email, passwordhash, securitystamp, lockoutend, accessfailedcount, lockoutenabled,
+    (id, firstname, lastname, mobile, usertypeid, username, email, passwordhash, securitystamp, lockoutend, accessfailedcount, lockoutenabled,
      isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{userId}', 'platform.admin', '{AdminEmail}', '{passwordHash.Replace("'", "''")}', '{Guid.NewGuid():N}',
+SELECT '{userId}', 'Platform', 'Admin', NULL, '{adminTypeId}', 'platform.admin', '{AdminEmail}', '{passwordHash.Replace("'", "''")}', '{Guid.NewGuid():N}',
        NULL, 0, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} WHERE email = '{AdminEmail}');
 """);
@@ -35,7 +37,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles}
     (userid, roleid, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT '{userId}', r.id, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
-WHERE r.code = 'ADMIN'
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}'))
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserRoles} ur
     WHERE ur.userid = '{userId}' AND ur.roleid = r.id

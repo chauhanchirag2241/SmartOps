@@ -7,7 +7,11 @@ namespace SmartOps.Domain.Modules.FrontOffice.Entities;
 public sealed class VisitorEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+
+    /// <summary>Set from active branch on write; not user-edited — omit from audit history.</summary>
+    [TrackHistoryIgnore]
     public Guid BranchId { get; set; }
+
     public string Name { get; set; } = null!;
     public string? Phone { get; set; }
     public string? IdCardType { get; set; }

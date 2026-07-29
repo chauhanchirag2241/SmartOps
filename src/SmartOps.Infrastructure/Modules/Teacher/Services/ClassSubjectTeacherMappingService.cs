@@ -52,7 +52,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
         Guid yearId = await ResolveAcademicYearIdAsync(academicYearId, cancellationToken).ConfigureAwait(false);
         string schema = _context.OperationalSchema;
         (string classBranchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "c", cancellationToken)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", cancellationToken)
             .ConfigureAwait(false);
         (string subjectBranchFilter, _) = await BranchSqlBuilder
             .GetActiveBranchFilterAsync(_branchContext, "s", cancellationToken)
@@ -81,16 +81,17 @@ ORDER BY startdate DESC
             .QueryAsync<MappingLookupOptionDto>(
                 new CommandDefinition(
                     $"""
-SELECT id AS Id,
-       trim(classname || COALESCE(' - ' || NULLIF(trim(
+SELECT c.id AS Id,
+       trim(cg.classname || COALESCE(' - ' || NULLIF(trim(
            CASE c.section WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE '' END
        ), ''), '')) AS Name,
        CASE c.section WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE '' END AS SubLabel
 FROM {schema}.{DatabaseConfig.TableClasses} c
-WHERE isactive = true AND academicyearid = @AcademicYearId{classBranchFilter}
-ORDER BY classname, section
+INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+WHERE c.isactive = true{classBranchFilter}
+ORDER BY cg.classname, c.section
 """,
-                    new { AcademicYearId = yearId, ActiveBranchId = activeBranchId },
+                    new { ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
@@ -111,10 +112,11 @@ ORDER BY s.subjectname
             .QueryAsync<MappingLookupOptionDto>(
                 new CommandDefinition(
                     $"""
-SELECT e.id AS Id, trim(e.firstname || ' ' || e.lastname) AS Name
+SELECT e.id AS Id, trim(u.firstname || ' ' || u.lastname) AS Name
 FROM {schema}.{DatabaseConfig.TableEmployees} e
+INNER JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 WHERE e.isactive = true{employeeBranchFilter}
-ORDER BY e.firstname, e.lastname
+ORDER BY u.firstname, u.lastname
 """,
                     new { ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
@@ -382,16 +384,16 @@ ORDER BY e.firstname, e.lastname
         Guid classId,
         CancellationToken cancellationToken)
     {
-        Guid? classYearId = await _repository
-            .GetClassAcademicYearIdAsync(classId, cancellationToken)
+        bool classExists = await _repository
+            .ExistsActiveClassAsync(classId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!classYearId.HasValue)
+        if (!classExists)
         {
             throw new InvalidOperationException("Class not found or is inactive.");
         }
 
-        return classYearId.Value;
+        return await ResolveAcademicYearIdAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
     private static InvalidOperationException? MapDatabaseException(Exception ex)

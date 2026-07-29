@@ -34,31 +34,27 @@ public sealed class EmployeesController(
     {
         if (request is null) return BadRequest("Employee data is required.");
 
+        if (!TryGetSchoolId(out Guid schoolId))
+        {
+            return BadRequest("School context is required.");
+        }
+
         var entity = request.ToEntity();
         if (entity.ReportingManagerId == entity.Id)
         {
             return BadRequest("Reporting manager cannot be the same employee.");
         }
 
+        Guid provisionedUserId = await userProvisioning
+            .ProvisionEmployeeUserAsync(entity, schoolId, cancellationToken)
+            .ConfigureAwait(false);
+        entity.UserId = provisionedUserId;
+
         var employeeId = await employeeRepository.CreateEmployeeAsync(entity, cancellationToken).ConfigureAwait(false);
 
-        if (TryGetSchoolId(out Guid schoolId))
-        {
-            Guid? provisionedUserId = await userProvisioning
-                .ProvisionEmployeeUserAsync(entity, schoolId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (provisionedUserId.HasValue)
-            {
-                await employeeRepository
-                    .SetEmployeeUserIdAsync(employeeId, provisionedUserId.Value, cancellationToken)
-                    .ConfigureAwait(false);
-
-                await userScopeService
-                    .BumpScopeVersionAsync(provisionedUserId.Value, schoolId, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
+        await userScopeService
+            .BumpScopeVersionAsync(provisionedUserId, schoolId, cancellationToken)
+            .ConfigureAwait(false);
 
         return Ok(new CreateEmployeeResponse("Employee created successfully", employeeId));
     }
@@ -126,30 +122,7 @@ public sealed class EmployeesController(
             return BadRequest("Reporting manager cannot be the same employee.");
         }
 
-        if (employee.UserTypeCode is not "TEACHER" and not "HOD")
-        {
-            employee.ClassId = null;
-        }
-
         await employeeRepository.UpdateEmployeeAsync(employee, cancellationToken).ConfigureAwait(false);
-
-        if (TryGetSchoolId(out Guid schoolId))
-        {
-            Guid? provisionedUserId = await userProvisioning
-                .ProvisionEmployeeUserAsync(employee, schoolId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (provisionedUserId.HasValue && employee.UserId != provisionedUserId)
-            {
-                await employeeRepository
-                    .SetEmployeeUserIdAsync(employee.Id, provisionedUserId.Value, cancellationToken)
-                    .ConfigureAwait(false);
-
-                await userScopeService
-                    .BumpScopeVersionAsync(provisionedUserId.Value, schoolId, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
 
         return NoContent();
     }

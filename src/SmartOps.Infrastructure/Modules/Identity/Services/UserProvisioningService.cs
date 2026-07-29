@@ -1,334 +1,217 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Identity.Models;
-using SmartOps.Application.Modules.Identity.Utilities;
+using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Modules.Employee.Entities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Modules.Student.Entities;
-using SmartOps.Domain.Modules.Employee.Entities;
-using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 
 public sealed class UserProvisioningService : IUserProvisioningService
 {
-    private const string ParentFallbackPassword = "ChangeMe@123";
-    private const string InternalEmailDomain = "portal.smartops.internal";
+    public const string DefaultPortalPassword = "SmartOps@123";
 
     private readonly IUserRepository _users;
     private readonly IUserTypeRepository _userTypes;
     private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
-    private readonly IPersonaRoleMapper _roleMapper;
 
     public UserProvisioningService(
         IUserRepository users,
         IUserTypeRepository userTypes,
-        IPasswordHasher<ApplicationUser> passwordHasher,
-        IPersonaRoleMapper roleMapper)
+        IPasswordHasher<ApplicationUser> passwordHasher)
     {
         _users = users;
         _userTypes = userTypes;
         _passwordHasher = passwordHasher;
-        _roleMapper = roleMapper;
     }
 
-    public async Task<ProvisionUserResult?> ProvisionSchoolUserAsync(
+    public async Task<ProvisionUserResult> ProvisionSchoolUserAsync(
         ProvisionUserRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!request.PortalAccess)
+        string firstName = RequireName(request.FirstName, "First name");
+        string lastName = RequireName(request.LastName, "Last name");
+        string email = RequireEmail(request.Email);
+        string username = BuildUsername(firstName, lastName, request.Username);
+        string userTypeCode = string.IsNullOrWhiteSpace(request.UserTypeCode)
+            ? UserTypeCodes.Teacher
+            : request.UserTypeCode.Trim();
+
+        Guid? userTypeId = await _userTypes.GetIdByCodeAsync(userTypeCode, cancellationToken).ConfigureAwait(false)
+            ?? UserTypeCodes.TryGetId(userTypeCode);
+
+        if (userTypeId is null || userTypeId == Guid.Empty)
         {
-            return null;
+            throw new InvalidOperationException($"Unknown user type '{userTypeCode}'.");
         }
 
-        if (!TryResolveLoginIdentity(
-                request.SchoolId,
-                request.Email,
-                request.Username,
-                request.LoginIdentifier,
-                out string username,
-                out string email))
+        ApplicationUser? byUsername = await _users.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
+        if (byUsername is not null)
         {
-            return null;
+            throw new InvalidOperationException($"Username '{username}' already exists.");
         }
 
-        if (!request.DateOfBirth.HasValue)
+        ApplicationUser? byEmail = await _users.GetByEmailAsync(email, cancellationToken).ConfigureAwait(false);
+        if (byEmail is not null)
         {
-            throw new InvalidOperationException(
-                $"Date of birth is required to provision a {request.RoleName} portal account.");
-        }
-
-        string passwordSeed = ResolvePasswordSeed(request.Email, username);
-        string password = DefaultPasswordGenerator.Generate(passwordSeed, request.DateOfBirth.Value);
-        string userTypeCode = request.UserTypeCode ?? ResolveUserTypeCodeForRole(request.RoleName);
-        Guid? userTypeId = await _userTypes.GetIdByCodeAsync(userTypeCode, cancellationToken).ConfigureAwait(false);
-
-        ApplicationUser? existing = await _users
-            .GetByEmailAsync(email, cancellationToken)
-            .ConfigureAwait(false)
-            ?? await _users.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
-
-        if (existing is not null)
-        {
-            existing.PasswordHash = _passwordHasher.HashPassword(existing, password);
-            existing.SecurityStamp = Guid.NewGuid().ToString("N");
-            await _users.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
-
-            await AssignRoleAndSchoolAsync(existing.Id, request.SchoolId, request.RoleName, userTypeId, cancellationToken)
-                .ConfigureAwait(false);
-
-            return new ProvisionUserResult
-            {
-                UserId = existing.Id,
-                IsNewUser = false,
-                GeneratedPassword = password
-            };
+            throw new InvalidOperationException($"Email '{email}' already exists.");
         }
 
         var user = new ApplicationUser
         {
+            FirstName = firstName,
+            LastName = lastName,
+            Mobile = string.IsNullOrWhiteSpace(request.Mobile) ? null : request.Mobile.Trim(),
+            UserTypeId = userTypeId.Value,
             Username = username,
             Email = email,
             IsActive = true,
             LockoutEnabled = true
         };
-        user.PasswordHash = _passwordHasher.HashPassword(user, password);
+        user.PasswordHash = _passwordHasher.HashPassword(user, DefaultPortalPassword);
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
         await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await AssignRoleAndSchoolAsync(user.Id, request.SchoolId, request.RoleName, userTypeId, cancellationToken)
-            .ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(request.RoleName))
+        {
+            await _users.AddUserToRoleAsync(user.Id, request.RoleName.Trim(), cancellationToken).ConfigureAwait(false);
+        }
 
         return new ProvisionUserResult
         {
             UserId = user.Id,
             IsNewUser = true,
-            GeneratedPassword = password
+            GeneratedPassword = DefaultPortalPassword
         };
     }
 
-    public async Task<Guid?> ProvisionEmployeeUserAsync(
+    public async Task<Guid> ProvisionEmployeeUserAsync(
         EmployeeEntity employee,
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        string roleName = _roleMapper.ResolveRoleName(employee.PortalRoleName, RoleNames.Teacher);
+        string userTypeCode = string.IsNullOrWhiteSpace(employee.UserTypeCode)
+            ? UserTypeCodes.Teacher
+            : employee.UserTypeCode;
 
-        ProvisionUserResult? result = await ProvisionSchoolUserAsync(
+        if (!UserTypeCodes.IsStaff(userTypeCode))
+        {
+            userTypeCode = UserTypeCodes.Teacher;
+        }
+
+        ProvisionUserResult result = await ProvisionSchoolUserAsync(
             new ProvisionUserRequest
             {
                 SchoolId = schoolId,
-                RoleName = roleName,
-                UserTypeCode = employee.UserTypeCode,
-                PortalAccess = employee.PortalAccess,
+                UserTypeCode = userTypeCode,
+                FirstName = employee.FirstName,
+                LastName = employee.LastName,
                 Email = employee.Email,
-                Username = employee.Username,
-                DateOfBirth = employee.Dob,
-                LoginIdentifier = employee.EmployeeId
+                Mobile = employee.Mobile,
+                Username = employee.Username
             },
             cancellationToken).ConfigureAwait(false);
 
-        return result?.UserId;
+        employee.UserId = result.UserId;
+        employee.Username = BuildUsername(employee.FirstName, employee.LastName, employee.Username);
+        return result.UserId;
     }
 
-    public async Task<Guid?> ProvisionStudentUserAsync(
+    public async Task<Guid> ProvisionStudentUserAsync(
         StudentEntity student,
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        ProvisionUserResult? result = await ProvisionSchoolUserAsync(
+        if (string.IsNullOrWhiteSpace(student.Email))
+        {
+            throw new InvalidOperationException("Student email is required to create a portal user.");
+        }
+
+        ProvisionUserResult result = await ProvisionSchoolUserAsync(
             new ProvisionUserRequest
             {
                 SchoolId = schoolId,
-                RoleName = RoleNames.Student,
                 UserTypeCode = UserTypeCodes.Student,
-                PortalAccess = student.PortalAccess,
+                FirstName = student.FirstName,
+                LastName = student.LastName,
                 Email = student.Email,
-                Username = null,
-                DateOfBirth = student.Dob,
-                LoginIdentifier = student.AdmissionNo
+                Mobile = student.Mobile
             },
             cancellationToken).ConfigureAwait(false);
 
-        return result?.UserId;
-    }
-
-    public async Task<Guid?> ProvisionParentUserAsync(
-        string email,
-        string? username,
-        Guid schoolId,
-        CancellationToken cancellationToken = default,
-        DateOnly? dateOfBirth = null)
-    {
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            return null;
-        }
-
-        if (dateOfBirth.HasValue
-            && TryResolveLoginIdentity(schoolId, email, username, null, out string loginName, out string normalizedEmail))
-        {
-            ProvisionUserResult? result = await ProvisionSchoolUserAsync(
-                new ProvisionUserRequest
-                {
-                    SchoolId = schoolId,
-                    RoleName = RoleNames.Parent,
-                    UserTypeCode = UserTypeCodes.Parent,
-                    PortalAccess = true,
-                    Email = normalizedEmail,
-                    Username = loginName,
-                    DateOfBirth = dateOfBirth
-                },
-                cancellationToken).ConfigureAwait(false);
-
-            return result?.UserId;
-        }
-
-        return await ProvisionParentWithoutDobAsync(email, username, schoolId, cancellationToken).ConfigureAwait(false);
+        student.UserId = result.UserId;
+        return result.UserId;
     }
 
     public async Task<Guid?> ProvisionStaffUserAsync(
         string email,
         string? username,
+        string firstName,
+        string lastName,
+        string? mobile,
         string personaRoleLabel,
+        string userTypeCode,
         Guid schoolId,
-        DateOnly dateOfBirth,
-        bool portalAccess = true,
         CancellationToken cancellationToken = default)
     {
-        string roleName = _roleMapper.ResolveRoleName(personaRoleLabel, RoleNames.Staff);
-
-        ProvisionUserResult? result = await ProvisionSchoolUserAsync(
+        _ = personaRoleLabel;
+        ProvisionUserResult result = await ProvisionSchoolUserAsync(
             new ProvisionUserRequest
             {
                 SchoolId = schoolId,
-                RoleName = roleName,
-                UserTypeCode = ResolveUserTypeCodeForRole(roleName),
-                PortalAccess = portalAccess,
+                UserTypeCode = string.IsNullOrWhiteSpace(userTypeCode) ? UserTypeCodes.OfficeStaff : userTypeCode,
+                FirstName = firstName,
+                LastName = lastName,
                 Email = email,
-                Username = username,
-                DateOfBirth = dateOfBirth
+                Mobile = mobile,
+                Username = username
             },
             cancellationToken).ConfigureAwait(false);
 
-        return result?.UserId;
+        return result.UserId;
     }
 
-    private async Task<Guid?> ProvisionParentWithoutDobAsync(
-        string email,
-        string? username,
-        Guid schoolId,
-        CancellationToken cancellationToken)
+    public static string BuildUsername(string firstName, string lastName, string? explicitUsername = null)
     {
-        string normalizedEmail = email.Trim().ToLowerInvariant();
-        string loginName = !string.IsNullOrWhiteSpace(username)
-            ? username.Trim()
-            : normalizedEmail;
-
-        Guid? userTypeId = await _userTypes.GetIdByCodeAsync(UserTypeCodes.Parent, cancellationToken).ConfigureAwait(false);
-
-        ApplicationUser? existing = await _users
-            .GetByEmailAsync(normalizedEmail, cancellationToken)
-            .ConfigureAwait(false)
-            ?? await _users.GetByUsernameAsync(loginName, cancellationToken).ConfigureAwait(false);
-
-        if (existing is not null)
-        {
-            await AssignRoleAndSchoolAsync(existing.Id, schoolId, RoleNames.Parent, userTypeId, cancellationToken)
-                .ConfigureAwait(false);
-            return existing.Id;
-        }
-
-        var user = new ApplicationUser
-        {
-            Username = loginName,
-            Email = normalizedEmail,
-            IsActive = true,
-            LockoutEnabled = true
-        };
-        user.PasswordHash = _passwordHasher.HashPassword(user, ParentFallbackPassword);
-        user.SecurityStamp = Guid.NewGuid().ToString("N");
-
-        await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
-        await AssignRoleAndSchoolAsync(user.Id, schoolId, RoleNames.Parent, userTypeId, cancellationToken).ConfigureAwait(false);
-
-        return user.Id;
-    }
-
-    private async Task AssignRoleAndSchoolAsync(
-        Guid userId,
-        Guid schoolId,
-        string roleName,
-        Guid? userTypeId,
-        CancellationToken cancellationToken)
-    {
-        await _users.AddUserToRoleAsync(userId, roleName, cancellationToken).ConfigureAwait(false);
-        await _users.AddUserToSchoolAsync(userId, schoolId, roleName, userTypeId, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static string ResolveUserTypeCodeForRole(string roleName) =>
-        roleName switch
-        {
-            RoleNames.Student => UserTypeCodes.Student,
-            RoleNames.Parent => UserTypeCodes.Parent,
-            RoleNames.Hod => UserTypeCodes.Hod,
-            RoleNames.Accountant => UserTypeCodes.Accountant,
-            RoleNames.Staff => UserTypeCodes.Staff,
-            RoleNames.SchoolAdmin or RoleNames.Admin => UserTypeCodes.SchoolAdmin,
-            RoleNames.Teacher => UserTypeCodes.Teacher,
-            _ => UserTypeCodes.Teacher
-        };
-
-    private static string ResolvePasswordSeed(string? email, string loginUsername)
-    {
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            string trimmed = email.Trim().ToLowerInvariant();
-            int atIndex = trimmed.IndexOf('@');
-            return atIndex > 0 ? trimmed[..atIndex] : trimmed;
-        }
-
-        return loginUsername;
-    }
-
-    private static bool TryResolveLoginIdentity(
-        Guid schoolId,
-        string? email,
-        string? explicitUsername,
-        string? loginIdentifier,
-        out string username,
-        out string normalizedEmail)
-    {
-        username = string.Empty;
-        normalizedEmail = string.Empty;
-
         if (!string.IsNullOrWhiteSpace(explicitUsername))
         {
-            username = explicitUsername.Trim().ToLowerInvariant();
-        }
-        else if (!string.IsNullOrWhiteSpace(email))
-        {
-            string trimmedEmail = email.Trim().ToLowerInvariant();
-            int atIndex = trimmedEmail.IndexOf('@');
-            username = atIndex > 0 ? trimmedEmail[..atIndex] : trimmedEmail;
-        }
-        else if (!string.IsNullOrWhiteSpace(loginIdentifier))
-        {
-            username = loginIdentifier.Trim().ToLowerInvariant();
-        }
-        else
-        {
-            return false;
+            return SanitizeUsername(explicitUsername);
         }
 
-        if (!string.IsNullOrWhiteSpace(email))
+        string first = SanitizeUsername(firstName);
+        string last = SanitizeUsername(lastName);
+        string username = string.IsNullOrEmpty(last) ? first : $"{first}.{last}";
+        if (string.IsNullOrEmpty(username))
         {
-            normalizedEmail = email.Trim().ToLowerInvariant();
-            return true;
+            throw new InvalidOperationException("Unable to generate username from first and last name.");
         }
 
-        string schoolSuffix = schoolId.ToString("N")[..8];
-        username = $"{username}.{schoolSuffix}";
-        normalizedEmail = $"{username}@{InternalEmailDomain}";
-        return true;
+        return username;
+    }
+
+    private static string SanitizeUsername(string value) =>
+        Regex.Replace(value.Trim().ToLowerInvariant(), @"[^a-z0-9.]", string.Empty);
+
+    private static string RequireName(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{fieldName} is required.");
+        }
+
+        return value.Trim();
+    }
+
+    private static string RequireEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException("Email is required.");
+        }
+
+        return email.Trim();
     }
 }

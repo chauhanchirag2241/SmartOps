@@ -25,7 +25,7 @@ public interface IClassSubjectTeacherMappingRepository
 
     Task<ClassSubjectTeacherMappingDto?> GetDtoByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task<Guid?> GetClassAcademicYearIdAsync(Guid classId, CancellationToken cancellationToken = default);
+    Task<bool> ExistsActiveClassAsync(Guid classId, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsActiveClassSubjectAsync(
         Guid classId,

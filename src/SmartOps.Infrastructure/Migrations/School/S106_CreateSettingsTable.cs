@@ -5,7 +5,7 @@ using SmartOps.Domain.Common.Configuration;
 namespace SmartOps.Infrastructure.Migrations.School;
 
 [Tags("School")]
-[Migration(106, "School template — settings and alerts")]
+[Migration(106, "School template — settings")]
 public sealed class S106_CreateSettingsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
@@ -21,30 +21,10 @@ public sealed class S106_CreateSettingsTable : Migration
                 .WithColumn("description").AsString(500).Nullable()
                 .WithAuditColumns();
         }
-
-        if (!Schema.Schema(S).Table(DatabaseConfig.TableAlerts).Exists())
-        {
-            Create.Table(DatabaseConfig.TableAlerts).InSchema(S)
-                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("title").AsString(200).NotNullable()
-                .WithColumn("message").AsString(int.MaxValue).NotNullable()
-                .WithColumn("alerttype").AsString(50).NotNullable().WithDefaultValue("info")
-                .WithColumn("targetrole").AsString(100).Nullable()
-                .WithColumn("targetuserid").AsGuid().Nullable()
-                .WithColumn("isread").AsBoolean().NotNullable().WithDefaultValue(false)
-                .WithColumn("readon").AsDateTimeOffset().Nullable()
-                .WithColumn("expiresat").AsDateTimeOffset().Nullable()
-                .WithAuditColumns();
-
-            Create.Index("ix_alerts_targetuserid")
-                .OnTable(DatabaseConfig.TableAlerts).InSchema(S)
-                .OnColumn("targetuserid").Ascending();
-        }
     }
 
     public override void Down()
     {
-        Delete.Table(DatabaseConfig.TableAlerts).InSchema(S);
         Delete.Table(DatabaseConfig.TableSettings).InSchema(S);
     }
 }

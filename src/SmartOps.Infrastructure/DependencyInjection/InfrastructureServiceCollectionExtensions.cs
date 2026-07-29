@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Configuration;
 using SmartOps.Application.Modules.Identity.Interfaces;
-using SmartOps.Application.Modules.Identity.Utilities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Infrastructure.Modules.Identity;
 using SmartOps.Infrastructure.Modules.Identity.Services;
@@ -17,6 +16,7 @@ using SmartOps.Infrastructure.Persistence.TypeHandlers;
 using SmartOps.Domain.Modules.Student;
 using SmartOps.Domain.Modules.Class;
 using SmartOps.Domain.Modules.Subject;
+using SmartOps.Domain.Modules.Shift;
 using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.AcademicPeriod;
 using SmartOps.Domain.Modules.Employee;
@@ -67,6 +67,7 @@ using SmartOps.Infrastructure.Modules.Class;
 using SmartOps.Infrastructure.Modules.School;
 using SmartOps.Infrastructure.Modules.Student;
 using SmartOps.Infrastructure.Modules.Subject;
+using SmartOps.Infrastructure.Modules.Shift;
 using SmartOps.Infrastructure.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Infrastructure.Modules.Teacher.Services;
@@ -100,6 +101,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IStudentFeeInstallmentRepository, StudentFeeInstallmentRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<ISubjectRepository, SubjectRepository>();
+        services.AddScoped<IShiftRepository, ShiftRepository>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
@@ -165,10 +167,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ITimetableRepository, TimetableRepository>();
         services.AddScoped<ITimetableService, TimetableService>();
 
-        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
+        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDatabase"))
+            && string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))
             && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PlatformDb")))
         {
-            throw new InvalidOperationException("Connection string 'GlobalDb' or 'PlatformDb' is not configured.");
+            throw new InvalidOperationException(
+                "Connection string 'GlobalDatabase', 'GlobalDb', or 'PlatformDb' is not configured.");
         }
 
         services.AddSingleton<IDatabaseMigrationService, DatabaseMigrationService>();
@@ -182,9 +186,7 @@ public static class InfrastructureServiceCollectionExtensions
     public static IServiceCollection AddSmartOpsIdentityInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
-        services.Configure<PersonaRoleMappingOptions>(configuration.GetSection(PersonaRoleMappingOptions.SectionName));
 
-        services.AddScoped<IPersonaRoleMapper, PersonaRoleMapper>();
         services.AddScoped<UserRepository>();
         services.AddScoped<IUserRepository>(sp => sp.GetRequiredService<UserRepository>());
 

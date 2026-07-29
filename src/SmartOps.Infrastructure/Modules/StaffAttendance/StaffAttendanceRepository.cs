@@ -36,7 +36,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
             SELECT
                 COALESCE(sa.id, '00000000-0000-0000-0000-000000000000'::uuid) AS Id,
                 e.id AS EmployeeId,
-                TRIM(e.firstname || ' ' || e.lastname) AS EmployeeName,
+                TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
                 e.departmentid AS DepartmentId,
                 d.name AS DepartmentName,
                 @Date AS AttendanceDate,
@@ -55,11 +55,12 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                 e.photourl AS PhotoUrl,
                 e.shiftstarttime AS ShiftStartTime
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid AND d.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableStaffAttendance} sa
                 ON sa.employeeid = e.id AND sa.attendancedate = @Date AND sa.isactive = true
             WHERE e.isactive = true
-            ORDER BY e.firstname ASC, e.lastname ASC;
+            ORDER BY u.firstname ASC, u.lastname ASC;
             """;
 
         IEnumerable<StaffAttendanceListRow> rows = await connection.QueryAsync<StaffAttendanceListRow>(
@@ -253,7 +254,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
         string sql = $"""
             SELECT
                 e.id AS Id,
-                TRIM(e.firstname || ' ' || e.lastname) AS EmployeeName,
+                TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
                 e.departmentid AS DepartmentId,
                 d.name AS DepartmentName,
                 e.shiftstarttime AS ShiftStartTime,
@@ -263,6 +264,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                     WHERE fe.employeeid = e.id AND fe.isactive = true
                 ) AS IsFaceEnrolled
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid AND d.isactive = true
             WHERE e.id = @EmployeeId AND e.isactive = true;
             """;
@@ -306,11 +308,12 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
         string sql = $"""
             SELECT
                 e.id AS EmployeeId,
-                TRIM(e.firstname || ' ' || e.lastname) AS EmployeeName,
+                TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
                 d.name AS DepartmentName,
                 sa.attendancedate AS AttendanceDate,
                 sa.status AS Status
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid AND d.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableStaffAttendance} sa
                 ON sa.employeeid = e.id
@@ -319,7 +322,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                AND sa.isactive = true
             WHERE e.isactive = true
               AND (@DepartmentId IS NULL OR e.departmentid = @DepartmentId)
-            ORDER BY e.firstname ASC, e.lastname ASC, sa.attendancedate ASC;
+            ORDER BY u.firstname ASC, u.lastname ASC, sa.attendancedate ASC;
             """;
 
         IEnumerable<StaffAttendanceReportSourceRow> rows = await connection.QueryAsync<StaffAttendanceReportSourceRow>(

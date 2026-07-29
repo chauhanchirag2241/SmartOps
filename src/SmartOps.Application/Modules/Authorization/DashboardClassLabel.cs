@@ -5,6 +5,9 @@ public static class DashboardClassLabel
     public const string SectionSuffixSql =
         "CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
 
+    /// <summary>Requires aliases <c>cg</c> (classgroups) and <c>c</c> (classes).</summary>
+    public const string DisplayNameSql = "cg.classname || " + SectionSuffixSql;
+
     public static string Format(string? className, int section)
     {
         string baseName = (className ?? string.Empty).Trim();

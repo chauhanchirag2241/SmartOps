@@ -38,7 +38,6 @@ public sealed class RolesController(
             {
                 Id = role.Id,
                 Name = role.Name,
-                Code = role.Code,
                 Description = role.Description,
                 MenuPermissions = permissions,
                 DashboardWidgetPermissions = widgetPermissions
@@ -69,7 +68,6 @@ public sealed class RolesController(
         {
             Id = role.Id,
             Name = role.Name,
-            Code = role.Code,
             Description = role.Description,
             MenuPermissions = permissions,
             DashboardWidgetPermissions = widgetPermissions
@@ -82,13 +80,12 @@ public sealed class RolesController(
         [FromBody] CreateRoleDto request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Code))
+        if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return BadRequest("Role name and code are required.");
+            return BadRequest("Role name is required.");
         }
 
         string name = request.Name.Trim();
-        string code = request.Code.Trim().ToUpperInvariant();
         if (await roleRepository.GetByNameAsync(name, cancellationToken).ConfigureAwait(false) is not null)
         {
             return Conflict("A role with this name already exists.");
@@ -97,7 +94,6 @@ public sealed class RolesController(
         var role = new ApplicationRole
         {
             Name = name,
-            Code = code,
             Description = request.Description?.Trim(),
             IsActive = true,
         };
@@ -124,7 +120,6 @@ public sealed class RolesController(
             {
                 Id = role.Id,
                 Name = role.Name,
-                Code = role.Code,
                 Description = role.Description,
                 MenuPermissions = permissions,
                 DashboardWidgetPermissions = widgetPermissions,
@@ -145,7 +140,6 @@ public sealed class RolesController(
         }
 
         string name = request.Name.Trim();
-        string code = request.Code.Trim().ToUpperInvariant();
 
         IReadOnlyList<ApplicationRole> allRoles = await roleRepository.GetAllAsync(cancellationToken).ConfigureAwait(false);
         if (allRoles.Any(r => r.Id != id && string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
@@ -153,13 +147,7 @@ public sealed class RolesController(
             return Conflict("A role with this name already exists.");
         }
 
-        if (allRoles.Any(r => r.Id != id && string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase)))
-        {
-            return Conflict("A role with this code already exists.");
-        }
-
         role.Name = name;
-        role.Code = code;
         role.Description = request.Description?.Trim();
         role.IsActive = request.IsActive;
 

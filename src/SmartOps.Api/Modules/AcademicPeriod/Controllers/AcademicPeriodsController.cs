@@ -36,20 +36,27 @@ public sealed class AcademicPeriodsController(
     [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
     public async Task<ActionResult<ClassAcademicPeriodSetupDto>> GetByClass(
         Guid classId,
+        [FromQuery] Guid academicYearId,
         CancellationToken cancellationToken)
     {
-        var classEntity = await classRepository.GetClassByIdAsync(classId, cancellationToken).ConfigureAwait(false);
-        if (classEntity is null)
+        if (academicYearId == Guid.Empty)
+        {
+            return BadRequest("Academic year is required.");
+        }
+
+        // classId is a class group id (Class 1 / Class 9), not a section row.
+        var classGroup = await classRepository.GetClassGroupByIdAsync(classId, cancellationToken).ConfigureAwait(false);
+        if (classGroup is null)
         {
             return NotFound();
         }
 
         IReadOnlyList<ClassAcademicPeriodEntity> periods =
-            await periodRepository.GetByClassAsync(classId, cancellationToken).ConfigureAwait(false);
+            await periodRepository.GetByClassAsync(classId, academicYearId, cancellationToken).ConfigureAwait(false);
 
         return Ok(new ClassAcademicPeriodSetupDto(
             classId,
-            classEntity.AcademicYearId,
+            academicYearId,
             periods.FirstOrDefault()?.PeriodType,
             periods.Select(x => x.ToDto()).ToList()));
     }
@@ -61,15 +68,15 @@ public sealed class AcademicPeriodsController(
         [FromBody] SaveClassAcademicPeriodsRequest request,
         CancellationToken cancellationToken)
     {
-        var classEntity = await classRepository.GetClassByIdAsync(classId, cancellationToken).ConfigureAwait(false);
-        if (classEntity is null)
+        var classGroup = await classRepository.GetClassGroupByIdAsync(classId, cancellationToken).ConfigureAwait(false);
+        if (classGroup is null)
         {
             return NotFound("Class not found.");
         }
 
-        if (request.AcademicYearId == Guid.Empty || classEntity.AcademicYearId != request.AcademicYearId)
+        if (request.AcademicYearId == Guid.Empty)
         {
-            return BadRequest("The selected class does not belong to the selected academic year.");
+            return BadRequest("Academic year is required.");
         }
 
         var year = await academicYearRepository
@@ -90,7 +97,9 @@ public sealed class AcademicPeriodsController(
             return BadRequest(validationError);
         }
 
-        if (await periodRepository.HasPaidInstallmentsAsync(classId, cancellationToken).ConfigureAwait(false))
+        if (await periodRepository
+                .HasPaidInstallmentsAsync(classId, request.AcademicYearId, cancellationToken)
+                .ConfigureAwait(false))
         {
             return BadRequest("Academic periods cannot be changed after fee payments exist for this class.");
         }
@@ -98,7 +107,7 @@ public sealed class AcademicPeriodsController(
         List<ClassAcademicPeriodEntity> entities = request.Periods
             .Select(p => new ClassAcademicPeriodEntity
             {
-                ClassId = classId,
+                ClassGroupId = classId,
                 AcademicYearId = request.AcademicYearId,
                 PeriodType = request.PeriodType,
                 PeriodIndex = p.PeriodIndex,
@@ -113,7 +122,8 @@ public sealed class AcademicPeriodsController(
             .ConfigureAwait(false);
 
         IReadOnlyList<ClassAcademicPeriodEntity> saved =
-            await periodRepository.GetByClassAsync(classId, cancellationToken).ConfigureAwait(false);
+            await periodRepository.GetByClassAsync(classId, request.AcademicYearId, cancellationToken)
+                .ConfigureAwait(false);
         return Ok(new ClassAcademicPeriodSetupDto(
             classId,
             request.AcademicYearId,

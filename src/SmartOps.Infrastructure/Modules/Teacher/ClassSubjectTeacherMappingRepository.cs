@@ -122,16 +122,16 @@ LIMIT 1
         return rows.FirstOrDefault();
     }
 
-    public async Task<Guid?> GetClassAcademicYearIdAsync(Guid classId, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsActiveClassAsync(Guid classId, CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT academicyearid FROM {Schema}.{DatabaseConfig.TableClasses}
-WHERE id = @ClassId AND isactive = true
-LIMIT 1
+SELECT EXISTS (
+    SELECT 1 FROM {Schema}.{DatabaseConfig.TableClasses} c
+    WHERE c.id = @ClassId AND c.isactive = true)
 """;
 
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.QuerySingleOrDefaultAsync<Guid?>(
+        return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
@@ -383,26 +383,26 @@ WHERE m.classid = ANY(@ClassIds)
         CancellationToken cancellationToken = default)
     {
         (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "c", cancellationToken)
+            .GetActiveBranchFilterAsync(_branchContext, "cg", cancellationToken)
             .ConfigureAwait(false);
 
         string sql = $"""
 SELECT
     c.id AS ClassId,
-    c.classname AS ClassName,
+    cg.classname AS ClassName,
     {SectionLabelSql} AS Section,
     COUNT(m.id) FILTER (WHERE m.isactive = true) AS SubjectCount,
     COUNT(m.id) FILTER (WHERE m.isactive = true AND m.employeeid IS NOT NULL) AS EmployeesAssignedCount,
     COUNT(m.id) FILTER (WHERE m.isactive = true AND m.isclassteacher = true) AS ClassTeacherCount
 FROM {Schema}.{DatabaseConfig.TableClasses} c
+INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
     ON m.classid = c.id
     AND m.isactive = true
     AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
-WHERE c.isactive = true
-  AND (@AcademicYearId IS NULL OR c.academicyearid = @AcademicYearId){branchFilter}
-GROUP BY c.id, c.classname, c.section
-ORDER BY c.classname, c.section
+WHERE c.isactive = true{branchFilter}
+GROUP BY c.id, cg.classname, c.section
+ORDER BY cg.classname, c.section
 """;
 
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -417,29 +417,26 @@ ORDER BY c.classname, c.section
     }
 
     private static string BuildEmployeeUserMatchSql() =>
-        $"""
-(t.userid = @UserId OR EXISTS (
-    SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
-    WHERE u.id = @UserId AND u.isactive = true AND lower(trim(t.email)) = lower(trim(u.email))
-))
-""";
+        "t.userid = @UserId";
 
     private string BuildSelectSql(string whereClause) => $"""
 SELECT
     m.id AS Id,
     m.classid AS ClassId,
-    c.classname AS ClassName,
+    cg.classname AS ClassName,
     m.subjectid AS SubjectId,
     s.subjectname AS SubjectName,
     s.subjectcode AS SubjectCode,
     m.employeeid AS employeeid,
-    CASE WHEN m.employeeid IS NULL THEN NULL ELSE trim(t.firstname || ' ' || t.lastname) END AS EmployeeName,
+    CASE WHEN m.employeeid IS NULL THEN NULL ELSE trim(tu.firstname || ' ' || tu.lastname) END AS EmployeeName,
     m.academicyearid AS AcademicYearId,
     m.isclassteacher AS IsClassTeacher
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = m.classid
+INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = m.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+LEFT JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
 WHERE {whereClause}
 ORDER BY s.subjectname
 """;

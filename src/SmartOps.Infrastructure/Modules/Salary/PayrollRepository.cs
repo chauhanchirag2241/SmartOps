@@ -156,7 +156,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
         string sql = $"""
             SELECT pe.id AS Id,
                    pe.employeeid AS EmployeeRecordId,
-                   TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
+                   TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
                    {DepartmentExpr} AS Department,
                    pe.basicsalary AS BasicSalary,
                    COALESCE((
@@ -178,6 +178,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pe.status AS Status
             FROM {Schema}.{DatabaseConfig.TablePayrollEntries} pe
             INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = pe.employeeid
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             WHERE pe.payrollrunid = @RunId AND pe.isactive = true
             ORDER BY EmployeeName;
             """;
@@ -334,8 +335,8 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pr.payyear AS PayYear,
                    pr.paymonth AS PayMonth,
                    pe.employeeid AS EmployeeRecordId,
-                   TRIM(t.firstname || ' ' || t.lastname) AS EmployeeName,
-                   t.employeeid AS EmployeeId,
+                   TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
+                   t.employeecode AS EmployeeCode,
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
                    pe.basicsalary AS BasicSalary,
@@ -350,6 +351,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
             FROM {Schema}.{DatabaseConfig.TablePayrollEntries} pe
             INNER JOIN {Schema}.{DatabaseConfig.TablePayrollRuns} pr ON pr.id = pe.payrollrunid
             INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = pe.employeeid
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             WHERE pe.id = @EntryId AND pe.isactive = true;
             """;
         return await connection

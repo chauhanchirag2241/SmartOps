@@ -29,7 +29,6 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         academicYear.Title = academicYear.Title.Trim();
         academicYear.IsActive = true;
         academicYear.Status = AcademicYearStatus.Draft;
-        academicYear.IsCurrent = false;
         EnsureInsertAudit(academicYear, utcNow);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -70,6 +69,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
         var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableAcademicYears;
+        int currentStatus = (int)AcademicYearStatus.Current;
 
         var countSql = $@"
             SELECT COUNT(*)
@@ -85,12 +85,12 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 CASE
                     WHEN NOT ay.isactive THEN 'Deleted'
                     WHEN ay.status = {(int)AcademicYearStatus.Draft} THEN 'Draft'
-                    WHEN ay.status = {(int)AcademicYearStatus.Current} OR ay.iscurrent THEN 'Current'
+                    WHEN ay.status = {currentStatus} THEN 'Current'
                     WHEN ay.status = {(int)AcademicYearStatus.Archived} THEN 'Archived'
                     ELSE 'Archived'
                 END AS Status,
                 ay.isactive AS IsActive,
-                ay.iscurrent AS IsCurrent
+                (ay.isactive AND ay.status = {currentStatus}) AS IsCurrent
             FROM {schema}.{table} ay
             {whereClause}
             ORDER BY {orderBy}";
@@ -114,32 +114,39 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
         var table = DatabaseConfig.TableAcademicYears;
+        int currentStatus = (int)AcademicYearStatus.Current;
 
+        // all: every active year (Current, Draft, Archived) for header year switcher.
+        // switcher: Current + Draft (future setup) + Archived only when start is on/after current.
+        int draftStatus = (int)AcademicYearStatus.Draft;
+        int archivedStatus = (int)AcademicYearStatus.Archived;
         string scopeFilter = currentAndFutureOnly
             ? $"""
-              AND ay.status IN ({(int)AcademicYearStatus.Current}, {(int)AcademicYearStatus.Archived})
               AND (
-                  ay.iscurrent = true
-                  OR ay.startdate >= (
-                      SELECT cur.startdate
-                      FROM {schema}.{table} cur
-                      WHERE cur.iscurrent = true AND cur.isactive = true
-                      LIMIT 1
+                  ay.status IN ({currentStatus}, {draftStatus})
+                  OR (
+                      ay.status = {archivedStatus}
+                      AND ay.startdate >= (
+                          SELECT cur.startdate
+                          FROM {schema}.{table} cur
+                          WHERE cur.status = {currentStatus} AND cur.isactive = true
+                          LIMIT 1
+                      )
                   )
               )
               """
-            : $" AND ay.status <> {(int)AcademicYearStatus.Draft}";
+            : string.Empty;
 
         var sql = $@"
             SELECT
                 ay.id AS Id,
                 ay.title AS Name,
-                ay.iscurrent AS IsCurrent,
+                (ay.status = {currentStatus}) AS IsCurrent,
                 ay.startdate AS StartDate
             FROM {schema}.{table} ay
             WHERE ay.isactive = true
             {scopeFilter}
-            ORDER BY ay.iscurrent DESC, ay.startdate DESC, ay.title ASC;";
+            ORDER BY (ay.status = {currentStatus}) DESC, ay.startdate DESC, ay.title ASC;";
 
         var items = await connection.QueryAsync<AcademicYearDropdownItem>(sql).ConfigureAwait(false);
         return items.ToList();
@@ -150,10 +157,12 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var sql = $@"
             SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableAcademicYears}
-            WHERE iscurrent = true AND isactive = true
+            WHERE status = @CurrentStatus AND isactive = true
             LIMIT 1;";
 
-        return await connection.QuerySingleOrDefaultAsync<AcademicYearEntity>(sql).ConfigureAwait(false);
+        return await connection.QuerySingleOrDefaultAsync<AcademicYearEntity>(
+            sql,
+            new { CurrentStatus = (int)AcademicYearStatus.Current }).ConfigureAwait(false);
     }
 
     public async Task<Guid?> GetCurrentAcademicYearIdAsync(CancellationToken cancellationToken = default)
@@ -201,7 +210,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             var previousCurrentIds = (await conn.QueryAsync<Guid>(
                 $"""
                 SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
-                WHERE isactive = true AND (iscurrent = true OR status = @CurrentStatus);
+                WHERE isactive = true AND status = @CurrentStatus;
                 """,
                 new { CurrentStatus = current },
                 tx).ConfigureAwait(false)).ToList();
@@ -209,12 +218,11 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             await conn.ExecuteAsync(
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
-                SET iscurrent = false,
-                    status = @ArchivedStatus,
+                SET status = @ArchivedStatus,
                     updatedby = @UpdatedBy,
                     updatedon = @UpdatedOn,
                     versionno = versionno + 1
-                WHERE isactive = true AND (iscurrent = true OR status = @CurrentStatus);
+                WHERE isactive = true AND status = @CurrentStatus;
                 """,
                 new
                 {
@@ -228,8 +236,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             await conn.ExecuteAsync(
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableAcademicYears}
-                SET iscurrent = true,
-                    status = @CurrentStatus,
+                SET status = @CurrentStatus,
                     updatedby = @UpdatedBy,
                     updatedon = @UpdatedOn,
                     versionno = versionno + 1
@@ -256,7 +263,6 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                     utcNow,
                     [
                         new FieldChangeDto { Field = "Status", OldValue = "Current", NewValue = "Archived" },
-                        new FieldChangeDto { Field = "IsCurrent", OldValue = "True", NewValue = "False" },
                     ],
                     tx).ConfigureAwait(false);
             }
@@ -271,7 +277,6 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 utcNow,
                 [
                     new FieldChangeDto { Field = "Status", OldValue = "Draft", NewValue = "Current" },
-                    new FieldChangeDto { Field = "IsCurrent", OldValue = "False", NewValue = "True" },
                 ],
                 tx).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -359,7 +364,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             existing.Title = academicYear.Title.Trim();
             existing.StartDate = academicYear.StartDate;
             existing.EndDate = academicYear.EndDate;
-            // Keep Status / IsCurrent from existing
+            // Keep Status from existing
             ApplyUpdateAudit(existing, actorId, utcNow);
 
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, existing, tx, "Id")
@@ -372,29 +377,18 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
 
-        var isCurrent = await connection.QuerySingleOrDefaultAsync<bool>(
+        var status = await connection.QuerySingleOrDefaultAsync<short?>(
             $"""
-            SELECT iscurrent FROM {schema}.{DatabaseConfig.TableAcademicYears}
+            SELECT status FROM {schema}.{DatabaseConfig.TableAcademicYears}
             WHERE id = @Id AND isactive = true;
             """,
             new { Id = id }).ConfigureAwait(false);
 
-        if (isCurrent)
+        if (status == (short)AcademicYearStatus.Current)
         {
             throw new InvalidOperationException("Cannot delete the current academic year. Set another year as current first.");
         }
 
-        // Check for classes mapped to this academic year
-        var classCount = await connection.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableClasses} WHERE academicyearid = @Id AND isactive = true;",
-            new { Id = id }).ConfigureAwait(false);
-
-        if (classCount > 0)
-        {
-            throw new InvalidOperationException($"Cannot delete this academic year because it has {classCount} class(es) associated with it.");
-        }
-
-        // Check for student academic enrollments
         var studentCount = await connection.ExecuteScalarAsync<int>(
             $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableStudentAcademics} WHERE academicyearid = @Id AND isactive = true;",
             new { Id = id }).ConfigureAwait(false);
@@ -419,11 +413,15 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
     {
         var sql = $@"
             SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
-            WHERE iscurrent = true AND isactive = true
+            WHERE status = @CurrentStatus AND isactive = true
             LIMIT 1;";
 
         return await connection.QuerySingleOrDefaultAsync<Guid?>(
-            new CommandDefinition(sql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(
+                sql,
+                new { CurrentStatus = (int)AcademicYearStatus.Current },
+                transaction: transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private static string BuildListWhereClause(AcademicYearFilter filter, ref string? searchTerm)
@@ -439,7 +437,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
                 where += " AND ay.isactive = false";
                 break;
             case AcademicYearFilter.Current:
-                where += $" AND ay.isactive = true AND (ay.iscurrent = true OR ay.status = {(int)AcademicYearStatus.Current})";
+                where += $" AND ay.isactive = true AND ay.status = {(int)AcademicYearStatus.Current}";
                 break;
             case AcademicYearFilter.Draft:
                 where += $" AND ay.isactive = true AND ay.status = {(int)AcademicYearStatus.Draft}";
@@ -461,10 +459,11 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
     private static string ResolveListOrderBy(string? sortColumn, string? sortDirection)
     {
         var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+        int currentStatus = (int)AcademicYearStatus.Current;
 
         if (string.IsNullOrWhiteSpace(sortColumn))
         {
-            return "ay.iscurrent DESC, ay.startdate DESC, ay.id ASC";
+            return $"(ay.status = {currentStatus}) DESC, ay.startdate DESC, ay.id ASC";
         }
 
         if (IsSortKey(sortColumn, "title"))
@@ -482,7 +481,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             return $"ay.enddate {direction}, ay.id ASC";
         }
 
-        return "ay.iscurrent DESC, ay.startdate DESC, ay.id ASC";
+        return $"(ay.status = {currentStatus}) DESC, ay.startdate DESC, ay.id ASC";
     }
 
     private static bool IsSortKey(string sortColumn, params string[] keys)

@@ -51,7 +51,7 @@ public sealed class AttendanceService : IAttendanceService
         SubmitAttendanceRequestDto request,
         CancellationToken ct = default)
     {
-        var employeeId = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
+        var markedBy = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
             ? _currentUser.UserId
             : Guid.Parse(DatabaseConfig.SystemUserId);
 
@@ -61,7 +61,7 @@ public sealed class AttendanceService : IAttendanceService
                 Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 StudentId = s.StudentId,
-                EmployeeId = employeeId,
+                MarkedBy = markedBy,
                 AttendanceDate = request.AttendanceDate,
                 Status = s.Status,
                 Remarks = s.Remarks,
@@ -71,8 +71,8 @@ public sealed class AttendanceService : IAttendanceService
         await _attendanceRepo.BulkUpsertAsync(records, ct).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Attendance submitted by {EmployeeId} for class {ClassId} on {Date}. Count: {Count}",
-            employeeId,
+            "Attendance submitted by {MarkedBy} for class {ClassId} on {Date}. Count: {Count}",
+            markedBy,
             request.ClassId,
             request.AttendanceDate,
             records.Count);

@@ -1,3 +1,4 @@
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Employee.Entities;
 
 namespace SmartOps.Application.Modules.Employee;
@@ -26,6 +27,7 @@ public class CreateEmployeeDto
             Email = Personal.Email,
             Address = Personal.Address,
             JoiningDate = Professional.JoiningDate,
+            EmployeeCode = string.IsNullOrWhiteSpace(Professional.EmployeeCode) ? null : Professional.EmployeeCode.Trim(),
             Designation = string.IsNullOrWhiteSpace(Professional.Designation) ? null : Professional.Designation.Trim(),
             Experience = Professional.Experience,
             SalaryGrade = Professional.SalaryGrade,
@@ -40,7 +42,6 @@ public class CreateEmployeeDto
             Username = Access.Username,
             DepartmentId = Organization.DepartmentId,
             ReportingManagerId = Organization.ReportingManagerId,
-            ClassId = Schedule.ClassId,
             ShiftStartTime = Schedule.ShiftStartTime,
             ShiftEndTime = Schedule.ShiftEndTime,
             IsActive = true
@@ -55,11 +56,6 @@ public class CreateEmployeeDto
         if (entity.ReportingManagerId == entity.Id)
         {
             entity.ReportingManagerId = null;
-        }
-
-        if (entity.UserTypeCode is not "TEACHER" and not "HOD")
-        {
-            entity.ClassId = null;
         }
     }
 }
@@ -81,6 +77,7 @@ public class EmployeePersonalInfo
 
 public class EmployeeProfessionalInfo
 {
+    public string? EmployeeCode { get; set; }
     public DateOnly JoiningDate { get; set; }
     public string? Designation { get; set; }
     public int Experience { get; set; }
@@ -99,7 +96,7 @@ public class EmployeeBankDetails
 
 public class EmployeeAccessInfo
 {
-    public string UserTypeCode { get; set; } = "TEACHER";
+    public string UserTypeCode { get; set; } = "Teacher";
     public string PortalRoleName { get; set; } = "Teacher";
     public string PortalAccess { get; set; } = "Enabled";
     public string? Username { get; set; }
@@ -113,7 +110,6 @@ public class EmployeeOrganizationInfo
 
 public class EmployeeScheduleInfo
 {
-    public Guid? ClassId { get; set; }
     public List<EmployeeClassAssignmentRowDto> ClassAssignments { get; set; } = [];
     public string? ShiftStartTime { get; set; }
     public string? ShiftEndTime { get; set; }

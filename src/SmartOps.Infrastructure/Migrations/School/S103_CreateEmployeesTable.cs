@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S103_CreateEmployeesTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private static string G => DatabaseConfig.Schema_Global;
+    private static string G => DatabaseConfig.Schema_Man;
 
     public override void Up()
     {
@@ -18,18 +18,15 @@ public sealed class S103_CreateEmployeesTable : Migration
             Create.Table(DatabaseConfig.TableEmployees).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("branchid").AsGuid().NotNullable()
-                .WithColumn("firstname").AsString(50).NotNullable()
-                .WithColumn("lastname").AsString(50).NotNullable()
+                .WithColumn("userid").AsGuid().NotNullable()
                 .WithColumn("dob").AsDate().NotNullable()
                 .WithColumn("gender").AsString(20).NotNullable()
                 .WithColumn("bloodgroup").AsString(10).Nullable()
                 .WithColumn("aadhaarno").AsString(20).Nullable()
                 .WithColumn("panno").AsString(20).Nullable()
-                .WithColumn("mobile").AsString(20).NotNullable()
                 .WithColumn("alternatemobile").AsString(20).Nullable()
-                .WithColumn("email").AsString(256).NotNullable()
                 .WithColumn("address").AsString(1000).Nullable()
-                .WithColumn("employeeid").AsString(50).Nullable()
+                .WithColumn("employeecode").AsString(50).Nullable()
                 .WithColumn("joiningdate").AsDate().NotNullable()
                 .WithColumn("designation").AsString(100).Nullable()
                 .WithColumn("experience").AsInt32().WithDefaultValue(0)
@@ -39,15 +36,10 @@ public sealed class S103_CreateEmployeesTable : Migration
                 .WithColumn("bankaccountnumber").AsString(50).Nullable()
                 .WithColumn("bankifsccode").AsString(20).Nullable()
                 .WithColumn("bankname").AsString(50).Nullable()
-                .WithColumn("classid").AsGuid().Nullable()
-                    .ForeignKey("fk_employees_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("shiftstarttime").AsString(5).Nullable()
                 .WithColumn("shiftendtime").AsString(5).Nullable()
-                .WithColumn("usertypecode").AsString(50).NotNullable().WithDefaultValue("TEACHER")
                 .WithColumn("portalrolename").AsString(100).NotNullable().WithDefaultValue("Teacher")
                 .WithColumn("portalaccess").AsBoolean().WithDefaultValue(true)
-                .WithColumn("username").AsString(100).Nullable()
-                .WithColumn("userid").AsGuid().Nullable()
                 .WithAuditColumns();
 
             Execute.Sql($"""
@@ -57,15 +49,15 @@ ALTER TABLE {S}.{DatabaseConfig.TableEmployees}
 
 ALTER TABLE {S}.{DatabaseConfig.TableEmployees}
     ADD CONSTRAINT fk_employees_user FOREIGN KEY (userid)
-    REFERENCES {G}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
+    REFERENCES {G}.{DatabaseConfig.TableUsers}(id);
 
-CREATE UNIQUE INDEX ux_employees_employeeid_branch_active
-    ON {S}.{DatabaseConfig.TableEmployees} (branchid, lower(employeeid))
-    WHERE isactive = true AND employeeid IS NOT NULL AND btrim(employeeid) <> '';
+CREATE UNIQUE INDEX ux_employees_employeecode_branch_active
+    ON {S}.{DatabaseConfig.TableEmployees} (branchid, lower(employeecode))
+    WHERE isactive = true AND employeecode IS NOT NULL AND btrim(employeecode) <> '';
 
-CREATE UNIQUE INDEX ux_employees_username_active
-    ON {S}.{DatabaseConfig.TableEmployees} (lower(username))
-    WHERE isactive = true AND username IS NOT NULL AND btrim(username) <> '';
+CREATE UNIQUE INDEX ux_employees_userid_active
+    ON {S}.{DatabaseConfig.TableEmployees} (userid)
+    WHERE isactive = true;
 
 CREATE INDEX ix_employees_branchid ON {S}.{DatabaseConfig.TableEmployees} (branchid);
 """);
@@ -75,8 +67,8 @@ CREATE INDEX ix_employees_branchid ON {S}.{DatabaseConfig.TableEmployees} (branc
     public override void Down()
     {
         Execute.Sql($"""
-DROP INDEX IF EXISTS {S}.ux_employees_username_active;
-DROP INDEX IF EXISTS {S}.ux_employees_employeeid_branch_active;
+DROP INDEX IF EXISTS {S}.ux_employees_userid_active;
+DROP INDEX IF EXISTS {S}.ux_employees_employeecode_branch_active;
 ALTER TABLE {S}.{DatabaseConfig.TableEmployees} DROP CONSTRAINT IF EXISTS fk_employees_user;
 ALTER TABLE {S}.{DatabaseConfig.TableEmployees} DROP CONSTRAINT IF EXISTS fk_employees_branchid;
 """);

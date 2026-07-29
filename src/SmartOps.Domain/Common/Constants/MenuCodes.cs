@@ -42,6 +42,8 @@ public static class MenuCodes
 
     public const string Subjects = "SUBJECTS";
 
+    public const string Shifts = "SHIFTS";
+
     public const string AcademicYears = "ACADEMIC_YEARS";
     public const string AcademicPeriods = "ACADEMIC_PERIODS";
 
@@ -135,6 +137,7 @@ public static class MenuCodes
         Classes,
         ClassMappings,
         Subjects,
+        Shifts,
         AcademicYears,
         AcademicPeriods,
         Attendance,

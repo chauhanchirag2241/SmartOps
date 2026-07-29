@@ -31,7 +31,7 @@ public sealed class EmployeeSalaryListRow
 {
     public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
-    public string? EmployeeId { get; init; }
+    public string? EmployeeCode { get; init; }
     public string? Department { get; init; }
     public string? Designation { get; init; }
     public Guid? EmployeeSalaryId { get; init; }
@@ -42,7 +42,7 @@ public sealed class EmployeeSalaryContextRow
 {
     public Guid EmployeeRecordId { get; init; }
     public string EmployeeName { get; init; } = string.Empty;
-    public string? EmployeeId { get; init; }
+    public string? EmployeeCode { get; init; }
     public string? Department { get; init; }
     public string? Designation { get; init; }
     public string? BankName { get; init; }

@@ -5,9 +5,9 @@ namespace SmartOps.Application.Modules.Fees;
 /// </summary>
 public static class FeeAllocationHelper
 {
-    public sealed record HeadAmount(Guid FeeTypeId, decimal Amount);
+    public sealed record HeadAmount(Guid FeeHeadId, decimal Amount);
 
-    public sealed record HeadAllocation(Guid FeeTypeId, decimal TotalAmount, decimal PaidAmount, decimal DueAmount);
+    public sealed record HeadAllocation(Guid FeeHeadId, decimal TotalAmount, decimal PaidAmount, decimal DueAmount);
 
     /// <summary>
     /// Apply <paramref name="totalPaid"/> to heads in list order until the pool is exhausted.
@@ -23,7 +23,7 @@ public static class FeeAllocationHelper
             decimal paid = Math.Min(total, remainingPool);
             remainingPool -= paid;
             decimal due = Math.Max(0, total - paid);
-            result.Add(new HeadAllocation(head.FeeTypeId, total, paid, due));
+            result.Add(new HeadAllocation(head.FeeHeadId, total, paid, due));
         }
 
         return result;
@@ -32,17 +32,17 @@ public static class FeeAllocationHelper
     /// <summary>
     /// Allocate a new payment to selected heads using the same waterfall due amounts shown in the UI.
     /// </summary>
-    public static IList<(Guid FeeTypeId, decimal Amount)> AllocateToSelectedHeads(
+    public static IList<(Guid FeeHeadId, decimal Amount)> AllocateToSelectedHeads(
         IEnumerable<HeadAllocation> distributed,
         decimal paymentAmount,
-        IReadOnlySet<Guid> selectedFeeTypeIds)
+        IReadOnlySet<Guid> selectedFeeHeadIds)
     {
         decimal remaining = Math.Max(0, paymentAmount);
-        var allocations = new List<(Guid FeeTypeId, decimal Amount)>();
+        var allocations = new List<(Guid FeeHeadId, decimal Amount)>();
 
         foreach (HeadAllocation head in distributed)
         {
-            if (!selectedFeeTypeIds.Contains(head.FeeTypeId) || head.DueAmount <= 0)
+            if (!selectedFeeHeadIds.Contains(head.FeeHeadId) || head.DueAmount <= 0)
             {
                 continue;
             }
@@ -53,28 +53,28 @@ public static class FeeAllocationHelper
                 break;
             }
 
-            allocations.Add((head.FeeTypeId, alloc));
+            allocations.Add((head.FeeHeadId, alloc));
             remaining -= alloc;
         }
 
         return allocations;
     }
 
-    public static decimal SumDueOnSelected(IEnumerable<HeadAllocation> distributed, IReadOnlySet<Guid> selectedFeeTypeIds) =>
-        distributed.Where(h => selectedFeeTypeIds.Contains(h.FeeTypeId)).Sum(h => h.DueAmount);
+    public static decimal SumDueOnSelected(IEnumerable<HeadAllocation> distributed, IReadOnlySet<Guid> selectedFeeHeadIds) =>
+        distributed.Where(h => selectedFeeHeadIds.Contains(h.FeeHeadId)).Sum(h => h.DueAmount);
 
-    public sealed record InstallmentDue(Guid InstallmentId, Guid FeeTypeId, decimal DueAmount);
+    public sealed record InstallmentDue(Guid InstallmentId, Guid FeeHeadId, decimal DueAmount);
 
     /// <summary>
     /// Allocate payment across explicitly selected installments (exact selection).
     /// </summary>
-    public static IList<(Guid FeeTypeId, Guid InstallmentId, decimal Amount)> AllocateToSelectedInstallments(
+    public static IList<(Guid FeeHeadId, Guid InstallmentId, decimal Amount)> AllocateToSelectedInstallments(
         IEnumerable<InstallmentDue> installments,
         decimal paymentAmount,
         IReadOnlySet<Guid> selectedInstallmentIds)
     {
         decimal remaining = Math.Max(0, paymentAmount);
-        var allocations = new List<(Guid FeeTypeId, Guid InstallmentId, decimal Amount)>();
+        var allocations = new List<(Guid FeeHeadId, Guid InstallmentId, decimal Amount)>();
 
         foreach (InstallmentDue inst in installments.OrderBy(i => i.InstallmentId))
         {
@@ -89,7 +89,7 @@ public static class FeeAllocationHelper
                 break;
             }
 
-            allocations.Add((inst.FeeTypeId, inst.InstallmentId, alloc));
+            allocations.Add((inst.FeeHeadId, inst.InstallmentId, alloc));
             remaining -= alloc;
         }
 

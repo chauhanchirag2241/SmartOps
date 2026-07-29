@@ -1,6 +1,5 @@
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Branch;
-using SmartOps.Infrastructure.Modules.Branch;
 
 namespace SmartOps.Api.Middleware;
 
@@ -15,20 +14,11 @@ public sealed class BranchMiddleware
 
     public async Task InvokeAsync(
         HttpContext context,
-        IBranchContext branchContext,
-        SchoolBranchSyncService schoolBranchSyncService,
-        ITenantProvider tenantProvider)
+        IBranchContext branchContext)
     {
         if (!ApiMiddlewarePaths.IsTenantContextBypass(context)
             && context.User.Identity?.IsAuthenticated == true)
         {
-            if (Guid.TryParse(tenantProvider.GetCurrentSchoolId(), out Guid schoolId))
-            {
-                await schoolBranchSyncService
-                    .EnsureSyncedAsync(schoolId, context.RequestAborted)
-                    .ConfigureAwait(false);
-            }
-
             await branchContext.EnsureResolvedAsync(context.RequestAborted).ConfigureAwait(false);
 
             if (branchContext.IsResolved

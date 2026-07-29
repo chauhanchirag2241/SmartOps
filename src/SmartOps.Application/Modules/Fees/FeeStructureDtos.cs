@@ -4,22 +4,18 @@ namespace SmartOps.Application.Modules.Fees;
 
 public record FeeStructureVersionListItemDto(
     Guid Id,
-    Guid AcademicYearId,
-    string AcademicYearTitle,
     int VersionNumber,
     FeeStructureVersionStatus Status,
     string StatusLabel,
     DateOnly? EffectiveDate,
     DateTime? PublishedOn,
     DateTime? ActivatedOn,
-    int FeeTypeCount,
+    int FeeHeadCount,
     bool HasStudentPayments,
     bool IsLocked);
 
 public record FeeStructureVersionDetailDto(
     Guid Id,
-    Guid AcademicYearId,
-    string AcademicYearTitle,
     int VersionNumber,
     FeeStructureVersionStatus Status,
     string StatusLabel,
@@ -28,16 +24,15 @@ public record FeeStructureVersionDetailDto(
     DateTime? ActivatedOn,
     bool HasStudentPayments,
     bool IsLocked,
-    IList<FeeTypeDto> FeeTypes);
+    IList<FeeHeadDto> FeeHeads);
 
 public record CreateFeeStructureVersionRequestDto(
-    Guid AcademicYearId,
     DateOnly? EffectiveDate,
     Guid? CloneFromVersionId);
 
-public record FeeTypeDto(
+public record FeeHeadDto(
     Guid Id,
-    Guid FeeStructureVersionId,
+    Guid FeeStructureId,
     string Name,
     FeeCategory Category,
     string CategoryLabel,
@@ -49,17 +44,8 @@ public record FeeTypeDto(
     bool IsActive,
     bool HasStudentPayments);
 
-public record FeeSettingsDto(
-    Guid Id,
-    decimal LateFeePerDay,
-    Guid? DefaultAcademicYearId);
-
-public record UpsertFeeSettingsRequestDto(
-    decimal LateFeePerDay,
-    Guid? DefaultAcademicYearId);
-
-public record CreateFeeTypeRequestDto(
-    Guid FeeStructureVersionId,
+public record CreateFeeHeadRequestDto(
+    Guid FeeStructureId,
     string Name,
     FeeCategory Category,
     FeeCollectionType CollectionType,
@@ -67,7 +53,7 @@ public record CreateFeeTypeRequestDto(
     bool IsRefundable,
     bool StudentWiseDifferentAmount);
 
-public record UpdateFeeTypeRequestDto(
+public record UpdateFeeHeadRequestDto(
     string Name,
     FeeCategory Category,
     FeeCollectionType CollectionType,

@@ -4,10 +4,13 @@ namespace SmartOps.Application.Abstractions;
 
 public interface IDbConnectionFactory
 {
-    /// <summary>Platform registry database (schools, platform admins).</summary>
+    /// <summary>Platform / global catalog database (<c>smartops_global</c>) — always, never tenant CS.</summary>
+    Task<IDbConnection> CreateGlobalDatabaseConnectionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Alias for <see cref="CreateGlobalDatabaseConnectionAsync"/>.</summary>
     Task<IDbConnection> CreatePlatformConnectionAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Alias for platform connection — identity on platform or tenant DB depending on caller.</summary>
+    /// <summary>Alias for platform/global database connection.</summary>
     Task<IDbConnection> CreateGlobalConnectionAsync(CancellationToken cancellationToken = default);
 
     Task<IDbConnection> CreateTenantConnectionAsync(string tenantId, CancellationToken cancellationToken = default);

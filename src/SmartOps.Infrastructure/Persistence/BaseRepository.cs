@@ -24,6 +24,12 @@ public abstract class BaseRepository
     protected readonly DapperContext Context;
     protected readonly ICurrentUserService CurrentUser;
 
+    /// <summary>Identity/management schema (<c>man</c> on school DB, <c>global</c> on platform).</summary>
+    protected string IdentitySchema => Context.IdentitySchema;
+
+    /// <summary>Platform catalog schema (always <c>global</c>).</summary>
+    protected static string CatalogSchema => DatabaseConfig.Schema_Global;
+
     protected BaseRepository(DapperContext context, ICurrentUserService currentUser)
     {
         Context = context;

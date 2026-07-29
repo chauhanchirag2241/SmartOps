@@ -1,84 +1,61 @@
-using System.Data;
-using Dapper;
+using Microsoft.Extensions.Logging;
 using SmartOps.Application.Abstractions;
-using SmartOps.Domain.Common.Configuration;
-using SmartOps.Domain.Modules.School.Entities;
 using SmartOps.Infrastructure.MultiTenancy;
 using SmartOps.Infrastructure.Persistence.Context;
 
 namespace SmartOps.Infrastructure.Modules.Branch;
 
+/// <summary>
+/// Retired stub. Branch source-of-truth is school DB <c>man.schoolbranches</c>;
+/// platform no longer syncs branches into tenant databases.
+/// Kept registered in DI so existing constructors do not break.
+/// </summary>
 public sealed class SchoolBranchSyncService
 {
-    private readonly DapperContext _context;
-    private readonly TenantContext _tenantContext;
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ILogger<SchoolBranchSyncService> _logger;
+    private bool _loggedNoOp;
 
     public SchoolBranchSyncService(
         DapperContext context,
         TenantContext tenantContext,
-        IDbConnectionFactory connectionFactory)
+        IDbConnectionFactory connectionFactory,
+        ILogger<SchoolBranchSyncService>? logger = null)
     {
-        _context = context;
-        _tenantContext = tenantContext;
-        _connectionFactory = connectionFactory;
+        _ = context;
+        _ = tenantContext;
+        _ = connectionFactory;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SchoolBranchSyncService>.Instance;
     }
 
     public Task EnsureSyncedAsync(Guid schoolId, CancellationToken cancellationToken = default)
     {
-        if (!_tenantContext.UsesDedicatedDatabase)
-        {
-            return Task.CompletedTask;
-        }
-
-        return EnsureSyncedAsync(schoolId, _tenantContext.ConnectionString, cancellationToken);
+        _ = schoolId;
+        _ = cancellationToken;
+        LogRetiredOnce();
+        return Task.CompletedTask;
     }
 
-    public async Task EnsureSyncedAsync(
+    public Task EnsureSyncedAsync(
         Guid schoolId,
         string? connectionString,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(connectionString))
+        _ = schoolId;
+        _ = connectionString;
+        _ = cancellationToken;
+        LogRetiredOnce();
+        return Task.CompletedTask;
+    }
+
+    private void LogRetiredOnce()
+    {
+        if (_loggedNoOp)
         {
             return;
         }
 
-        IDbConnection platform = await _context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-        using var schoolDb = await _connectionFactory
-            .CreateConnectionAsync(connectionString, cancellationToken)
-            .ConfigureAwait(false);
-
-        string g = DatabaseConfig.Schema_Global;
-
-        IEnumerable<SchoolBranchEntity> branches = await platform.QueryAsync<SchoolBranchEntity>(
-            $"""
-SELECT id AS Id, schoolid AS SchoolId, name AS Name, email AS Email, address AS Address,
-       isheadoffice AS IsHeadOffice, isactive AS IsActive, versionno AS VersionNo,
-       createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-FROM {g}.{DatabaseConfig.TableSchoolBranches}
-WHERE schoolid = @SchoolId;
-""",
-            new { SchoolId = schoolId }).ConfigureAwait(false);
-
-        foreach (SchoolBranchEntity branch in branches)
-        {
-            await schoolDb.ExecuteAsync(
-                $"""
-INSERT INTO {g}.{DatabaseConfig.TableSchoolBranches}
-    (id, schoolid, name, email, address, isheadoffice, isactive, versionno, createdby, createdon, updatedby, updatedon)
-VALUES
-    (@Id, @SchoolId, @Name, @Email, @Address, @IsHeadOffice, @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn)
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    email = EXCLUDED.email,
-    address = EXCLUDED.address,
-    isheadoffice = EXCLUDED.isheadoffice,
-    isactive = EXCLUDED.isactive,
-    updatedby = EXCLUDED.updatedby,
-    updatedon = EXCLUDED.updatedon;
-""",
-                branch).ConfigureAwait(false);
-        }
+        _loggedNoOp = true;
+        _logger.LogDebug(
+            "SchoolBranchSyncService.EnsureSyncedAsync is a no-op; branch sync to school DB is retired.");
     }
 }

@@ -21,7 +21,7 @@ public record EmployeeSalaryComponentItemDto(
 public record EmployeeSalaryListItemDto(
     Guid EmployeeRecordId,
     string EmployeeName,
-    string? EmployeeId,
+    string? EmployeeCode,
     string? Department,
     string? Designation,
     decimal? NetSalary,
@@ -38,7 +38,7 @@ public record SalaryLineItemDto(
 public record EmployeeSalaryDetailDto(
     Guid EmployeeRecordId,
     string EmployeeName,
-    string? EmployeeId,
+    string? EmployeeCode,
     string? Department,
     string? Designation,
     Guid? EmployeeSalaryId,
@@ -98,7 +98,7 @@ public record PayslipDto(
     int PayYear,
     int PayMonth,
     string EmployeeName,
-    string? EmployeeId,
+    string? EmployeeCode,
     string? Department,
     string? Designation,
     int WorkingDays,

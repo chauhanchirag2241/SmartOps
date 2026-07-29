@@ -13,7 +13,7 @@ public enum AcademicPeriodType : short
 public sealed class ClassAcademicPeriodEntity : AuditableEntity
 {
     public Guid Id { get; set; }
-    public Guid ClassId { get; set; }
+    public Guid ClassGroupId { get; set; }
     public Guid AcademicYearId { get; set; }
     public AcademicPeriodType PeriodType { get; set; }
     public int PeriodIndex { get; set; }

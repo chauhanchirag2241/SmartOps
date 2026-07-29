@@ -29,11 +29,9 @@ public sealed class StudentsController(
     IFeeStructureRepository feeStructureRepository,
     IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
-    IScopeMappingRepository scopeMapping,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider,
-    SmartOps.Infrastructure.Persistence.Context.DapperContext dapperContext,
     IAuditLogRepository auditLogRepository,
     IBranchContext branchContext) : ControllerBase
 {
@@ -87,7 +85,7 @@ public sealed class StudentsController(
             }
 
             var admissionFeeStructure = await feeStructureRepository
-                .GetAdmissionVersionForYearAsync(academic.AcademicYearId, cancellationToken)
+                .GetAdmissionFeeStructureAsync(cancellationToken)
                 .ConfigureAwait(false);
             if (admissionFeeStructure is null)
             {
@@ -100,7 +98,7 @@ public sealed class StudentsController(
             if (academic.ClassId != Guid.Empty)
             {
                 bool classHasConfiguredAmounts = await classFeeAmountRepository
-                    .ClassHasConfiguredAmountsAsync(academic.ClassId, admissionFeeStructure.Id, cancellationToken)
+                    .ClassHasConfiguredAmountsAsync(academic.ClassId, academic.AcademicYearId, admissionFeeStructure.Id, cancellationToken)
                     .ConfigureAwait(false);
                 if (!classHasConfiguredAmounts)
                 {
@@ -118,46 +116,42 @@ public sealed class StudentsController(
             if (admissionAcademic is not null && admissionAcademic.AcademicYearId != Guid.Empty)
             {
                 var admissionVersion = await feeStructureRepository
-                    .GetAdmissionVersionForYearAsync(admissionAcademic.AcademicYearId, cancellationToken)
+                    .GetAdmissionFeeStructureAsync(cancellationToken)
                     .ConfigureAwait(false);
                 if (admissionVersion is not null)
                 {
                     IList<ClassFeeAmountRow> classAmounts = await classFeeAmountRepository
-                        .GetAmountsByClassAsync(admissionAcademic.ClassId, admissionVersion.Id, cancellationToken)
+                        .GetAmountsByClassAsync(admissionAcademic.ClassId, admissionAcademic.AcademicYearId, admissionVersion.Id, cancellationToken)
                         .ConfigureAwait(false);
                     foreach (ClassFeeAmountRow mandatoryRow in classAmounts.Where(r => r.IsMandatory && r.Amount > 0))
                     {
                         CreateStudentFeeHeadSelectionDto? selection = request.FeeHeadSelections
-                            .FirstOrDefault(s => s.FeeTypeId == mandatoryRow.FeeTypeId);
+                            .FirstOrDefault(s => s.FeeHeadId == mandatoryRow.FeeHeadId);
                         if (selection is { IsIncluded: false })
                         {
-                            return BadRequest($"Mandatory fee '{mandatoryRow.FeeTypeName}' cannot be excluded.");
+                            return BadRequest($"Mandatory fee '{mandatoryRow.FeeHeadName}' cannot be excluded.");
                         }
                     }
                 }
             }
         }
 
+        if (!TryGetSchoolId(out Guid schoolId))
+        {
+            return BadRequest("School context is required.");
+        }
+
+        Guid userId = await userProvisioning
+            .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
+            .ConfigureAwait(false);
+        entity.UserId = userId;
+        entity.PortalAccess = true;
+
         var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
-        if (TryGetSchoolId(out Guid schoolId))
-        {
-            if (entity.PortalAccess)
-            {
-                Guid? userId = await userProvisioning
-                    .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (userId.HasValue)
-                {
-                    await studentRepository
-                        .SetStudentUserIdAsync(studentId, userId.Value, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-            }
-
-            await ProvisionParentUsersAsync(entity, studentId, schoolId, cancellationToken).ConfigureAwait(false);
-        }
+        await userScopeService
+            .BumpScopeVersionAsync(userId, schoolId, cancellationToken)
+            .ConfigureAwait(false);
 
         return Ok(new CreateStudentResponse("Student created successfully", studentId));
     }
@@ -229,6 +223,9 @@ public sealed class StudentsController(
             return NotFound();
         }
 
+        // NOTE: profile fields (name/email/mobile) now live on global.users and are not updated here.
+        // TODO(frontend/backend): add a dedicated user-profile update endpoint if editing name/email/mobile
+        // for an existing student/employee is required; IUserProvisioningService only supports first-time creation.
         await studentRepository.UpdateStudentAsync(student, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
@@ -268,79 +265,6 @@ public sealed class StudentsController(
         schoolId = Guid.Empty;
         string? raw = tenantProvider.GetCurrentSchoolId();
         return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
-    }
-
-    private async Task ProvisionParentUsersAsync(
-        StudentEntity entity,
-        Guid studentId,
-        Guid schoolId,
-        CancellationToken cancellationToken)
-    {
-        if (entity.Parents is not { Count: > 0 })
-        {
-            return;
-        }
-
-        string schema = dapperContext.OperationalSchema;
-        string admissionNo = entity.AdmissionNo?.Trim() ?? studentId.ToString("N")[..8];
-
-        foreach (StudentParentEntity parent in entity.Parents)
-        {
-            string? email = ResolveParentProvisionEmail(parent, admissionNo, schoolId);
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                continue;
-            }
-
-            Guid? parentUserId = await userProvisioning
-                .ProvisionParentUserAsync(email, null, schoolId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!parentUserId.HasValue || parent.Id == Guid.Empty)
-            {
-                continue;
-            }
-
-            await scopeMapping.UpsertParentStudentMappingAsync(
-                schema,
-                parentUserId.Value,
-                studentId,
-                parent.RelationType,
-                cancellationToken).ConfigureAwait(false);
-
-            await studentRepository
-                .SetStudentParentUserIdAsync(parent.Id, parentUserId.Value, cancellationToken)
-                .ConfigureAwait(false);
-
-            await userScopeService
-                .BumpScopeVersionAsync(parentUserId.Value, schoolId, cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-    private static string? ResolveParentProvisionEmail(StudentParentEntity parent, string admissionNo, Guid schoolId)
-    {
-        if (!string.IsNullOrWhiteSpace(parent.Email))
-        {
-            return parent.Email.Trim().ToLowerInvariant();
-        }
-
-        if (string.IsNullOrWhiteSpace(parent.Name))
-        {
-            return null;
-        }
-
-        string slug = new string(parent.Name.Trim().ToLowerInvariant()
-            .Where(c => char.IsLetterOrDigit(c))
-            .ToArray());
-
-        if (slug.Length == 0)
-        {
-            slug = parent.RelationType.Trim().ToLowerInvariant();
-        }
-
-        string schoolSuffix = schoolId.ToString("N")[..8];
-        return $"{slug}.{admissionNo}.{schoolSuffix}@portal.smartops.internal";
     }
 
     private async Task<ActionResult?> ValidateAdmissionNoAsync(

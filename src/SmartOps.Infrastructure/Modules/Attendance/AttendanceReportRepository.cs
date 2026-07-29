@@ -3,6 +3,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Attendance;
 using SmartOps.Application.Modules.Attendance.Interfaces;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -66,9 +67,10 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
 
         // Fetch Class Name
         string classSql = $"""
-            SELECT classname 
-            FROM {OperationalSchema}.{DatabaseConfig.TableClasses} 
-            WHERE id = @ClassId AND isactive = true;
+            SELECT {DashboardClassLabel.DisplayNameSql}
+            FROM {OperationalSchema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {OperationalSchema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            WHERE c.id = @ClassId AND c.isactive = true;
             """;
         
         string className = await connection.QuerySingleOrDefaultAsync<string>(
@@ -79,10 +81,11 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
         string studentsSql = $"""
             SELECT 
                 s.id as StudentId,
-                s.firstname as FirstName,
-                s.lastname as LastName,
+                u.firstname as FirstName,
+                u.lastname as LastName,
                 sa.rollnumber as RollNo
             FROM {OperationalSchema}.{DatabaseConfig.TableStudents} s
+            INNER JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
             INNER JOIN {OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa ON s.id = sa.studentid
             WHERE sa.classid = @ClassId AND s.isactive = true AND sa.isactive = true;
             """;

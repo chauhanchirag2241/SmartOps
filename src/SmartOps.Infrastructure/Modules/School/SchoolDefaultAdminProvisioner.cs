@@ -35,7 +35,8 @@ public sealed class SchoolDefaultAdminProvisioner : ISchoolDefaultAdminProvision
 
     public async Task ProvisionAsync(SchoolEntity school, CancellationToken cancellationToken = default)
     {
-        string g = DatabaseConfig.Schema_Global;
+        // Dedicated school DB identity lives in man schema (not platform global).
+        string man = DatabaseConfig.Schema_Man;
         await using NpgsqlConnection connection = await OpenSchoolIdentityConnectionAsync(school, cancellationToken)
             .ConfigureAwait(false);
 
@@ -43,7 +44,7 @@ public sealed class SchoolDefaultAdminProvisioner : ISchoolDefaultAdminProvision
             new CommandDefinition(
                 $"""
 SELECT EXISTS (
-    SELECT 1 FROM {g}.{DatabaseConfig.TableUsers}
+    SELECT 1 FROM {man}.{DatabaseConfig.TableUsers}
     WHERE lower(trim(email)) = lower(trim(@Email))
        OR lower(trim(username)) = lower(trim(@Username))
 );
@@ -54,31 +55,24 @@ SELECT EXISTS (
         Guid? roleId = await connection.ExecuteScalarAsync<Guid?>(
             new CommandDefinition(
                 $"""
-SELECT id FROM {g}.{DatabaseConfig.TableRoles}
+SELECT id FROM {man}.{DatabaseConfig.TableRoles}
 WHERE isactive = true
-  AND (code = @RoleCode OR lower(trim(name)) = lower(trim(@RoleName)))
+  AND lower(trim(name)) = lower(trim(@RoleName))
 LIMIT 1;
 """,
-                new { RoleCode = RoleCodes.SchoolAdmin, RoleName = RoleNames.SchoolAdmin },
+                new { RoleName = RoleNames.Admin },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         if (roleId is null || roleId == Guid.Empty)
         {
             _logger.LogWarning(
-                "Skipped default admin for school {SchoolId}: School Admin role was not found.",
+                "Skipped default admin for school {SchoolId}: Admin role was not found.",
                 school.Id);
             return;
         }
 
-        Guid? userTypeId = await connection.ExecuteScalarAsync<Guid?>(
-            new CommandDefinition(
-                $"""
-SELECT id FROM {g}.{DatabaseConfig.TableUserTypes}
-WHERE isactive = true AND code = @Code
-LIMIT 1;
-""",
-                new { Code = UserTypeCodes.SchoolAdmin },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        // usertypeid soft-references platform global.usertypes (canonical IDs in UserTypeCodes).
+        Guid userTypeId = UserTypeCodes.Ids.SchoolAdmin;
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid userId;
@@ -88,7 +82,7 @@ LIMIT 1;
             userId = await connection.ExecuteScalarAsync<Guid>(
                 new CommandDefinition(
                     $"""
-SELECT id FROM {g}.{DatabaseConfig.TableUsers}
+SELECT id FROM {man}.{DatabaseConfig.TableUsers}
 WHERE lower(trim(email)) = lower(trim(@Email))
    OR lower(trim(username)) = lower(trim(@Username))
 LIMIT 1;
@@ -113,20 +107,25 @@ LIMIT 1;
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"""
-INSERT INTO {g}.{DatabaseConfig.TableUsers}
+INSERT INTO {man}.{DatabaseConfig.TableUsers}
 (
-    id, username, email, passwordhash, securitystamp, lockoutend, accessfailedcount, lockoutenabled,
+    id, firstname, lastname, mobile, usertypeid, username, email, passwordhash, securitystamp,
+    lockoutend, accessfailedcount, lockoutenabled,
     isactive, versionno, createdby, createdon, updatedby, updatedon
 )
 VALUES
 (
-    @Id, @Username, @Email, @PasswordHash, @SecurityStamp, NULL, 0, true,
+    @Id, @FirstName, @LastName, NULL, @UserTypeId, @Username, @Email, @PasswordHash, @SecurityStamp,
+    NULL, 0, true,
     true, 1, @Actor, @Now, @Actor, @Now
 );
 """,
                     new
                     {
                         Id = userId,
+                        FirstName = "School",
+                        LastName = "Admin",
+                        UserTypeId = userTypeId,
                         Username = DefaultUsername,
                         Email = DefaultEmail,
                         PasswordHash = passwordHash,
@@ -142,15 +141,7 @@ VALUES
                 school.Subdomain);
         }
 
-        await EnsureUserRoleAsync(connection, g, userId, roleId.Value, now, cancellationToken).ConfigureAwait(false);
-        await EnsureUserSchoolMappingAsync(
-            connection,
-            g,
-            userId,
-            school.Id,
-            userTypeId,
-            now,
-            cancellationToken).ConfigureAwait(false);
+        await EnsureUserRoleAsync(connection, man, userId, roleId.Value, now, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<NpgsqlConnection> OpenSchoolIdentityConnectionAsync(
@@ -189,38 +180,6 @@ WHERE NOT EXISTS (
 );
 """,
                 new { UserId = userId, RoleId = roleId, Actor = SystemActor, Now = now },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    private static async Task EnsureUserSchoolMappingAsync(
-        IDbConnection connection,
-        string schema,
-        Guid userId,
-        Guid schoolId,
-        Guid? userTypeId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                $"""
-INSERT INTO {schema}.{DatabaseConfig.TableUserSchoolMappings}
-    (userid, schoolid, role, usertypeid, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT @UserId, @SchoolId, @Role, @UserTypeId, true, 1, @Actor, @Now, @Actor, @Now
-WHERE NOT EXISTS (
-    SELECT 1 FROM {schema}.{DatabaseConfig.TableUserSchoolMappings}
-    WHERE userid = @UserId AND schoolid = @SchoolId
-);
-""",
-                new
-                {
-                    UserId = userId,
-                    SchoolId = schoolId,
-                    Role = RoleNames.SchoolAdmin,
-                    UserTypeId = userTypeId,
-                    Actor = SystemActor,
-                    Now = now
-                },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 }

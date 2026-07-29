@@ -129,6 +129,15 @@ public static class MenuPolicies
         public const string Export = "Menu:SUBJECTS:Export";
     }
 
+    public static class Shifts
+    {
+        public const string View = "Menu:SHIFTS:View";
+        public const string Add = "Menu:SHIFTS:Add";
+        public const string Edit = "Menu:SHIFTS:Edit";
+        public const string Delete = "Menu:SHIFTS:Delete";
+        public const string Export = "Menu:SHIFTS:Export";
+    }
+
     public static class AcademicYears
     {
         public const string View = "Menu:ACADEMIC_YEARS:View";

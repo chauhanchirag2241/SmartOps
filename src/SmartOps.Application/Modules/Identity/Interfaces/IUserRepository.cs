@@ -21,26 +21,19 @@ public interface IUserRepository
 
     Task<IList<string>> GetRolesAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    Task<IList<string>> GetRoleCodesAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<string?> GetUserTypeCodeAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    Task<(Guid RoleId, string RoleName, string RoleCode)?> GetPrimaryRoleAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<(Guid RoleId, string RoleName)?> GetPrimaryRoleAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
 
     Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
 
-    Task AddUserToSchoolAsync(
+    Task SetUserTypeAsync(
         Guid userId,
-        Guid schoolId,
-        string schoolRole,
-        Guid? userTypeId = null,
-        CancellationToken cancellationToken = default);
-
-    Task SetUserTypeForSchoolAsync(
-        Guid userId,
-        Guid schoolId,
         Guid? userTypeId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Returns active users in the current school database.</summary>
     Task<IReadOnlyList<ApplicationUser>> GetUsersBySchoolAsync(Guid schoolId, CancellationToken cancellationToken = default);
 }

@@ -28,7 +28,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
     {
         var schema = _context.OperationalSchema;
         var table = DatabaseConfig.TableEntityAuditLogs;
-        var globalSchema = DatabaseConfig.Schema_Global;
+        var globalSchema = _context.IdentitySchema;
         var usersTable = DatabaseConfig.TableUsers;
 
         var countSql = $"""

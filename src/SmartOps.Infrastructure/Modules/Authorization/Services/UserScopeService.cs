@@ -66,45 +66,37 @@ public sealed class UserScopeService : IUserScopeService
             return cached;
         }
 
-        IList<string> roleCodes = await _userRepository.GetRoleCodesAsync(userId, cancellationToken).ConfigureAwait(false);
+        string? userTypeCode = await _userRepository.GetUserTypeCodeAsync(userId, cancellationToken).ConfigureAwait(false);
 
-        if (roleCodes.Any(c => RoleCodes.GlobalScopeRoles.Contains(c)))
+        if (UserTypeCodes.IsGlobalScope(userTypeCode))
         {
-            int version = schoolId.HasValue
-                ? await GetScopeVersionAsync(userId, schoolId.Value, cancellationToken).ConfigureAwait(false)
-                : 1;
-            UserScopeDto global = GlobalScope(version, academicYearId);
+            UserScopeDto global = GlobalScope(1, academicYearId);
             _cache.Set(cacheKey, global, TimeSpan.FromMinutes(_options.ScopeCacheMinutes));
             return global;
         }
 
-        int scopeVersion = schoolId.HasValue
-            ? await GetScopeVersionAsync(userId, schoolId.Value, cancellationToken).ConfigureAwait(false)
-            : 1;
+        const int scopeVersion = 1;
 
         UserScopeDto scope;
 
-        if (roleCodes.Contains(RoleCodes.Hod, StringComparer.OrdinalIgnoreCase))
+        if (string.Equals(userTypeCode, UserTypeCodes.Teacher, StringComparison.OrdinalIgnoreCase))
         {
-            scope = await ResolveHodScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<Guid> hodDepartments = await _scopeMapping
+                .GetDepartmentIdsForHodAsync(schema, userId, cancellationToken)
+                .ConfigureAwait(false);
+            scope = hodDepartments.Count > 0
+                ? await ResolveHodScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false)
+                : await ResolveTeacherScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
         }
-        else if (roleCodes.Contains(RoleCodes.Teacher, StringComparer.OrdinalIgnoreCase))
-        {
-            scope = await ResolveTeacherScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
-        }
-        else if (roleCodes.Contains(RoleCodes.Student, StringComparer.OrdinalIgnoreCase))
+        else if (string.Equals(userTypeCode, UserTypeCodes.Student, StringComparison.OrdinalIgnoreCase))
         {
             scope = await ResolveStudentScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
         }
-        else if (roleCodes.Contains(RoleCodes.Parent, StringComparer.OrdinalIgnoreCase))
-        {
-            scope = await ResolveParentScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
-        }
-        else if (roleCodes.Contains(RoleCodes.Accountant, StringComparer.OrdinalIgnoreCase))
+        else if (string.Equals(userTypeCode, UserTypeCodes.Accountant, StringComparison.OrdinalIgnoreCase))
         {
             scope = ModuleOnlyScope(scopeVersion, academicYearId);
         }
-        else if (roleCodes.Contains(RoleCodes.Staff, StringComparer.OrdinalIgnoreCase))
+        else if (string.Equals(userTypeCode, UserTypeCodes.NonAcademicStaff, StringComparison.OrdinalIgnoreCase))
         {
             scope = await ResolveStaffScopeAsync(userId, schema, academicYearId, scopeVersion, cancellationToken).ConfigureAwait(false);
         }
@@ -117,37 +109,21 @@ public sealed class UserScopeService : IUserScopeService
         return scope;
     }
 
-    public async Task<int> GetScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
+    public Task<int> GetScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
     {
-        string sql = $"""
-SELECT version FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserScopeVersions}
-WHERE userid = @UserId AND schoolid = @SchoolId
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        int? version = await connection.QuerySingleOrDefaultAsync<int?>(
-            new CommandDefinition(sql, new { UserId = userId, SchoolId = schoolId }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-
-        return version ?? 1;
+        _ = userId;
+        _ = schoolId;
+        _ = cancellationToken;
+        return Task.FromResult(1);
     }
 
-    public async Task BumpScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
+    public Task BumpScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
     {
-        string sql = $"""
-INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserScopeVersions} (userid, schoolid, version, updatedon)
-VALUES (@UserId, @SchoolId, 1, NOW())
-ON CONFLICT (userid) DO UPDATE SET
-    version = {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUserScopeVersions}.version + 1,
-    schoolid = EXCLUDED.schoolid,
-    updatedon = NOW()
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { UserId = userId, SchoolId = schoolId }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-
+        _ = cancellationToken;
         string schema = _context.OperationalSchema;
+        // Cache keys include academic year; TTL also expires entries (ScopeCacheMinutes).
         _cache.Remove($"scope:{userId}:{schoolId}:{schema}");
+        return Task.CompletedTask;
     }
 
     private async Task<UserScopeDto> ResolveHodScopeAsync(
@@ -218,10 +194,6 @@ WHERE t.departmentid = ANY(@DepartmentIds)
         int scopeVersion,
         CancellationToken cancellationToken)
     {
-        await _scopeMapping
-            .EnsureEmployeeLinkedToUserAsync(schema, userId, cancellationToken)
-            .ConfigureAwait(false);
-
         IReadOnlyList<Guid> classIds = await ResolveTeacherClassIdsWithFallbackAsync(
             schema, userId, academicYearId, cancellationToken).ConfigureAwait(false);
 
@@ -302,42 +274,6 @@ WHERE t.departmentid = ANY(@DepartmentIds)
             IsGlobalScope = false,
             OwnStudentId = studentId,
             AllowedStudentIds = studentId.HasValue ? [studentId.Value] : [],
-            ActiveAcademicYearId = academicYearId
-        };
-    }
-
-    private async Task<UserScopeDto> ResolveParentScopeAsync(
-        Guid userId,
-        string schema,
-        Guid? academicYearId,
-        int scopeVersion,
-        CancellationToken cancellationToken)
-    {
-        IReadOnlyList<Guid> studentIds = await _scopeMapping
-            .GetLinkedStudentIdsForParentAsync(schema, userId, cancellationToken)
-            .ConfigureAwait(false);
-
-        IReadOnlyList<Guid> classIds = [];
-        if (studentIds.Count > 0)
-        {
-            string sql = $"""
-SELECT DISTINCT classid FROM {schema}.{DatabaseConfig.TableStudentAcademics}
-WHERE studentid = ANY(@StudentIds) AND isactive = true
-  AND (@AcademicYearId IS NULL OR academicyearid = @AcademicYearId)
-""";
-            IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-            classIds = (await connection.QueryAsync<Guid>(
-                new CommandDefinition(sql, new { StudentIds = studentIds.ToArray(), AcademicYearId = academicYearId }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).Distinct().ToList();
-        }
-
-        return new UserScopeDto
-        {
-            ScopeType = DataScopeType.LinkedStudents,
-            ScopeVersion = scopeVersion,
-            IsGlobalScope = false,
-            AllowedStudentIds = studentIds,
-            AllowedClassIds = classIds,
             ActiveAcademicYearId = academicYearId
         };
     }

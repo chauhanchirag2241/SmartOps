@@ -3,6 +3,8 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Employee.Entities;
@@ -10,7 +12,6 @@ using SmartOps.Domain.Modules.Employee;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
-using SmartOps.Domain.Common.Configuration;
 
 namespace SmartOps.Infrastructure.Modules.Employee;
 
@@ -61,8 +62,27 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var activeFilter = includeInactive ? string.Empty : " AND isactive = true";
-        var sql = $"SELECT * FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} WHERE id = @Id{activeFilter}";
-        return await connection.QuerySingleOrDefaultAsync<EmployeeEntity>(sql, new { Id = id }).ConfigureAwait(false);
+        var sql = $"""
+SELECT
+    e.*,
+    u.firstname AS FirstName,
+    u.lastname AS LastName,
+    u.email AS Email,
+    u.mobile AS Mobile,
+    u.username AS Username,
+    u.usertypeid AS UserTypeId
+FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
+WHERE e.id = @Id{activeFilter}
+""";
+        var row = await connection.QuerySingleOrDefaultAsync<EmployeeDetailRow>(sql, new { Id = id }).ConfigureAwait(false);
+        if (row is null)
+        {
+            return null;
+        }
+
+        row.UserTypeCode = UserTypeCodes.GetName(row.UserTypeId) ?? row.UserTypeCode;
+        return row;
     }
 
     public async Task<PagedResult<EmployeeListModel>> GetAllEmployeesAsync(
@@ -90,7 +110,7 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            whereClause += " AND (e.firstname ILIKE @SearchTerm OR e.lastname ILIKE @SearchTerm OR e.employeeid ILIKE @SearchTerm OR e.email ILIKE @SearchTerm)";
+            whereClause += " AND (u.firstname ILIKE @SearchTerm OR u.lastname ILIKE @SearchTerm OR e.employeecode ILIKE @SearchTerm OR u.email ILIKE @SearchTerm)";
             searchTerm = $"%{searchTerm}%";
         }
 
@@ -120,26 +140,29 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
         var countSql = $"""
 SELECT COUNT(*)
 FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 {whereClause}
 """;
 
         var querySql = $@"
             SELECT
                 e.id,
-                TRIM(e.firstname || ' ' || e.lastname) AS Name,
-                e.email,
+                TRIM(u.firstname || ' ' || u.lastname) AS Name,
+                u.email,
                 e.designation,
-                e.usertypecode AS UserTypeCode,
+                u.usertypeid AS UserTypeId,
                 d.name AS DepartmentName,
-                TRIM(rm.firstname || ' ' || rm.lastname) AS ReportingManagerName,
+                TRIM(rmu.firstname || ' ' || rmu.lastname) AS ReportingManagerName,
                 e.isactive
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Context.OperationalSchema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid
             LEFT JOIN {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} rm ON rm.id = e.reportingmanagerid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} rmu ON rmu.id = rm.userid
             {whereClause}
             ORDER BY {orderBy}";
 
-        return await GetPagedResultAsync<EmployeeListModel>(
+        var page = await GetPagedResultAsync<EmployeeListRow>(
             connection,
             querySql,
             countSql,
@@ -152,6 +175,24 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
             },
             pageIndex,
             pageSize).ConfigureAwait(false);
+
+        return new PagedResult<EmployeeListModel>
+        {
+            Items = page.Items.Select(r => new EmployeeListModel
+            {
+                Id = r.Id,
+                Name = r.Name,
+                Email = r.Email,
+                Designation = r.Designation,
+                UserTypeCode = UserTypeCodes.GetName(r.UserTypeId) ?? string.Empty,
+                DepartmentName = r.DepartmentName,
+                ReportingManagerName = r.ReportingManagerName,
+                IsActive = r.IsActive,
+            }).ToList(),
+            TotalCount = page.TotalCount,
+            PageIndex = page.PageIndex,
+            PageSize = page.PageSize,
+        };
     }
 
     public async Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default)
@@ -164,10 +205,11 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
         var sql = $@"
             SELECT
                 e.id AS Id,
-                TRIM(e.firstname || ' ' || e.lastname) AS Name
+                TRIM(u.firstname || ' ' || u.lastname) AS Name
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
-            WHERE e.isactive = true AND e.usertypecode = 'TEACHER'{branchFilter}
-            ORDER BY e.firstname ASC, e.lastname ASC;";
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
+            WHERE e.isactive = true AND u.usertypeid = '{UserTypeCodes.Ids.Teacher}'{branchFilter}
+            ORDER BY u.firstname ASC, u.lastname ASC;";
 
         var items = await connection.QueryAsync<DropdownDto>(sql, new { ActiveBranchId = activeBranchId }).ConfigureAwait(false);
         return items.ToList();
@@ -183,10 +225,11 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
         var sql = $@"
             SELECT
                 e.id AS Id,
-                TRIM(e.firstname || ' ' || e.lastname) AS Name
+                TRIM(u.firstname || ' ' || u.lastname) AS Name
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             WHERE e.isactive = true{branchFilter}
-            ORDER BY e.firstname ASC, e.lastname ASC;";
+            ORDER BY u.firstname ASC, u.lastname ASC;";
 
         var items = await connection.QueryAsync<DropdownDto>(sql, new { ActiveBranchId = activeBranchId }).ConfigureAwait(false);
         return items.ToList();
@@ -202,6 +245,31 @@ FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees} e
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
+            // Client update payloads often omit BranchId (defaults to Empty) — keep the stored branch.
+            if (employee.BranchId == Guid.Empty)
+            {
+                var existingBranchId = await conn.ExecuteScalarAsync<Guid?>(
+                    new CommandDefinition(
+                        $@"SELECT branchid FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees}
+                           WHERE id = @Id AND isactive = true",
+                        new { employee.Id },
+                        transaction: tx,
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+                if (existingBranchId is null || existingBranchId == Guid.Empty)
+                {
+                    throw new InvalidOperationException("Employee not found.");
+                }
+
+                employee.BranchId = existingBranchId.Value;
+            }
+            else
+            {
+                employee.BranchId = await _branchWrite
+                    .ResolveWriteBranchIdAsync(employee.BranchId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx, "Id")
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -237,5 +305,22 @@ WHERE id = @EmployeeId AND isactive = true
             await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+    private sealed class EmployeeDetailRow : EmployeeEntity
+    {
+        public Guid UserTypeId { get; set; }
+    }
+
+    private sealed class EmployeeListRow
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = null!;
+        public string Email { get; set; } = null!;
+        public string? Designation { get; set; }
+        public Guid UserTypeId { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? ReportingManagerName { get; set; }
+        public bool IsActive { get; set; }
     }
 }

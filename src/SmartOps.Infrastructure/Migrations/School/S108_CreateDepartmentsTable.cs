@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S108_CreateDepartmentsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private static string G => DatabaseConfig.Schema_Global;
+    private static string G => DatabaseConfig.Schema_Man;
 
     public override void Up()
     {

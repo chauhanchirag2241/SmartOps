@@ -17,37 +17,37 @@ public sealed class S104_CreateStudentsTables : Migration
             Create.Table(DatabaseConfig.TableStudents).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("branchid").AsGuid().NotNullable()
+                .WithColumn("userid").AsGuid().NotNullable()
                 .WithColumn("admissionno").AsString(50).Nullable()
-                .WithColumn("firstname").AsString(50).NotNullable()
                 .WithColumn("middlename").AsString(50).Nullable()
-                .WithColumn("lastname").AsString(50).NotNullable()
                 .WithColumn("dob").AsDate().Nullable()
                 .WithColumn("gender").AsString(20).Nullable()
                 .WithColumn("bloodgroup").AsString(10).Nullable()
-                .WithColumn("mobile").AsString(20).Nullable()
-                .WithColumn("email").AsString(256).Nullable()
                 .WithColumn("aadhaarno").AsString(20).Nullable()
                 .WithColumn("caste").AsString(100).Nullable()
                 .WithColumn("category").AsString(50).Nullable()
                 .WithColumn("address").AsString(1000).Nullable()
                 .WithColumn("photourl").AsString(1000).Nullable()
                 .WithColumn("remarks").AsString(1000).Nullable()
-                .WithColumn("portalaccess").AsBoolean().NotNullable().WithDefaultValue(false)
-                .WithColumn("userid").AsGuid().Nullable()
+                .WithColumn("portalaccess").AsBoolean().NotNullable().WithDefaultValue(true)
                 .WithAuditColumns();
 
             Execute.Sql($"""
 ALTER TABLE {S}.{DatabaseConfig.TableStudents}
     ADD CONSTRAINT fk_students_branchid FOREIGN KEY (branchid)
-    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchoolBranches}(id);
+    REFERENCES {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableSchoolBranches}(id);
 
 ALTER TABLE {S}.{DatabaseConfig.TableStudents}
     ADD CONSTRAINT fk_students_user FOREIGN KEY (userid)
-    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
+    REFERENCES {DatabaseConfig.Schema_Man}.{DatabaseConfig.TableUsers}(id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_students_admissionno_branch_active_ci
     ON {S}.{DatabaseConfig.TableStudents} (branchid, lower(admissionno))
     WHERE isactive = true AND admissionno IS NOT NULL AND btrim(admissionno) <> '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_students_userid_active
+    ON {S}.{DatabaseConfig.TableStudents} (userid)
+    WHERE isactive = true;
 
 CREATE INDEX IF NOT EXISTS ix_students_branchid ON {S}.{DatabaseConfig.TableStudents} (branchid);
 """);
@@ -64,14 +64,7 @@ CREATE INDEX IF NOT EXISTS ix_students_branchid ON {S}.{DatabaseConfig.TableStud
                 .WithColumn("mobile").AsString(20).Nullable()
                 .WithColumn("email").AsString(256).Nullable()
                 .WithColumn("occupation").AsString(100).Nullable()
-                .WithColumn("userid").AsGuid().Nullable()
                 .WithAuditColumns();
-
-            Execute.Sql($"""
-ALTER TABLE {S}.{DatabaseConfig.TableStudentParents}
-    ADD CONSTRAINT fk_studentparents_userid FOREIGN KEY (userid)
-    REFERENCES {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}(id) ON DELETE SET NULL;
-""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentAcademics).Exists())
@@ -131,7 +124,6 @@ ALTER TABLE {S}.{DatabaseConfig.TableStudentParents}
         Delete.Table(DatabaseConfig.TableStudentCustomFields).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentPreviousSchools).InSchema(S);
         Delete.Table(DatabaseConfig.TableStudentAcademics).InSchema(S);
-        Execute.Sql($"ALTER TABLE {S}.{DatabaseConfig.TableStudentParents} DROP CONSTRAINT IF EXISTS fk_studentparents_userid;");
         Delete.Table(DatabaseConfig.TableStudentParents).InSchema(S);
         Execute.Sql($"""
             DROP INDEX IF EXISTS {S}.ix_students_branchid;

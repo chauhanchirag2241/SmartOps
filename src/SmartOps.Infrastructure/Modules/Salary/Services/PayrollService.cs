@@ -205,7 +205,7 @@ public sealed class PayrollService : IPayrollService
             context.PayYear,
             context.PayMonth,
             context.EmployeeName,
-            context.EmployeeId,
+            context.EmployeeCode,
             string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,
             context.Designation,
             context.WorkingDays,

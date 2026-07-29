@@ -24,34 +24,12 @@ public sealed class ScopeMappingRepository : IScopeMappingRepository
 
         string sql = $"""
 SELECT id FROM {schema}.{DatabaseConfig.TableAcademicYears}
-WHERE iscurrent = true AND isactive = true
+WHERE status = 2 AND isactive = true
 LIMIT 1
 """;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    public async Task EnsureEmployeeLinkedToUserAsync(
-        string schema,
-        Guid userId,
-        CancellationToken cancellationToken = default)
-    {
-        string sql = $"""
-UPDATE {schema}.{DatabaseConfig.TableEmployees} t
-SET userid = @UserId,
-    updatedon = NOW(),
-    versionno = t.versionno + 1
-FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
-WHERE u.id = @UserId
-  AND u.isactive = true
-  AND t.isactive = true
-  AND t.userid IS NULL
-  AND lower(trim(t.email)) = lower(trim(u.email))
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<Guid>> GetEmployeeClassIdsAsync(
@@ -60,12 +38,11 @@ WHERE u.id = @UserId
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildEmployeeUserMatchSql();
         string sql = $"""
 SELECT DISTINCT m.classid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
-WHERE {teacherMatch}
+WHERE t.userid = @UserId
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -79,29 +56,17 @@ WHERE {teacherMatch}
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
-        string teacherMatch = BuildEmployeeUserMatchSql();
         string sql = $"""
 SELECT DISTINCT m.subjectid
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
-WHERE {teacherMatch}
+WHERE t.userid = @UserId
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
-
-    private static string BuildEmployeeUserMatchSql() =>
-        $"""
-(t.userid = @UserId OR EXISTS (
-    SELECT 1
-    FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} u
-    WHERE u.id = @UserId
-      AND u.isactive = true
-      AND lower(trim(u.email)) = lower(trim(t.email))
-))
-""";
 
     public async Task<IReadOnlyList<Guid>> GetDepartmentIdsForHodAsync(
         string schema,
@@ -188,18 +153,6 @@ LIMIT 1
             new CommandDefinition(sql, new { UserId = userId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetLinkedStudentIdsForParentAsync(
-        string schema,
-        Guid parentUserId,
-        CancellationToken cancellationToken = default)
-    {
-        string sql = $"""
-SELECT studentid FROM {schema}.{DatabaseConfig.TableParentStudentMappings}
-WHERE parentuserid = @UserId AND isactive = true
-""";
-        return await QueryGuidListAsync(sql, new { UserId = parentUserId }, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<IReadOnlyList<Guid>> GetStaffScopeClassIdsAsync(
         string schema,
         Guid userId,
@@ -222,29 +175,6 @@ SELECT scopevalue FROM {schema}.{DatabaseConfig.TableStaffScopeAssignments}
 WHERE userid = @UserId AND scopetype = 'Department' AND isactive = true
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId }, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task UpsertParentStudentMappingAsync(
-        string schema,
-        Guid parentUserId,
-        Guid studentId,
-        string relationType,
-        CancellationToken cancellationToken = default)
-    {
-        string sql = $"""
-INSERT INTO {schema}.{DatabaseConfig.TableParentStudentMappings}
-    (id, parentuserid, studentid, relationtype, isprimary, isactive, versionno, createdby, createdon, updatedby, updatedon)
-VALUES (gen_random_uuid(), @ParentUserId, @StudentId, @RelationType, true, true, 1,
-        '{DatabaseConfig.SystemUserId}', NOW(), '{DatabaseConfig.SystemUserId}', NOW())
-ON CONFLICT ON CONSTRAINT uq_parentstudentmappings DO UPDATE SET
-    relationtype = EXCLUDED.relationtype,
-    isactive = true,
-    updatedon = NOW()
-""";
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { ParentUserId = parentUserId, StudentId = studentId, RelationType = relationType }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
     }
 
     public async Task UpsertHodDepartmentAssignmentAsync(

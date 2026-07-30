@@ -13,7 +13,6 @@ using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student;
 using SmartOps.Application.Modules.Branch;
-using SmartOps.Application.Modules.Fees.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
 namespace SmartOps.Api.Modules.Student.Controllers;
@@ -26,8 +25,6 @@ namespace SmartOps.Api.Modules.Student.Controllers;
 [Authorize]
 public sealed class StudentsController(
     IStudentRepository studentRepository,
-    IFeeStructureRepository feeStructureRepository,
-    IClassFeeAmountRepository classFeeAmountRepository,
     IUserProvisioningService userProvisioning,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
@@ -76,32 +73,6 @@ public sealed class StudentsController(
 
         request.AdmissionNo = request.AdmissionNo!.Trim();
         var entity = request.ToEntity();
-
-        if (request.FeeHeadSelections.Count > 0)
-        {
-            CreateStudentAcademicDto? admissionAcademic = request.Academics.FirstOrDefault(a => a.ClassId != Guid.Empty);
-            if (admissionAcademic is not null && admissionAcademic.AcademicYearId != Guid.Empty)
-            {
-                var admissionVersion = await feeStructureRepository
-                    .GetAdmissionFeeStructureAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                if (admissionVersion is not null)
-                {
-                    IList<ClassFeeAmountRow> classAmounts = await classFeeAmountRepository
-                        .GetAmountsByClassAsync(admissionAcademic.ClassId, admissionAcademic.AcademicYearId, admissionVersion.Id, cancellationToken)
-                        .ConfigureAwait(false);
-                    foreach (ClassFeeAmountRow mandatoryRow in classAmounts.Where(r => r.IsMandatory && r.Amount > 0))
-                    {
-                        CreateStudentFeeHeadSelectionDto? selection = request.FeeHeadSelections
-                            .FirstOrDefault(s => s.FeeHeadId == mandatoryRow.FeeHeadId);
-                        if (selection is { IsIncluded: false })
-                        {
-                            return BadRequest($"Mandatory fee '{mandatoryRow.FeeHeadName}' cannot be excluded.");
-                        }
-                    }
-                }
-            }
-        }
 
         if (!TryGetSchoolId(out Guid schoolId))
         {
@@ -286,7 +257,7 @@ public sealed class StudentsController(
         return Ok(result);
     }
 
-    /// <summary>Checks whether target year/class has published fee structure and class-wise amounts configured.</summary>
+    /// <summary>Checks whether target year/class is ready for promotion (class active).</summary>
     [HttpGet("promote-readiness")]
     [Authorize(Policy = MenuPolicies.Students.Edit)]
     [ProducesResponseType(typeof(PromoteReadinessResponse), StatusCodes.Status200OK)]
@@ -306,34 +277,16 @@ public sealed class StudentsController(
         });
     }
 
-    /// <summary>Lists students selected for promotion who still have pending fees in the source academic year.</summary>
+    /// <summary>Stub: fees module removed — always returns an empty pending-fees list.</summary>
     [HttpGet("promote-pending-fees")]
     [Authorize(Policy = MenuPolicies.Students.Edit)]
     [ProducesResponseType(typeof(IReadOnlyList<PromotePendingFeeDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<PromotePendingFeeDto>>> GetPromotePendingFees(
+    public ActionResult<IReadOnlyList<PromotePendingFeeDto>> GetPromotePendingFees(
         [FromQuery] Guid sourceAcademicYearId,
         [FromQuery] Guid[] studentIds,
         CancellationToken cancellationToken)
     {
-        if (sourceAcademicYearId == Guid.Empty || studentIds is null || studentIds.Length == 0)
-        {
-            return Ok(Array.Empty<PromotePendingFeeDto>());
-        }
-
-        IReadOnlyList<PromotePendingFeeRow> rows = await studentRepository
-            .GetPromotePendingFeesAsync(sourceAcademicYearId, studentIds, cancellationToken)
-            .ConfigureAwait(false);
-
-        IReadOnlyList<PromotePendingFeeDto> dtos = rows
-            .Select(r => new PromotePendingFeeDto(
-                r.StudentId,
-                r.StudentName,
-                r.TotalFees,
-                r.PaidAmount,
-                r.PendingAmount))
-            .ToList();
-
-        return Ok(dtos);
+        return Ok(Array.Empty<PromotePendingFeeDto>());
     }
 
     /// <summary>Promote students from one academic year enrollment to the next.</summary>

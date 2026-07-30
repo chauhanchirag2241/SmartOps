@@ -107,16 +107,6 @@ public sealed class SubjectsController(
         entity.ClassGroupId = request.ClassGroupId != Guid.Empty ? request.ClassGroupId : existing.ClassGroupId;
         entity.BranchId = existing.BranchId;
 
-        if (request.AssignedClasses is null or { Length: 0 })
-        {
-            entity.AssignedClasses = existing.AssignedClasses;
-        }
-
-        if (request.TeachingDays is null or { Length: 0 })
-        {
-            entity.TeachingDays = existing.TeachingDays;
-        }
-
         await subjectRepository.UpdateSubjectAsync(entity, ct).ConfigureAwait(false);
         return NoContent();
     }

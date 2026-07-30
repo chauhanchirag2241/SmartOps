@@ -58,11 +58,6 @@ public interface IStudentRepository
         Guid targetClassId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<PromotePendingFeeRow>> GetPromotePendingFeesAsync(
-        Guid sourceAcademicYearId,
-        IReadOnlyList<Guid> studentIds,
-        CancellationToken cancellationToken = default);
-
     Task AddDocumentAsync(StudentDocumentEntity document, CancellationToken cancellationToken = default);
     Task DeleteDocumentAsync(Guid documentId, CancellationToken cancellationToken = default);
     Task<StudentDocumentEntity?> GetDocumentByIdAsync(Guid documentId, CancellationToken cancellationToken = default);

@@ -33,7 +33,6 @@ public class StudentEntity : AuditableEntity
     [DbIgnore] [TrackHistoryIgnore] public List<StudentParentEntity> Parents { get; set; } = new();
     [DbIgnore] [TrackHistoryIgnore] public List<StudentAcademicEntity> Academics { get; set; } = new();
     [DbIgnore] [TrackHistoryIgnore] public List<StudentPreviousSchoolEntity> PreviousSchools { get; set; } = new();
-    [DbIgnore] [TrackHistoryIgnore] public List<StudentFeeHeadAssignmentEntity> FeeHeadAssignments { get; set; } = new();
     [DbIgnore]
     [TrackHistoryIgnore]
     [JsonPropertyName("customFields")]

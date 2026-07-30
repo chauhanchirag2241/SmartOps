@@ -13,19 +13,3 @@ public enum SubjectCategory
     Elective = 2,
     CoCurricular = 3
 }
-
-public enum GradeSystem
-{
-    Marks = 1,
-    Grade = 2,
-    CGPA = 3
-}
-
-public enum Curriculum
-{
-    CBSE = 1,
-    GSEB = 2,
-    ICSE = 3,
-    IB = 4,
-    StateBoard = 5
-}

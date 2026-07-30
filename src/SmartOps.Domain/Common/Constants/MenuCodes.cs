@@ -19,8 +19,6 @@ public static class MenuCodes
 
     public const string AcademicSetup = "ACADEMIC_SETUP";
 
-    public const string FeesManagement = "FEES_MANAGEMENT";
-
     public const string SalaryManagement = "SALARY_MANAGEMENT";
 
     public const string LeaveManagement = "LEAVE_MANAGEMENT";
@@ -56,12 +54,6 @@ public static class MenuCodes
     public const string StaffAttendanceReport = "STAFF_ATTENDANCE_REPORT";
 
     public const string Homework = "HOMEWORK";
-
-    public const string FeesStructure = "FEES_STRUCTURE";
-
-    public const string FeesClassAmounts = "FEES_CLASS_AMOUNTS";
-
-    public const string FeesCollection = "FEES_COLLECTION";
 
     public const string SalaryStructure = "SALARY_STRUCTURE";
 
@@ -118,6 +110,10 @@ public static class MenuCodes
 
     public const string TeacherTimetableReport = "TEACHER_TIMETABLE_REPORT";
 
+    public const string FeeManagement = "FEE_MANAGEMENT";
+
+    public const string FeeMaster = "FEE_MASTER";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -127,7 +123,6 @@ public static class MenuCodes
         Settings,
         Academics,
         AcademicSetup,
-        FeesManagement,
         SalaryManagement,
         LeaveManagement,
         Administration,
@@ -145,9 +140,6 @@ public static class MenuCodes
         StaffAttendance,
         StaffAttendanceReport,
         Homework,
-        FeesStructure,
-        FeesClassAmounts,
-        FeesCollection,
         SalaryStructure,
         SalaryEmployees,
         SalaryPayroll,
@@ -173,6 +165,8 @@ public static class MenuCodes
         PeriodMaster,
         ClassTimetable,
         MyTimetable,
-        TeacherTimetableReport
+        TeacherTimetableReport,
+        FeeManagement,
+        FeeMaster
     ];
 }

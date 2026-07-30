@@ -42,8 +42,6 @@ public static class DatabaseConfig
     public const string TableStudentParents = "studentparents";
     public const string TableStudentAcademics = "studentacademics";
     public const string TableStudentPreviousSchools = "studentpreviousschools";
-    public const string TableStudentFeeHeadAssignments = "studentfeeheadassignments";
-    public const string TableStudentFeeInstallments = "studentfeeinstallments";
     public const string TableStudentCustomFields = "studentcustomfields";
     public const string TableStudentDocuments = "studentdocuments";
 
@@ -56,6 +54,13 @@ public static class DatabaseConfig
 
     // Subject Module
     public const string TableSubjects = "subjects";
+
+    // Fee Module
+    public const string TableFeeMaster = "feemaster";
+    public const string TableFeeHead = "feehead";
+    public const string TableFeeHeadPeriodAmount = "feeheadperiodamount";
+    public const string TableFeeStudentAmount = "feestudentamount";
+    public const string TableFeeMasterClassGroup = "feemasterclassgroup";
 
     // Employee Module
     public const string TableEmployees = "employees";
@@ -71,15 +76,6 @@ public static class DatabaseConfig
     public const string TableEmployeeFaceEnrollments = "employeefaceenrollments";
     public const string TableHomework = "homework";
     public const string TableHomeworkDetails = "homeworkdetails";
-
-    // Fees Module
-    public const string TableFeeStructure = "feestructure";
-    public const string TableFeeHead = "feehead";
-    public const string TableClassFeeAmounts = "classfeeamounts";
-    public const string TableClassFeePeriodAmounts = "classfeeperiodamounts";
-    public const string TableClassFeeInstallments = "classfeeinstallments";
-    public const string TableFeePayments = "feepayments";
-    public const string TableFeePaymentAllocations = "feepaymentallocations";
 
     // Salary Module
     public const string TableSalaryStructureVersions = "salarystructureversions";

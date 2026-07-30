@@ -107,7 +107,16 @@ public sealed class ExceptionHandlingMiddleware
                     ? "Employee code already exists."
                     : constraint?.Contains("username", StringComparison.OrdinalIgnoreCase) == true
                         ? "Username already exists."
-                        : "Duplicate value is not allowed.";
+                        : constraint?.Contains("feemaster", StringComparison.OrdinalIgnoreCase) == true
+                            && constraint?.Contains("name", StringComparison.OrdinalIgnoreCase) == true
+                            ? "A fee with this name already exists."
+                            : constraint?.Contains("feehead", StringComparison.OrdinalIgnoreCase) == true
+                                && (constraint?.Contains("name", StringComparison.OrdinalIgnoreCase) == true
+                                    || constraint?.Contains("feeheadname", StringComparison.OrdinalIgnoreCase) == true)
+                                ? "A fee head with this name already exists for this fee."
+                                : constraint?.Contains("feestudentamount", StringComparison.OrdinalIgnoreCase) == true
+                                    ? "This student is already linked to this fee head."
+                                    : "Duplicate value is not allowed.";
             return true;
         }
 

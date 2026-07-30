@@ -25,16 +25,6 @@ public sealed class S102_CreateSubjectsTable : Migration
                 .WithColumn("subjecttype").AsInt32().Nullable()
                 .WithColumn("subjectcategory").AsInt32().Nullable()
                 .WithColumn("medium").AsInt32().Nullable()
-                .WithColumn("assignedclasses").AsString(int.MaxValue).NotNullable().WithDefaultValue("[]")
-                .WithColumn("periodsperweek").AsInt32().NotNullable()
-                .WithColumn("periodduration").AsString(50).NotNullable()
-                .WithColumn("teachingdays").AsString(int.MaxValue).NotNullable().WithDefaultValue("[]")
-                .WithColumn("maxtheory").AsInt32().NotNullable()
-                .WithColumn("maxpractical").AsInt32().NotNullable()
-                .WithColumn("passingmarks").AsInt32().NotNullable()
-                .WithColumn("gradesystem").AsInt32().NotNullable()
-                .WithColumn("syllabustextbook").AsString(200).Nullable()
-                .WithColumn("curriculum").AsInt32().NotNullable()
                 .WithColumn("description").AsString(500).Nullable()
                 .WithAuditColumns();
 

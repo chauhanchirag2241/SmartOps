@@ -2,11 +2,8 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
-using SmartOps.Application.Modules.Fees.Interfaces;
-using SmartOps.Application.Modules.Student.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
-using SmartOps.Infrastructure.Modules.Fees;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.Student.Entities;
 using SmartOps.Domain.Modules.Student;
@@ -25,10 +22,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 {
     private readonly IUserScopeContext _scope;
     private readonly IBranchContext _branchContext;
-    private readonly IFeeStructureRepository _feeStructureRepo;
-    private readonly IClassFeeAmountRepository _classFeeAmountRepo;
-    private readonly IStudentFeeInstallmentRepository _studentFeeInstallmentRepo;
-    private readonly IFeeCollectionRepository _feeCollectionRepo;
     private readonly IBranchScopedWriteHelper _branchWrite;
 
     private static readonly string[] RelatedTablesForSoftDelete =
@@ -36,7 +29,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         DatabaseConfig.TableStudentParents,
         DatabaseConfig.TableStudentAcademics,
         DatabaseConfig.TableStudentPreviousSchools,
-        DatabaseConfig.TableStudentFeeHeadAssignments,
         DatabaseConfig.TableStudentCustomFields,
     };
 
@@ -45,17 +37,9 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         ICurrentUserService currentUser,
         IUserScopeContext scope,
         IBranchContext branchContext,
-        IFeeStructureRepository feeStructureRepo,
-        IClassFeeAmountRepository classFeeAmountRepo,
-        IStudentFeeInstallmentRepository studentFeeInstallmentRepo,
-        IFeeCollectionRepository feeCollectionRepo,
         IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
-        _feeStructureRepo = feeStructureRepo;
-        _classFeeAmountRepo = classFeeAmountRepo;
-        _studentFeeInstallmentRepo = studentFeeInstallmentRepo;
-        _feeCollectionRepo = feeCollectionRepo;
         _branchWrite = branchWrite;
         _scope = scope;
         _branchContext = branchContext;
@@ -91,9 +75,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 return id;
             }).ConfigureAwait(false);
 
-            await GenerateStudentFeeInstallmentsAfterCreateAsync(studentId, student, cancellationToken)
-                .ConfigureAwait(false);
-
             return studentId;
         }
         catch (Exception ex)
@@ -119,7 +100,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
         student.Parents = (await multi.ReadAsync<StudentParentEntity>().ConfigureAwait(false)).ToList();
         student.Academics = (await multi.ReadAsync<StudentAcademicEntity>().ConfigureAwait(false)).ToList();
-        student.FeeHeadAssignments = (await multi.ReadAsync<StudentFeeHeadAssignmentEntity>().ConfigureAwait(false)).ToList();
         student.PreviousSchools = (await multi.ReadAsync<StudentPreviousSchoolEntity>().ConfigureAwait(false)).ToList();
         student.CustomFields = (await multi.ReadAsync<StudentCustomFieldEntity>().ConfigureAwait(false)).ToList();
         student.Documents = (await multi.ReadAsync<StudentDocumentEntity>().ConfigureAwait(false)).ToList();
@@ -178,9 +158,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             var students = DatabaseConfig.TableStudents;
             var academics = DatabaseConfig.TableStudentAcademics;
             var attendance = DatabaseConfig.TableAttendance;
-            var classFeeAmounts = DatabaseConfig.TableClassFeeAmounts;
-            var feeHeads = DatabaseConfig.TableFeeHead;
-            var feePayments = DatabaseConfig.TableFeePayments;
 
             var countSql = $@"
             SELECT COUNT(*)
@@ -202,12 +179,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                     ELSE 'N/A'
                 END AS Class,
                 COALESCE(att_stats.attendance_pct, 0) AS Attendance,
-                CASE
-                    WHEN COALESCE(fee_totals.total_fees, 0) <= 0 THEN 'Pending'
-                    WHEN COALESCE(paid_totals.paid, 0) >= COALESCE(fee_totals.total_fees, 0) THEN 'Paid'
-                    WHEN COALESCE(paid_totals.paid, 0) > 0 THEN 'Partial'
-                    ELSE 'Overdue'
-                END AS Fees,
+                CAST(NULL AS text) AS Fees,
                 s.isactive AS IsActive,
                 COALESCE(a.isactive, false) AS EnrollmentIsActive
             FROM {schema}.{students} s
@@ -216,7 +188,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 SELECT sa.studentid,
                        sa.classid,
                        sa.rollnumber,
-                       sa.feestructureid,
                        sa.academicyearid,
                        sa.isactive,
                        ROW_NUMBER() OVER(
@@ -239,22 +210,6 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                   AND att.classid = a.classid
                   AND att.isactive = true
             ) att_stats ON a.classid IS NOT NULL
-            LEFT JOIN LATERAL (
-                SELECT SUM(cfa.amount) AS total_fees
-                FROM {schema}.{classFeeAmounts} cfa
-                INNER JOIN {schema}.{feeHeads} ft ON ft.id = cfa.feeheadid AND ft.isactive = true
-                WHERE cfa.classgroupid = c.classgroupid
-                  AND cfa.feestructureid = a.feestructureid
-                  AND cfa.isactive = true
-                  AND {StudentFeeHeadAssignmentSql.FeeHeadIncludedPredicate(schema, "cfa.feeheadid", "s.id", "a.feestructureid")}
-            ) fee_totals ON c.classgroupid IS NOT NULL AND a.feestructureid IS NOT NULL
-            LEFT JOIN LATERAL (
-                SELECT SUM(fp.amount) AS paid
-                FROM {schema}.{feePayments} fp
-                WHERE fp.studentid = s.id
-                  AND fp.feestructureid = a.feestructureid
-                  AND fp.isactive = true
-            ) paid_totals ON a.feestructureid IS NOT NULL
             {whereClause}
             ORDER BY {orderBy}";
 
@@ -421,32 +376,8 @@ WHERE id = @StudentId AND isactive = true
                 where += " AND s.isactive = false";
                 break;
             case StudentFilter.FeeOverdue:
-                var g = Context.OperationalSchema;
-                where += $@"
-                AND EXISTS (
-                    SELECT 1
-                    FROM {g}.{DatabaseConfig.TableStudentAcademics} sa
-                    INNER JOIN {g}.{DatabaseConfig.TableClasses} cl ON cl.id = sa.classid
-                    LEFT JOIN LATERAL (
-                        SELECT SUM(cfa.amount) AS total_fees
-                        FROM {g}.{DatabaseConfig.TableClassFeeAmounts} cfa
-                        INNER JOIN {g}.{DatabaseConfig.TableFeeHead} ft ON ft.id = cfa.feeheadid AND ft.isactive = true
-                        WHERE cfa.classgroupid = cl.classgroupid
-                          AND cfa.feestructureid = sa.feestructureid
-                          AND cfa.isactive = true
-                    ) ft ON true
-                    LEFT JOIN LATERAL (
-                        SELECT SUM(fp.amount) AS paid
-                        FROM {g}.{DatabaseConfig.TableFeePayments} fp
-                        WHERE fp.studentid = sa.studentid
-                          AND fp.feestructureid = sa.feestructureid
-                          AND fp.isactive = true
-                    ) pt ON true
-                    WHERE sa.studentid = s.id
-                      AND sa.isactive = true
-                      AND COALESCE(ft.total_fees, 0) > 0
-                      AND COALESCE(pt.paid, 0) < COALESCE(ft.total_fees, 0)
-                )";
+                // Fees module removed — no-op filter returns no rows.
+                where += " AND 1 = 0";
                 break;
         }
 
@@ -512,11 +443,6 @@ WHERE id = @StudentId AND isactive = true
                 student.AdmNo = "N/A";
             }
 
-            if (string.IsNullOrEmpty(student.Fees))
-            {
-                student.Fees = "Pending";
-            }
-
             student.Status = student.IsActive ? "Active" : "Inactive";
         }
     }
@@ -539,7 +465,6 @@ WHERE id = @StudentId AND isactive = true
             SELECT * FROM {g}.{DatabaseConfig.TableStudentAcademics}
             WHERE studentid = @Id
             ORDER BY isactive DESC, createdon DESC;
-            SELECT * FROM {g}.{DatabaseConfig.TableStudentFeeHeadAssignments} WHERE studentid = @Id AND isactive = true;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentPreviousSchools} WHERE studentid = @Id;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentCustomFields} WHERE studentid = @Id AND isactive = true ORDER BY createdon, fieldlabel;
             SELECT * FROM {g}.{DatabaseConfig.TableStudentDocuments} WHERE studentid = @Id AND isactive = true;
@@ -578,17 +503,6 @@ WHERE id = @StudentId AND isactive = true
         {
             foreach (var academic in student.Academics)
             {
-                if (!academic.FeeStructureId.HasValue || academic.FeeStructureId == Guid.Empty)
-                {
-                    var admissionVersion = await _feeStructureRepo
-                        .GetAdmissionFeeStructureAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
-                    if (admissionVersion is not null)
-                    {
-                        academic.FeeStructureId = admissionVersion.Id;
-                    }
-                }
-
                 academic.Id = Guid.NewGuid();
                 academic.StudentId = studentId;
                 EnsureInsertAudit(academic, utcNow);
@@ -619,77 +533,7 @@ WHERE id = @StudentId AND isactive = true
             }
         }
 
-        StudentAcademicEntity? admissionAcademic = student.Academics.FirstOrDefault();
-        Guid? feeVersionId = admissionAcademic?.FeeStructureId;
-        if (!feeVersionId.HasValue || feeVersionId.Value == Guid.Empty)
-        {
-            feeVersionId = student.Academics
-                .Select(a => a.FeeStructureId)
-                .FirstOrDefault(v => v.HasValue && v.Value != Guid.Empty);
-        }
-
-        if (student.FeeHeadAssignments is { Count: > 0 } && feeVersionId.HasValue)
-        {
-            foreach (var assignment in student.FeeHeadAssignments)
-            {
-                assignment.Id = Guid.NewGuid();
-                assignment.StudentId = studentId;
-                assignment.FeeStructureId = feeVersionId.Value;
-                EnsureInsertAudit(assignment, utcNow);
-                await InsertWithoutReturnAsync(
-                        connection,
-                        Context.OperationalSchema,
-                        DatabaseConfig.TableStudentFeeHeadAssignments,
-                        assignment,
-                        transaction)
-                    .ConfigureAwait(false);
-            }
-        }
-
         await InsertCustomFieldsAsync(connection, transaction, studentId, student.CustomFields, utcNow)
-            .ConfigureAwait(false);
-    }
-
-    private async Task GenerateStudentFeeInstallmentsAfterCreateAsync(
-        Guid studentId,
-        StudentEntity student,
-        CancellationToken cancellationToken)
-    {
-        StudentAcademicEntity? academic = student.Academics.FirstOrDefault();
-        if (academic is null || academic.ClassId == Guid.Empty || academic.AcademicYearId == Guid.Empty)
-        {
-            return;
-        }
-
-        Guid versionId = academic.FeeStructureId ?? Guid.Empty;
-        if (versionId == Guid.Empty)
-        {
-            var admissionVersion = await _feeStructureRepo
-                .GetAdmissionFeeStructureAsync(cancellationToken)
-                .ConfigureAwait(false);
-            versionId = admissionVersion?.Id ?? Guid.Empty;
-        }
-
-        if (versionId == Guid.Empty)
-        {
-            return;
-        }
-
-        Guid classGroupId = await ResolveClassGroupIdAsync(academic.ClassId, cancellationToken).ConfigureAwait(false);
-        if (classGroupId == Guid.Empty)
-        {
-            return;
-        }
-
-        IList<StudentFeeHeadAssignmentEntity> assignments = student.FeeHeadAssignments;
-        await _studentFeeInstallmentRepo
-            .GenerateForStudentAdmissionAsync(
-                studentId,
-                classGroupId,
-                versionId,
-                academic.AcademicYearId,
-                assignments,
-                cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -736,11 +580,6 @@ WHERE id = @StudentId AND isactive = true
                     if (academic.Id == Guid.Empty)
                     {
                         academic.Id = existingAcademic.Id;
-                    }
-
-                    if (!academic.FeeStructureId.HasValue || academic.FeeStructureId.Value == Guid.Empty)
-                    {
-                        academic.FeeStructureId = existingAcademic.FeeStructureId;
                     }
                 }
 
@@ -863,7 +702,7 @@ WHERE id = @StudentId AND isactive = true
         string sql = $"""
             SELECT id AS Id, studentid AS StudentId, admissiondate AS AdmissionDate,
                    academicyearid AS AcademicYearId, classid AS ClassId,
-                   feestructureid AS FeeStructureId, rollnumber AS RollNumber,
+                   rollnumber AS RollNumber,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -925,61 +764,7 @@ WHERE id = @StudentId AND isactive = true
             return "Selected target class is not active.";
         }
 
-        var admissionFeeStructure = await _feeStructureRepo
-            .GetAdmissionFeeStructureAsync(cancellationToken)
-            .ConfigureAwait(false);
-        if (admissionFeeStructure is null)
-        {
-            return "No published fee structure for the target academic year. Publish the fee structure first.";
-        }
-
-        bool classHasConfiguredAmounts = await _classFeeAmountRepo
-            .ClassHasConfiguredAmountsAsync(targetClassId, targetAcademicYearId, admissionFeeStructure.Id, cancellationToken)
-            .ConfigureAwait(false);
-        if (!classHasConfiguredAmounts)
-        {
-            return "Set class-wise fee amounts for the selected class in the target academic year before promoting students.";
-        }
-
         return null;
-    }
-
-    public async Task<IReadOnlyList<PromotePendingFeeRow>> GetPromotePendingFeesAsync(
-        Guid sourceAcademicYearId,
-        IReadOnlyList<Guid> studentIds,
-        CancellationToken cancellationToken = default)
-    {
-        if (sourceAcademicYearId == Guid.Empty || studentIds.Count == 0)
-        {
-            return Array.Empty<PromotePendingFeeRow>();
-        }
-
-        var rows = new List<PromotePendingFeeRow>();
-        foreach (Guid studentId in studentIds.Distinct())
-        {
-            FeeCollectionStudentRow? row = await _feeCollectionRepo
-                .GetStudentRowAsync(studentId, sourceAcademicYearId, cancellationToken)
-                .ConfigureAwait(false);
-            if (row is null)
-            {
-                continue;
-            }
-
-            decimal pending = Math.Max(0, row.TotalFees - row.PaidAmount);
-            if (pending <= 0)
-            {
-                continue;
-            }
-
-            rows.Add(new PromotePendingFeeRow(
-                studentId,
-                row.StudentName,
-                row.TotalFees,
-                row.PaidAmount,
-                pending));
-        }
-
-        return rows;
     }
 
     public async Task<PromoteStudentsResult> PromoteStudentsAsync(
@@ -1001,11 +786,11 @@ WHERE id = @StudentId AND isactive = true
         var errors = new List<string>();
         foreach (Guid targetClassId in students.Select(s => s.TargetClassId).Distinct())
         {
-            string? feeError = await GetPromoteTargetValidationErrorAsync(
+            string? validationError = await GetPromoteTargetValidationErrorAsync(
                 targetAcademicYearId, targetClassId, cancellationToken).ConfigureAwait(false);
-            if (feeError is not null)
+            if (validationError is not null)
             {
-                errors.Add(feeError);
+                errors.Add(validationError);
             }
         }
 
@@ -1014,28 +799,11 @@ WHERE id = @StudentId AND isactive = true
             return new PromoteStudentsResult(0, errors);
         }
 
-        var targetFeeVersion = await _feeStructureRepo
-            .GetAdmissionFeeStructureAsync(cancellationToken)
-            .ConfigureAwait(false);
-        if (targetFeeVersion is null)
-        {
-            return new PromoteStudentsResult(0, [
-                "No published fee structure for the target academic year. Publish the fee structure first."
-            ]);
-        }
-
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
         var utcNow = DateTime.UtcNow;
         var actorId = ResolveInsertActor();
         int promoted = 0;
-        int feesTransferred = 0;
-        decimal totalPendingTransferred = 0m;
-        var pendingFeeTransfers = new List<(
-            Guid StudentId,
-            Guid SourceClassId,
-            Guid SourceFeeStructureId,
-            Guid TargetClassId)>();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -1125,7 +893,6 @@ WHERE id = @StudentId AND isactive = true
                         SET classid = @ClassId,
                             rollnumber = @RollNumber,
                             admissiondate = @AdmissionDate,
-                            feestructureid = @FeeStructureId,
                             isactive = true,
                             updatedby = @UpdatedBy,
                             updatedon = @UpdatedOn,
@@ -1138,7 +905,6 @@ WHERE id = @StudentId AND isactive = true
                             ClassId = entry.TargetClassId,
                             RollNumber = rollNumber,
                             AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
-                            FeeStructureId = targetFeeVersion.Id,
                             UpdatedBy = actorId,
                             UpdatedOn = utcNow
                         },
@@ -1153,8 +919,7 @@ WHERE id = @StudentId AND isactive = true
                         AcademicYearId = targetAcademicYearId,
                         ClassId = entry.TargetClassId,
                         AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
-                        RollNumber = rollNumber,
-                        FeeStructureId = targetFeeVersion.Id
+                        RollNumber = rollNumber
                     };
                     EnsureInsertAudit(newRecord, utcNow, actorId);
                     await InsertAsync(conn, schema, DatabaseConfig.TableStudentAcademics, newRecord, tx)
@@ -1162,131 +927,10 @@ WHERE id = @StudentId AND isactive = true
                 }
 
                 promoted++;
-                pendingFeeTransfers.Add((
-                    entry.StudentId,
-                    sourceRecord.ClassId,
-                    sourceRecord.FeeStructureId ?? Guid.Empty,
-                    entry.TargetClassId));
             }
         }).ConfigureAwait(false);
 
-        foreach ((Guid studentId, Guid sourceClassId, Guid sourceFeeVersionId, Guid targetClassId) in pendingFeeTransfers)
-        {
-            try
-            {
-                decimal transferred = await TransferPendingFeesToTargetYearAsync(
-                    studentId,
-                    sourceAcademicYearId,
-                    sourceClassId,
-                    sourceFeeVersionId,
-                    targetClassId,
-                    targetFeeVersion.Id,
-                    targetAcademicYearId,
-                    cancellationToken).ConfigureAwait(false);
-                if (transferred > 0)
-                {
-                    feesTransferred++;
-                    totalPendingTransferred += transferred;
-                }
-            }
-            catch (Exception)
-            {
-                errors.Add(
-                    $"Student {studentId}: promoted successfully, but pending fees could not be transferred to the target year.");
-            }
-        }
-
-        return new PromoteStudentsResult(promoted, errors, feesTransferred, totalPendingTransferred);
-    }
-
-    private async Task<decimal> TransferPendingFeesToTargetYearAsync(
-        Guid studentId,
-        Guid sourceAcademicYearId,
-        Guid sourceClassId,
-        Guid sourceFeeStructureId,
-        Guid targetClassId,
-        Guid targetFeeStructureId,
-        Guid targetAcademicYearId,
-        CancellationToken cancellationToken)
-    {
-        if (sourceFeeStructureId == Guid.Empty || targetFeeStructureId == Guid.Empty)
-        {
-            return 0m;
-        }
-
-        decimal paid = await _feeCollectionRepo
-            .GetStudentPaidTotalAsync(studentId, sourceFeeStructureId, cancellationToken)
-            .ConfigureAwait(false);
-        FeeCollectionStudentRow? sourceRow = await _feeCollectionRepo
-            .GetStudentRowAsync(studentId, sourceAcademicYearId, cancellationToken)
-            .ConfigureAwait(false);
-
-        decimal total = sourceRow?.TotalFees ?? 0m;
-        Guid sourceClassGroupId = sourceRow?.ClassGroupId
-            ?? await ResolveClassGroupIdAsync(sourceClassId, cancellationToken).ConfigureAwait(false);
-        if (total <= 0 && sourceClassGroupId != Guid.Empty)
-        {
-            total = await _feeCollectionRepo
-                .GetStudentTotalFeesAsync(sourceClassGroupId, sourceFeeStructureId, sourceAcademicYearId, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        decimal pending = Math.Max(0, total - paid);
-        if (pending <= 0)
-        {
-            return 0m;
-        }
-
-        await _studentFeeInstallmentRepo
-            .CopyFeeHeadAssignmentsFromVersionAsync(
-                studentId,
-                sourceFeeStructureId,
-                targetFeeStructureId,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        Guid targetClassGroupId = await ResolveClassGroupIdAsync(targetClassId, cancellationToken).ConfigureAwait(false);
-        if (targetClassGroupId == Guid.Empty)
-        {
-            return 0m;
-        }
-
-        await _studentFeeInstallmentRepo
-            .EnsureCurrentYearInstallmentsAsync(
-                studentId,
-                targetClassGroupId,
-                targetFeeStructureId,
-                targetAcademicYearId,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        await _studentFeeInstallmentRepo
-            .AddCarriedForwardBalanceAsync(
-                studentId,
-                targetClassGroupId,
-                targetFeeStructureId,
-                targetAcademicYearId,
-                pending,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return pending;
-    }
-
-    private async Task<Guid> ResolveClassGroupIdAsync(Guid classId, CancellationToken cancellationToken)
-    {
-        if (classId == Guid.Empty)
-        {
-            return Guid.Empty;
-        }
-
-        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.ExecuteScalarAsync<Guid?>(
-            new CommandDefinition(
-                $@"SELECT classgroupid FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses}
-                   WHERE id = @ClassId;",
-                new { ClassId = classId },
-                cancellationToken: cancellationToken)).ConfigureAwait(false) ?? Guid.Empty;
+        return new PromoteStudentsResult(promoted, errors, StudentsWithFeesTransferred: 0, TotalPendingTransferred: 0);
     }
 
     #endregion
@@ -1330,4 +974,3 @@ WHERE id = @StudentId AND isactive = true
 
     #endregion
 }
-

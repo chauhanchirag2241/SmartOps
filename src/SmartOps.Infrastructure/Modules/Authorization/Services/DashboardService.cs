@@ -499,7 +499,6 @@ LIMIT 5
     {
         string classFilter = BuildClassFilter("c", "cg");
         string studentScope = BuildStudentExistsFilter(schema, "st");
-        string feeStudentScope = studentScope.Replace("st.", "st2.", StringComparison.Ordinal);
         string sql = $"""
 SELECT
     cg.classname AS ClassName,
@@ -509,14 +508,7 @@ SELECT
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 4) AS Late,
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 2) AS Absent,
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 3) AS OnLeave,
-    COALESCE((
-        SELECT SUM(fp.amount)
-        FROM {schema}.{DatabaseConfig.TableFeePayments} fp
-        INNER JOIN {schema}.{DatabaseConfig.TableStudents} st2 ON st2.id = fp.studentid AND st2.isactive = true
-        INNER JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa2 ON sa2.studentid = st2.id AND sa2.classid = c.id
-            AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause("sa2")}
-        WHERE fp.isactive = true AND fp.paymentdate = @SchoolToday {feeStudentScope}
-    ), 0) AS FeeCollectedToday
+    0::numeric AS FeeCollectedToday
 FROM {schema}.{DatabaseConfig.TableClasses} c
 INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {schema}.{DatabaseConfig.TableStudentAcademics} sa ON sa.classid = c.id

@@ -36,7 +36,6 @@ public static class AuthorizationExtensions
                 (MenuCodes.Attendance, MenuPermissionAction.View),
                 (MenuCodes.Homework, MenuPermissionAction.View),
                 (MenuCodes.ClassTimetable, MenuPermissionAction.View),
-                (MenuCodes.FeesCollection, MenuPermissionAction.View),
                 (MenuCodes.Exams, MenuPermissionAction.View));
 
             RegisterAnyPolicy(

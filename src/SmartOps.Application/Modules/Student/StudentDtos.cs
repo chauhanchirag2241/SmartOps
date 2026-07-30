@@ -27,7 +27,6 @@ public class CreateStudentDto
     public List<CreateStudentParentDto> Parents { get; set; } = new();
     public List<CreateStudentAcademicDto> Academics { get; set; } = new();
     public List<CreateStudentPreviousSchoolDto> PreviousSchools { get; set; } = new();
-    public List<CreateStudentFeeHeadSelectionDto> FeeHeadSelections { get; set; } = new();
     public List<StudentCustomFieldDto> CustomFields { get; set; } = new();
 }
 
@@ -65,14 +64,6 @@ public class CreateStudentPreviousSchoolDto
     public string? TcNumber { get; set; }
 }
 
-public class CreateStudentFeeHeadSelectionDto
-{
-    public Guid FeeHeadId { get; set; }
-    public bool IsIncluded { get; set; } = true;
-    /// <summary>Per-student annual amount override; omit to use class default.</summary>
-    public decimal? CustomAnnualAmount { get; set; }
-}
-
 public sealed class PromoteStudentsRequest
 {
     public Guid SourceAcademicYearId { get; set; }
@@ -94,6 +85,7 @@ public sealed record PromoteStudentsResponse(
     int StudentsWithFeesTransferred = 0,
     decimal TotalPendingTransferred = 0);
 
+/// <summary>Stub DTO kept for API compatibility; fees module removed.</summary>
 public sealed record PromotePendingFeeDto(
     Guid StudentId,
     string StudentName,
@@ -129,7 +121,6 @@ public static class StudentMappingExtensions
             PhotoUrl = dto.PhotoUrl,
             Remarks = dto.Remarks,
             PortalAccess = dto.PortalAccess,
-            //Status = "Active",
             Parents = dto.Parents.Select(p => new StudentParentEntity
             {
                 RelationType = p.RelationType,
@@ -152,15 +143,6 @@ public static class StudentMappingExtensions
                 PercentageOrCgpa = ps.PercentageOrCgpa,
                 TcNumber = ps.TcNumber
             }).ToList(),
-            FeeHeadAssignments = dto.FeeHeadSelections
-                .Where(s => s.FeeHeadId != Guid.Empty)
-                .Select(s => new StudentFeeHeadAssignmentEntity
-                {
-                    FeeHeadId = s.FeeHeadId,
-                    IsIncluded = s.IsIncluded,
-                    CustomAnnualAmount = s.CustomAnnualAmount is > 0 ? s.CustomAnnualAmount : null
-                })
-                .ToList(),
             CustomFields = dto.CustomFields
                 .Where(cf => !string.IsNullOrWhiteSpace(cf.Label) || !string.IsNullOrWhiteSpace(cf.Value))
                 .Select(cf => new StudentCustomFieldEntity

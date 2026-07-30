@@ -100,13 +100,6 @@ public sealed class AcademicPeriodsController(
             return BadRequest(validationError);
         }
 
-        if (await periodRepository
-                .HasPaidInstallmentsAsync(classId, cancellationToken)
-                .ConfigureAwait(false))
-        {
-            return BadRequest("Academic periods cannot be changed after fee payments exist for this class.");
-        }
-
         List<ClassAcademicPeriodEntity> entities = request.Periods
             .Select(p => new ClassAcademicPeriodEntity
             {

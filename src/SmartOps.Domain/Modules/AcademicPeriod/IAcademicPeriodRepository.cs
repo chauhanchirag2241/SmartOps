@@ -17,8 +17,4 @@ public interface IAcademicPeriodRepository
         Guid classId,
         IReadOnlyList<ClassAcademicPeriodEntity> periods,
         CancellationToken cancellationToken = default);
-
-    Task<bool> HasPaidInstallmentsAsync(
-        Guid classId,
-        CancellationToken cancellationToken = default);
 }

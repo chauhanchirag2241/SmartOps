@@ -12,7 +12,6 @@ public sealed class G010_SeedPermissions : Migration
 
     private static readonly Guid AcademicsId = Guid.Parse("10000000-0000-0000-0000-000000000010");
     private static readonly Guid AcademicSetupId = Guid.Parse("10000000-0000-0000-0000-000000000045");
-    private static readonly Guid FeesManagementId = Guid.Parse("10000000-0000-0000-0000-000000000040");
     private static readonly Guid SalaryManagementId = Guid.Parse("10000000-0000-0000-0000-000000000041");
     private static readonly Guid LeaveManagementId = Guid.Parse("10000000-0000-0000-0000-000000000042");
     private static readonly Guid AdministrationId = Guid.Parse("10000000-0000-0000-0000-000000000043");
@@ -29,7 +28,6 @@ public sealed class G010_SeedPermissions : Migration
         // School sidebar group roots (no route)
         (AcademicsId, "Academics", MenuCodes.Academics, MenuApplications.School, null, null, "menu_book", 10),
         (AcademicSetupId, "Academic Setup", MenuCodes.AcademicSetup, MenuApplications.School, null, null, "tune", 15),
-        (FeesManagementId, "Fee", MenuCodes.FeesManagement, MenuApplications.School, null, null, "payments", 20),
         (SalaryManagementId, "Salary", MenuCodes.SalaryManagement, MenuApplications.School, null, null, "account_balance_wallet", 30),
         (LeaveManagementId, "Leave", MenuCodes.LeaveManagement, MenuApplications.School, null, null, "event_busy", 40),
         (AdministrationId, "Administration", MenuCodes.Administration, MenuApplications.School, null, null, "admin_panel_settings", 50),

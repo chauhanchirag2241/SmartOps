@@ -147,6 +147,15 @@ public static class MenuPolicies
         public const string Export = "Menu:SHIFTS:Export";
     }
 
+    public static class FeeMaster
+    {
+        public const string View = "Menu:FEE_MASTER:View";
+        public const string Add = "Menu:FEE_MASTER:Add";
+        public const string Edit = "Menu:FEE_MASTER:Edit";
+        public const string Delete = "Menu:FEE_MASTER:Delete";
+        public const string Export = "Menu:FEE_MASTER:Export";
+    }
+
     public static class AcademicYears
     {
         public const string View = "Menu:ACADEMIC_YEARS:View";
@@ -199,33 +208,6 @@ public static class MenuPolicies
         public const string Edit = "Menu:HOMEWORK:Edit";
         public const string Delete = "Menu:HOMEWORK:Delete";
         public const string Export = "Menu:HOMEWORK:Export";
-    }
-
-    public static class FeesStructure
-    {
-        public const string View = "Menu:FEES_STRUCTURE:View";
-        public const string Add = "Menu:FEES_STRUCTURE:Add";
-        public const string Edit = "Menu:FEES_STRUCTURE:Edit";
-        public const string Delete = "Menu:FEES_STRUCTURE:Delete";
-        public const string Export = "Menu:FEES_STRUCTURE:Export";
-    }
-
-    public static class FeesClassAmounts
-    {
-        public const string View = "Menu:FEES_CLASS_AMOUNTS:View";
-        public const string Add = "Menu:FEES_CLASS_AMOUNTS:Add";
-        public const string Edit = "Menu:FEES_CLASS_AMOUNTS:Edit";
-        public const string Delete = "Menu:FEES_CLASS_AMOUNTS:Delete";
-        public const string Export = "Menu:FEES_CLASS_AMOUNTS:Export";
-    }
-
-    public static class FeesCollection
-    {
-        public const string View = "Menu:FEES_COLLECTION:View";
-        public const string Add = "Menu:FEES_COLLECTION:Add";
-        public const string Edit = "Menu:FEES_COLLECTION:Edit";
-        public const string Delete = "Menu:FEES_COLLECTION:Delete";
-        public const string Export = "Menu:FEES_COLLECTION:Export";
     }
 
     public static class SalaryStructure

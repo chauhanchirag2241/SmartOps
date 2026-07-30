@@ -480,7 +480,7 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
         CancellationToken ct)
     {
         (DateOnly start, DateOnly end) = await GetAcademicYearDatesAsync(academicYearId, ct).ConfigureAwait(false);
-        IList<FeeInstallmentGenerator.PeriodWindow> periodWindows = await GetPeriodWindowsAsync(classId, ct)
+        IList<FeeInstallmentGenerator.PeriodWindow> periodWindows = await GetPeriodWindowsAsync(classId, start, end, ct)
             .ConfigureAwait(false);
         IList<FeeInstallmentGenerator.InstallmentPeriod> periods = FeeInstallmentGenerator.Generate(
             (FeeCollectionType)row.CollectionType,
@@ -508,30 +508,59 @@ public sealed class ClassFeeInstallmentRepository : BaseRepository, IClassFeeIns
 
     private async Task<IList<FeeInstallmentGenerator.PeriodWindow>> GetPeriodWindowsAsync(
         Guid classId,
+        DateOnly yearStart,
+        DateOnly yearEnd,
         CancellationToken ct)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT p.periodindex AS PeriodIndex,
-                   p.name AS Label,
-                   p.startdate AS Start,
-                   p.enddate AS End
+                   p.name AS Label
             FROM {Schema}.{DatabaseConfig.TableClassAcademicPeriods} p
             WHERE p.classgroupid = @ClassGroupId
               AND p.isactive = true
             ORDER BY p.periodindex;
             """;
-        IEnumerable<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)> rows = await connection
-            .QueryAsync<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)>(
+        IEnumerable<(int PeriodIndex, string Label)> rows = await connection
+            .QueryAsync<(int PeriodIndex, string Label)>(
                 new CommandDefinition(sql, new { ClassGroupId = classId }, cancellationToken: ct))
             .ConfigureAwait(false);
-        return rows
-            .Select(r => new FeeInstallmentGenerator.PeriodWindow(
-                r.PeriodIndex,
-                r.Label,
-                r.Start,
-                r.End))
-            .ToList();
+        List<(int PeriodIndex, string Label)> periods = rows.ToList();
+        return SplitPeriodWindows(periods, yearStart, yearEnd);
+    }
+
+    private static IList<FeeInstallmentGenerator.PeriodWindow> SplitPeriodWindows(
+        IReadOnlyList<(int PeriodIndex, string Label)> periods,
+        DateOnly yearStart,
+        DateOnly yearEnd)
+    {
+        if (periods.Count == 0)
+        {
+            return Array.Empty<FeeInstallmentGenerator.PeriodWindow>();
+        }
+
+        int totalDays = Math.Max(1, yearEnd.DayNumber - yearStart.DayNumber + 1);
+        int count = periods.Count;
+        List<FeeInstallmentGenerator.PeriodWindow> windows = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            DateOnly start = yearStart.AddDays((totalDays * i) / count);
+            DateOnly end = i == count - 1
+                ? yearEnd
+                : yearStart.AddDays((totalDays * (i + 1) / count) - 1);
+            if (end < start)
+            {
+                end = start;
+            }
+
+            windows.Add(new FeeInstallmentGenerator.PeriodWindow(
+                periods[i].PeriodIndex,
+                periods[i].Label,
+                start,
+                end));
+        }
+
+        return windows;
     }
 
     private async Task<(DateOnly Start, DateOnly End)> GetAcademicYearDatesAsync(Guid academicYearId, CancellationToken ct)

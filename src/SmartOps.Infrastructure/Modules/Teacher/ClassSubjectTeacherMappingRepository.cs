@@ -14,15 +14,7 @@ namespace SmartOps.Infrastructure.Modules.Teacher;
 
 public sealed class ClassSubjectTeacherMappingRepository : BaseRepository, IClassSubjectTeacherMappingRepository
 {
-    private const string SectionLabelSql = """
-CASE c.section
-    WHEN 1 THEN 'A'
-    WHEN 2 THEN 'B'
-    WHEN 3 THEN 'C'
-    WHEN 4 THEN 'D'
-    ELSE ''
-END
-""";
+    private const string SectionLabelSql = "c.section";
 
     private readonly DapperContext _context;
     private readonly IBranchContext _branchContext;

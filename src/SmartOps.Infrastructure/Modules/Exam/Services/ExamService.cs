@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Exam;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Domain.Common;
@@ -9,11 +10,13 @@ namespace SmartOps.Infrastructure.Modules.Exam.Services;
 public sealed class ExamService : IExamService
 {
     private readonly IExamRepository _repo;
+    private readonly IUserScopeContext _scope;
     private readonly ILogger<ExamService> _logger;
 
-    public ExamService(IExamRepository repo, ILogger<ExamService> logger)
+    public ExamService(IExamRepository repo, IUserScopeContext scope, ILogger<ExamService> logger)
     {
         _repo = repo;
+        _scope = scope;
         _logger = logger;
     }
 
@@ -195,16 +198,10 @@ public sealed class ExamService : IExamService
             return Result<ExamGroupDto>.Failure("Group name is required.");
         }
 
-        if (request.AcademicYearId == Guid.Empty)
-        {
-            return Result<ExamGroupDto>.Failure("Academic year is required.");
-        }
-
         var group = new ExamGroupEntity
         {
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
-            AcademicYearId = request.AcademicYearId,
             GradeScaleId = request.GradeScaleId,
             EvaluationType = request.EvaluationType
         };
@@ -232,7 +229,6 @@ public sealed class ExamService : IExamService
 
         group.Name = request.Name.Trim();
         group.Description = request.Description?.Trim();
-        group.AcademicYearId = request.AcademicYearId;
         group.GradeScaleId = request.GradeScaleId;
         group.EvaluationType = request.EvaluationType;
 
@@ -271,8 +267,6 @@ public sealed class ExamService : IExamService
             row.Id,
             row.Name,
             row.Description,
-            row.AcademicYearId,
-            row.AcademicYearTitle,
             row.GradeScaleId,
             row.GradeScaleName,
             (ExamEvaluationType)row.EvaluationType,
@@ -354,10 +348,16 @@ public sealed class ExamService : IExamService
             return Result<ExamDetailDto>.Failure("Exam group not found.");
         }
 
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        if (!_scope.ActiveAcademicYearId.HasValue)
+        {
+            return Result<ExamDetailDto>.Failure("Active academic year is required.");
+        }
+
         var exam = new ExamEntity
         {
             ExamGroupId = request.ExamGroupId,
-            AcademicYearId = group.AcademicYearId,
+            AcademicYearId = _scope.ActiveAcademicYearId.Value,
             BranchId = group.BranchId,
             Name = request.Name.Trim(),
             ExamType = request.ExamType.Trim(),

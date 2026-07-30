@@ -23,9 +23,26 @@ public sealed class SubjectsController(
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateSubjectResponse>> CreateSubject([FromBody] CreateSubjectDto request, CancellationToken ct)
     {
-        var entity = request.ToEntity();
-        var id = await subjectRepository.CreateSubjectAsync(entity, ct).ConfigureAwait(false);
-        return Ok(new CreateSubjectResponse("Subject created successfully", id));
+        if (request is null)
+        {
+            return BadRequest("Subject data is required.");
+        }
+
+        if (request.ClassGroupId == Guid.Empty)
+        {
+            return BadRequest("Class group is required. Create subjects from a class.");
+        }
+
+        try
+        {
+            var entity = request.ToEntity();
+            var id = await subjectRepository.CreateSubjectAsync(entity, ct).ConfigureAwait(false);
+            return Ok(new CreateSubjectResponse("Subject created successfully", id));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet]
@@ -38,10 +55,11 @@ public sealed class SubjectsController(
         [FromQuery] string? sortColumn = null,
         [FromQuery] string? sortDirection = null,
         [FromQuery] string? filter = "All",
+        [FromQuery] Guid? classGroupId = null,
         CancellationToken ct = default)
     {
         var result = await subjectRepository
-            .GetAllSubjectsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, ct)
+            .GetAllSubjectsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, classGroupId, ct)
             .ConfigureAwait(false);
         return Ok(result);
     }
@@ -86,6 +104,8 @@ public sealed class SubjectsController(
         entity.VersionNo = existing.VersionNo;
         entity.CreatedBy = existing.CreatedBy;
         entity.CreatedOn = existing.CreatedOn;
+        entity.ClassGroupId = request.ClassGroupId != Guid.Empty ? request.ClassGroupId : existing.ClassGroupId;
+        entity.BranchId = existing.BranchId;
 
         if (request.AssignedClasses is null or { Length: 0 })
         {

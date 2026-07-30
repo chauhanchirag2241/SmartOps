@@ -18,15 +18,14 @@ public interface IAcademicYearRepository
         AcademicYearFilter filter = AcademicYearFilter.Active,
         CancellationToken cancellationToken = default);
     /// <param name="currentAndFutureOnly">
-    /// When false, returns every active year (Current, Draft, Archived) for the header switcher.
-    /// When true, keeps Current and Draft plus Archived years that start on/after the current year (excludes past Archived).
+    /// When false, returns every active year for the year switcher.
+    /// When true, keeps only current (by date) and upcoming years (excludes past).
     /// </param>
     Task<IReadOnlyList<AcademicYearDropdownItem>> GetAcademicYearDropdownAsync(
         bool currentAndFutureOnly = false,
         CancellationToken cancellationToken = default);
     Task<AcademicYearEntity?> GetCurrentAcademicYearAsync(CancellationToken cancellationToken = default);
     Task<Guid?> GetCurrentAcademicYearIdAsync(CancellationToken cancellationToken = default);
-    Task SetCurrentAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> AcademicYearExistsAsync(Guid id, bool requireNotDeleted = true, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -40,4 +39,13 @@ public interface IAcademicYearRepository
     Task DeleteAcademicYearAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<bool> TitleExistsAsync(string title, Guid? excludeId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when an active academic year already covers any day in [startDate, endDate].
+    /// </summary>
+    Task<bool> HasOverlappingDatesAsync(
+        DateOnly startDate,
+        DateOnly endDate,
+        Guid? excludeId = null,
+        CancellationToken cancellationToken = default);
 }

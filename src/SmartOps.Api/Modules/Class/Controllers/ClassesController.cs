@@ -33,9 +33,15 @@ public sealed class ClassesController(
         }
 
         var entity = request.ToEntity();
-        var classId = await classRepository.CreateClassAsync(entity, cancellationToken).ConfigureAwait(false);
-
-        return Ok(new CreateClassResponse("Class created successfully", classId));
+        try
+        {
+            var classId = await classRepository.CreateClassAsync(entity, cancellationToken).ConfigureAwait(false);
+            return Ok(new CreateClassResponse("Class created successfully", classId));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet]
@@ -48,13 +54,100 @@ public sealed class ClassesController(
         [FromQuery] string? sortColumn = null,
         [FromQuery] string? sortDirection = null,
         [FromQuery] ClassFilter filter = ClassFilter.Active,
+        [FromQuery] Guid? classGroupId = null,
         CancellationToken cancellationToken = default)
     {
         var result = await classRepository
-            .GetAllClassesAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, cancellationToken)
+            .GetAllClassesAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, classGroupId, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(result);
+    }
+
+    [HttpGet("/api/classGroups")]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
+    [ProducesResponseType(typeof(PagedResult<ClassGroupListModel>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllClassGroups(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] ClassFilter filter = ClassFilter.Active,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await classRepository
+            .GetAllClassGroupsAsync(
+                pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter,
+                scopeToActiveBranch: true, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Ok(result);
+    }
+
+    [HttpGet("/api/classGroups/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
+    [ProducesResponseType(typeof(ClassGroupEntity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ClassGroupEntity>> GetClassGroupById(Guid id, CancellationToken cancellationToken)
+    {
+        var entity = await classRepository
+            .GetClassGroupByIdAsync(id, cancellationToken, includeInactive: true)
+            .ConfigureAwait(false);
+        return entity is null ? NotFound() : Ok(entity);
+    }
+
+    [HttpGet("/api/classGroups/{id:guid}/subjects")]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
+    [ProducesResponseType(typeof(IReadOnlyList<ClassGroupSubjectListModel>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetClassGroupSubjects(Guid id, CancellationToken cancellationToken)
+    {
+        var items = await classRepository.GetClassGroupSubjectsAsync(id, cancellationToken).ConfigureAwait(false);
+        return Ok(items);
+    }
+
+    [HttpPost("/api/classGroups/{id:guid}/subjects")]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
+    [ProducesResponseType(typeof(AddClassGroupSubjectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AddClassGroupSubjectResponse>> AddClassGroupSubject(
+        Guid id,
+        [FromBody] AddClassGroupSubjectDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || request.SubjectId == Guid.Empty)
+        {
+            return BadRequest("Subject is required.");
+        }
+
+        try
+        {
+            var subjectRowId = await classRepository
+                .AddClassGroupSubjectAsync(id, request.SubjectId, cancellationToken)
+                .ConfigureAwait(false);
+            return Ok(new AddClassGroupSubjectResponse("Subject added to class", subjectRowId));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpDelete("/api/classGroups/subjects/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RemoveClassGroupSubject(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await classRepository.RemoveClassGroupSubjectAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpGet("/api/class/dropdown")]
@@ -98,8 +191,15 @@ public sealed class ClassesController(
             return BadRequest("Route id and payload id must match.");
         }
 
-        await classRepository.UpdateClassAsync(classEntity, cancellationToken).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await classRepository.UpdateClassAsync(classEntity, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpDelete("{id:guid}")]

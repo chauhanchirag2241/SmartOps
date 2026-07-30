@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Modules.AcademicPeriod;
+using SmartOps.Application.Modules.Audit.Interfaces;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.AcademicPeriod;
-using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.Class;
 
 namespace SmartOps.Api.Modules.AcademicPeriod.Controllers;
@@ -14,21 +15,15 @@ namespace SmartOps.Api.Modules.AcademicPeriod.Controllers;
 public sealed class AcademicPeriodsController(
     IAcademicPeriodRepository periodRepository,
     IClassRepository classRepository,
-    IAcademicYearRepository academicYearRepository) : ControllerBase
+    IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpGet("classes")]
     [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
     public async Task<ActionResult<IReadOnlyList<AcademicPeriodClassSummaryDto>>> GetClasses(
-        [FromQuery] Guid academicYearId,
         CancellationToken cancellationToken)
     {
-        if (academicYearId == Guid.Empty)
-        {
-            return BadRequest("Academic year is required.");
-        }
-
         IReadOnlyList<AcademicPeriodClassSummary> rows =
-            await periodRepository.GetClassesAsync(academicYearId, cancellationToken).ConfigureAwait(false);
+            await periodRepository.GetClassesAsync(cancellationToken).ConfigureAwait(false);
         return Ok(rows.Select(x => x.ToDto()).ToList());
     }
 
@@ -36,14 +31,8 @@ public sealed class AcademicPeriodsController(
     [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
     public async Task<ActionResult<ClassAcademicPeriodSetupDto>> GetByClass(
         Guid classId,
-        [FromQuery] Guid academicYearId,
         CancellationToken cancellationToken)
     {
-        if (academicYearId == Guid.Empty)
-        {
-            return BadRequest("Academic year is required.");
-        }
-
         // classId is a class group id (Class 1 / Class 9), not a section row.
         var classGroup = await classRepository.GetClassGroupByIdAsync(classId, cancellationToken).ConfigureAwait(false);
         if (classGroup is null)
@@ -52,13 +41,44 @@ public sealed class AcademicPeriodsController(
         }
 
         IReadOnlyList<ClassAcademicPeriodEntity> periods =
-            await periodRepository.GetByClassAsync(classId, academicYearId, cancellationToken).ConfigureAwait(false);
+            await periodRepository.GetByClassAsync(classId, cancellationToken).ConfigureAwait(false);
 
         return Ok(new ClassAcademicPeriodSetupDto(
             classId,
-            academicYearId,
-            periods.FirstOrDefault()?.PeriodType,
             periods.Select(x => x.ToDto()).ToList()));
+    }
+
+    [HttpGet("{id:guid}")]
+    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
+    public async Task<ActionResult<ClassAcademicPeriodDto>> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        ClassAcademicPeriodEntity? period =
+            await periodRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (period is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(period.ToDto());
+    }
+
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
+    public async Task<IActionResult> GetHistory(
+        [FromRoute] Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        var result = await auditLogRepository.GetEntityHistoryAsync(
+            DatabaseConfig.TableClassAcademicPeriods, id, page, pageSize, cancellationToken);
+
+        return Ok(result);
     }
 
     [HttpPut("classes/{classId:guid}")]
@@ -74,31 +94,14 @@ public sealed class AcademicPeriodsController(
             return NotFound("Class not found.");
         }
 
-        if (request.AcademicYearId == Guid.Empty)
-        {
-            return BadRequest("Academic year is required.");
-        }
-
-        var year = await academicYearRepository
-            .GetAcademicYearByIdAsync(request.AcademicYearId, cancellationToken)
-            .ConfigureAwait(false);
-        if (year is null)
-        {
-            return BadRequest("Academic year not found.");
-        }
-
-        string? validationError = AcademicPeriodValidation.Validate(
-            year.StartDate,
-            year.EndDate,
-            request.PeriodType,
-            request.Periods);
+        string? validationError = AcademicPeriodValidation.Validate(request.Periods);
         if (validationError is not null)
         {
             return BadRequest(validationError);
         }
 
         if (await periodRepository
-                .HasPaidInstallmentsAsync(classId, request.AcademicYearId, cancellationToken)
+                .HasPaidInstallmentsAsync(classId, cancellationToken)
                 .ConfigureAwait(false))
         {
             return BadRequest("Academic periods cannot be changed after fee payments exist for this class.");
@@ -108,26 +111,20 @@ public sealed class AcademicPeriodsController(
             .Select(p => new ClassAcademicPeriodEntity
             {
                 ClassGroupId = classId,
-                AcademicYearId = request.AcademicYearId,
-                PeriodType = request.PeriodType,
                 PeriodIndex = p.PeriodIndex,
                 Name = p.Name.Trim(),
-                StartDate = p.StartDate,
-                EndDate = p.EndDate,
             })
             .ToList();
 
         await periodRepository
-            .SaveAsync(classId, request.AcademicYearId, entities, cancellationToken)
+            .SaveAsync(classId, entities, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<ClassAcademicPeriodEntity> saved =
-            await periodRepository.GetByClassAsync(classId, request.AcademicYearId, cancellationToken)
+            await periodRepository.GetByClassAsync(classId, cancellationToken)
                 .ConfigureAwait(false);
         return Ok(new ClassAcademicPeriodSetupDto(
             classId,
-            request.AcademicYearId,
-            request.PeriodType,
             saved.Select(x => x.ToDto()).ToList()));
     }
 }

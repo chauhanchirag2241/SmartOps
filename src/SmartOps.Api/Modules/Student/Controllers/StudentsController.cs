@@ -77,39 +77,6 @@ public sealed class StudentsController(
         request.AdmissionNo = request.AdmissionNo!.Trim();
         var entity = request.ToEntity();
 
-        foreach (var academic in entity.Academics)
-        {
-            if (academic.AcademicYearId == Guid.Empty)
-            {
-                continue;
-            }
-
-            var admissionFeeStructure = await feeStructureRepository
-                .GetAdmissionFeeStructureAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (admissionFeeStructure is null)
-            {
-                return BadRequest(new
-                {
-                    message = "Cannot admit student without a published fee structure. Publish the fee structure for this academic year first."
-                });
-            }
-             
-            if (academic.ClassId != Guid.Empty)
-            {
-                bool classHasConfiguredAmounts = await classFeeAmountRepository
-                    .ClassHasConfiguredAmountsAsync(academic.ClassId, academic.AcademicYearId, admissionFeeStructure.Id, cancellationToken)
-                    .ConfigureAwait(false);
-                if (!classHasConfiguredAmounts)
-                {
-                    return BadRequest(new
-                    {
-                        message = "Set class-wise fee amounts for this class before admitting students."
-                    });
-                }
-            }
-        }
-
         if (request.FeeHeadSelections.Count > 0)
         {
             CreateStudentAcademicDto? admissionAcademic = request.Academics.FirstOrDefault(a => a.ClassId != Guid.Empty);

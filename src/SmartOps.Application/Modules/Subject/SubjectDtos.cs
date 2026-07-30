@@ -6,6 +6,7 @@ namespace SmartOps.Application.Modules.Subject;
 
 public sealed class CreateSubjectDto
 {
+    public Guid ClassGroupId { get; set; }
     public string SubjectName { get; set; } = null!;
     public string SubjectCode { get; set; } = null!;
     public string? SubjectType { get; set; }
@@ -31,6 +32,7 @@ public static class SubjectMappingExtensions
     {
         return new SubjectEntity
         {
+            ClassGroupId = dto.ClassGroupId == Guid.Empty ? null : dto.ClassGroupId,
             SubjectName = dto.SubjectName.Trim(),
             SubjectCode = dto.SubjectCode.Trim(),
             SubjectType = ParseSubjectTypeOrNull(dto.SubjectType),

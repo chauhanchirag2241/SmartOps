@@ -46,9 +46,7 @@ public record ClassFeeAmountsResponseDto(
 
 public record ClassFeePeriodDto(
     int PeriodIndex,
-    string Name,
-    DateOnly StartDate,
-    DateOnly EndDate);
+    string Name);
 
 public record ClassFeePeriodAmountDto(int PeriodIndex, decimal Amount);
 

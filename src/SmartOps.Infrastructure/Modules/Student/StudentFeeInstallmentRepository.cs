@@ -255,6 +255,8 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
                 {
                     IList<FeeInstallmentGenerator.PeriodWindow> periodWindows = await GetPeriodWindowsAsync(
                             classId,
+                            yearStart,
+                            yearEnd,
                             conn,
                             tx,
                             ct)
@@ -822,25 +824,50 @@ public sealed class StudentFeeInstallmentRepository : BaseRepository, IStudentFe
 
     private async Task<IList<FeeInstallmentGenerator.PeriodWindow>> GetPeriodWindowsAsync(
         Guid classId,
+        DateOnly yearStart,
+        DateOnly yearEnd,
         IDbConnection conn,
         IDbTransaction tx,
         CancellationToken ct)
     {
         string sql = $"""
             SELECT periodindex AS PeriodIndex,
-                   name AS Label,
-                   startdate AS Start,
-                   enddate AS End
+                   name AS Label
             FROM {Schema}.{DatabaseConfig.TableClassAcademicPeriods}
             WHERE classgroupid = @ClassGroupId AND isactive = true
             ORDER BY periodindex;
             """;
-        IEnumerable<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)> rows = await conn
-            .QueryAsync<(int PeriodIndex, string Label, DateOnly Start, DateOnly End)>(
+        IEnumerable<(int PeriodIndex, string Label)> rows = await conn
+            .QueryAsync<(int PeriodIndex, string Label)>(
                 new CommandDefinition(sql, new { ClassGroupId = classId }, transaction: tx, cancellationToken: ct))
             .ConfigureAwait(false);
-        return rows
-            .Select(r => new FeeInstallmentGenerator.PeriodWindow(r.PeriodIndex, r.Label, r.Start, r.End))
-            .ToList();
+        List<(int PeriodIndex, string Label)> periods = rows.ToList();
+        if (periods.Count == 0)
+        {
+            return Array.Empty<FeeInstallmentGenerator.PeriodWindow>();
+        }
+
+        int totalDays = Math.Max(1, yearEnd.DayNumber - yearStart.DayNumber + 1);
+        int count = periods.Count;
+        List<FeeInstallmentGenerator.PeriodWindow> windows = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            DateOnly start = yearStart.AddDays((totalDays * i) / count);
+            DateOnly end = i == count - 1
+                ? yearEnd
+                : yearStart.AddDays((totalDays * (i + 1) / count) - 1);
+            if (end < start)
+            {
+                end = start;
+            }
+
+            windows.Add(new FeeInstallmentGenerator.PeriodWindow(
+                periods[i].PeriodIndex,
+                periods[i].Label,
+                start,
+                end));
+        }
+
+        return windows;
     }
 }

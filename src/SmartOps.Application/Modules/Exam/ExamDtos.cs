@@ -35,8 +35,6 @@ public record ExamGroupDto(
     Guid Id,
     string Name,
     string? Description,
-    Guid AcademicYearId,
-    string AcademicYearTitle,
     Guid? GradeScaleId,
     string? GradeScaleName,
     ExamEvaluationType EvaluationType,
@@ -47,7 +45,6 @@ public record ExamGroupDto(
 public record SaveExamGroupRequestDto(
     string Name,
     string? Description,
-    Guid AcademicYearId,
     Guid? GradeScaleId,
     ExamEvaluationType EvaluationType
 );

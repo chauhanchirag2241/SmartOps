@@ -198,10 +198,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 a.rollnumber AS RollNumber,
                 CASE
                     WHEN cg.classname IS NOT NULL THEN
-                        cg.classname || ' — ' ||
-                        CASE c.section
-                            WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE 'N/A'
-                        END
+                        cg.classname || ' — ' || c.section
                     ELSE 'N/A'
                 END AS Class,
                 COALESCE(att_stats.attendance_pct, 0) AS Attendance,

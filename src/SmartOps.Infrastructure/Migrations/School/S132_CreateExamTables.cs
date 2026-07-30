@@ -11,7 +11,6 @@ public sealed class S132_CreateExamTables : Migration
     private static string S => DatabaseConfig.Schema_School;
 
     private const string GradeScaleDetailScaleIndex = "ix_examgradescaledetails_scaleid";
-    private const string ExamGroupYearIndex = "ix_examgroups_academicyearid";
     private const string ExamGroupIndex = "ix_exams_examgroupid";
     private const string ExamClassUnique = "uq_examclasses_exam_class";
     private const string ComponentExamIndex = "ix_exammarkcomponents_examid";
@@ -58,16 +57,11 @@ public sealed class S132_CreateExamTables : Migration
             Create.Table(DatabaseConfig.TableExamGroups).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("branchid").AsGuid().NotNullable()
-                .WithColumn("academicyearid").AsGuid().NotNullable()
                 .WithColumn("name").AsString(300).NotNullable()
                 .WithColumn("description").AsString(1000).Nullable()
                 .WithColumn("gradescaleid").AsGuid().Nullable()
                 .WithColumn("evaluationtype").AsInt16().NotNullable().WithDefaultValue(0)
                 .WithAuditColumns();
-
-            Create.Index(ExamGroupYearIndex)
-                .OnTable(DatabaseConfig.TableExamGroups).InSchema(S)
-                .OnColumn("academicyearid").Ascending();
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableExams).Exists())

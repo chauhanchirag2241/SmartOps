@@ -1,19 +1,31 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Modules.AcademicYear;
+using SmartOps.Application.Modules.Class;
 using SmartOps.Application.Modules.School;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
-using SmartOps.Domain.Modules.School.Entities;
+using SmartOps.Domain.Modules.AcademicYear;
+using SmartOps.Domain.Modules.AcademicYear.Entities;
+using SmartOps.Domain.Modules.Class;
+using SmartOps.Domain.Modules.Class.Entities;
 using SmartOps.Domain.Modules.School;
-using SmartOps.Domain.Common.Constants;
+using SmartOps.Domain.Modules.School.Entities;
+using SmartOps.Infrastructure.MultiTenancy;
 
 namespace SmartOps.Api.Modules.School.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public sealed class SchoolsController(ISchoolRepository schoolRepository) : ControllerBase
+public sealed class SchoolsController(
+    ISchoolRepository schoolRepository,
+    IAcademicYearRepository academicYearRepository,
+    IClassRepository classRepository,
+    TenantContext tenantContext) : ControllerBase
 {
     [HttpPost]
     [Authorize(Policy = MenuPolicies.Schools.Add)]
@@ -189,5 +201,390 @@ public sealed class SchoolsController(ISchoolRepository schoolRepository) : Cont
         {
             return BadRequest(ex.Message);
         }
+    }
+
+    // ── Academic years (managed from ConfigUi school edit; data lives in school DB) ──
+
+    [HttpGet("{schoolId:guid}/academicYears")]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
+    [ProducesResponseType(typeof(PagedResult<AcademicYearListModel>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAcademicYears(
+        Guid schoolId,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] AcademicYearFilter filter = AcademicYearFilter.Active,
+        CancellationToken cancellationToken = default)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        var result = await academicYearRepository
+            .GetAllAcademicYearsAsync(pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter, cancellationToken)
+            .ConfigureAwait(false);
+        return Ok(result);
+    }
+
+    [HttpGet("{schoolId:guid}/academicYears/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
+    [ProducesResponseType(typeof(AcademicYearEntity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AcademicYearEntity>> GetAcademicYearById(
+        Guid schoolId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        var entity = await academicYearRepository
+            .GetAcademicYearByIdAsync(id, cancellationToken, includeInactive: true)
+            .ConfigureAwait(false);
+        return entity is null ? NotFound() : Ok(entity);
+    }
+
+    [HttpPost("{schoolId:guid}/academicYears")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(typeof(CreateAcademicYearResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateAcademicYearResponse>> CreateAcademicYear(
+        Guid schoolId,
+        [FromBody] CreateAcademicYearDto request,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        if (request is null)
+        {
+            return BadRequest("Academic year data is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest("Title is required.");
+        }
+
+        string? dateError = AcademicYearValidation.ValidateYearDates(request.StartDate, request.EndDate);
+        if (dateError is not null)
+        {
+            return BadRequest(dateError);
+        }
+
+        if (await academicYearRepository.TitleExistsAsync(request.Title, null, cancellationToken).ConfigureAwait(false))
+        {
+            return BadRequest("An academic year with this title already exists.");
+        }
+
+        if (await academicYearRepository
+                .HasOverlappingDatesAsync(request.StartDate, request.EndDate, null, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return BadRequest("Academic year dates overlap with an existing academic year.");
+        }
+
+        var entity = request.ToEntity();
+        Guid id = await academicYearRepository.CreateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
+        return Ok(new CreateAcademicYearResponse("Academic year created successfully", id));
+    }
+
+    [HttpPut("{schoolId:guid}/academicYears/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateAcademicYear(
+        Guid schoolId,
+        Guid id,
+        [FromBody] UpdateAcademicYearDto request,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        if (request is null)
+        {
+            return BadRequest("Academic year data is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest("Title is required.");
+        }
+
+        string? dateError = AcademicYearValidation.ValidateYearDates(request.StartDate, request.EndDate);
+        if (dateError is not null)
+        {
+            return BadRequest(dateError);
+        }
+
+        if (await academicYearRepository.TitleExistsAsync(request.Title, id, cancellationToken).ConfigureAwait(false))
+        {
+            return BadRequest("An academic year with this title already exists.");
+        }
+
+        if (await academicYearRepository
+                .HasOverlappingDatesAsync(request.StartDate, request.EndDate, id, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return BadRequest("Academic year dates overlap with an existing academic year.");
+        }
+
+        try
+        {
+            await academicYearRepository.UpdateAcademicYearAsync(
+                new AcademicYearEntity
+                {
+                    Id = id,
+                    Title = request.Title.Trim(),
+                    StartDate = request.StartDate,
+                    EndDate = request.EndDate,
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        return NoContent();
+    }
+
+    [HttpDelete("{schoolId:guid}/academicYears/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteAcademicYear(
+        Guid schoolId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        try
+        {
+            await academicYearRepository.DeleteAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    // ── Class groups (managed from ConfigUi school edit; data lives in school DB) ──
+
+    [HttpGet("{schoolId:guid}/classGroups")]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
+    [ProducesResponseType(typeof(PagedResult<ClassGroupListModel>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetClassGroups(
+        Guid schoolId,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] ClassFilter filter = ClassFilter.Active,
+        CancellationToken cancellationToken = default)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        var result = await classRepository
+            .GetAllClassGroupsAsync(
+                pageIndex, pageSize, searchTerm, sortColumn, sortDirection, filter,
+                scopeToActiveBranch: false, cancellationToken)
+            .ConfigureAwait(false);
+        return Ok(result);
+    }
+
+    [HttpGet("{schoolId:guid}/classGroups/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.View)]
+    [ProducesResponseType(typeof(ClassGroupEntity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ClassGroupEntity>> GetClassGroupById(
+        Guid schoolId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        var entity = await classRepository
+            .GetClassGroupByIdAsync(id, cancellationToken, includeInactive: true)
+            .ConfigureAwait(false);
+        return entity is null ? NotFound() : Ok(entity);
+    }
+
+    [HttpPost("{schoolId:guid}/classGroups")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(typeof(CreateClassGroupResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateClassGroupResponse>> CreateClassGroup(
+        Guid schoolId,
+        [FromBody] CreateClassGroupDto request,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        if (request is null)
+        {
+            return BadRequest("Class group data is required.");
+        }
+
+        if (request.BranchId == Guid.Empty)
+        {
+            return BadRequest("Branch is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ClassName))
+        {
+            return BadRequest("Class name is required.");
+        }
+
+        try
+        {
+            var id = await classRepository
+                .CreateClassGroupAsync(request.ToEntity(), cancellationToken)
+                .ConfigureAwait(false);
+            return Ok(new CreateClassGroupResponse("Class group created successfully", id));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("{schoolId:guid}/classGroups/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateClassGroup(
+        Guid schoolId,
+        Guid id,
+        [FromBody] UpdateClassGroupDto request,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        if (request is null)
+        {
+            return BadRequest("Class group data is required.");
+        }
+
+        if (request.BranchId == Guid.Empty)
+        {
+            return BadRequest("Branch is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ClassName))
+        {
+            return BadRequest("Class name is required.");
+        }
+
+        try
+        {
+            await classRepository.UpdateClassGroupAsync(
+                new ClassGroupEntity
+                {
+                    Id = id,
+                    BranchId = request.BranchId,
+                    ClassName = request.ClassName.Trim(),
+                    Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        return NoContent();
+    }
+
+    [HttpDelete("{schoolId:guid}/classGroups/{id:guid}")]
+    [Authorize(Policy = MenuPolicies.Schools.Edit)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteClassGroup(
+        Guid schoolId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var bindError = await BindSchoolTenantAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (bindError is not null)
+        {
+            return bindError;
+        }
+
+        try
+        {
+            await classRepository.DeleteClassGroupAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    private async Task<ActionResult?> BindSchoolTenantAsync(Guid schoolId, CancellationToken cancellationToken)
+    {
+        var school = await schoolRepository.GetSchoolByIdAsync(schoolId, cancellationToken).ConfigureAwait(false);
+        if (school is null)
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(school.ConnectionString))
+        {
+            return BadRequest("School database is not provisioned.");
+        }
+
+        tenantContext.SchoolId = school.Id.ToString();
+        tenantContext.TenantId = school.Subdomain;
+        tenantContext.ConnectionString = school.ConnectionString;
+        tenantContext.DatabaseName = school.DatabaseName;
+        tenantContext.SchemaName = DatabaseConfig.Schema_School;
+        return null;
     }
 }

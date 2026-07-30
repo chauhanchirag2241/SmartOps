@@ -55,6 +55,8 @@ public enum SchoolFilter
 
 /// <summary>
 /// Filters for Academic Year table.
+/// Draft = Upcoming, Archived = Past (legacy enum names kept for API compatibility).
+/// Current / Upcoming / Past are date-derived.
 /// </summary>
 public enum AcademicYearFilter
 {

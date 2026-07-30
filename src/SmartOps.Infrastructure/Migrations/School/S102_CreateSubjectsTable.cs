@@ -18,6 +18,8 @@ public sealed class S102_CreateSubjectsTable : Migration
             Create.Table(DatabaseConfig.TableSubjects).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("branchid").AsGuid().NotNullable()
+                .WithColumn("classgroupid").AsGuid().Nullable()
+                    .ForeignKey("fk_subjects_classgroupid", S, DatabaseConfig.TableClassGroups, "id")
                 .WithColumn("subjectname").AsString(100).NotNullable()
                 .WithColumn("subjectcode").AsString(50).NotNullable()
                 .WithColumn("subjecttype").AsInt32().Nullable()
@@ -46,6 +48,7 @@ CREATE UNIQUE INDEX uq_subjects_branch_code
     WHERE isactive = true;
 
 CREATE INDEX ix_subjects_branchid ON {S}.{DatabaseConfig.TableSubjects} (branchid);
+CREATE INDEX ix_subjects_classgroupid ON {S}.{DatabaseConfig.TableSubjects} (classgroupid);
 """);
         }
     }

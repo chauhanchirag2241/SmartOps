@@ -19,11 +19,10 @@ public sealed class SalaryStructureController : ControllerBase
     [Authorize(Policy = MenuPolicies.SalaryStructure.View)]
     [ProducesResponseType(typeof(IList<SalaryStructureVersionListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetVersions(
-        [FromQuery] Guid? academicYearId,
         [FromQuery] string? status,
         CancellationToken ct)
     {
-        var result = await _service.GetVersionsAsync(academicYearId, status, ct).ConfigureAwait(false);
+        var result = await _service.GetVersionsAsync(status, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

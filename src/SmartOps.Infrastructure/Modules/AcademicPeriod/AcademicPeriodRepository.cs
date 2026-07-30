@@ -24,7 +24,6 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
     }
 
     public async Task<IReadOnlyList<AcademicPeriodClassSummary>> GetClassesAsync(
-        Guid academicYearId,
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -35,13 +34,10 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
         string sql = $"""
             SELECT cg.id AS ClassId,
                    cg.classname AS ClassName,
-                   @AcademicYearId AS AcademicYearId,
-                   COUNT(p.id)::int AS PeriodCount,
-                   MIN(p.periodtype) AS PeriodType
+                   COUNT(p.id)::int AS PeriodCount
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassGroups} cg
             LEFT JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClassAcademicPeriods} p
               ON p.classgroupid = cg.id
-             AND p.academicyearid = @AcademicYearId
              AND p.isactive = true
             WHERE cg.isactive = true{branchFilter}
             GROUP BY cg.id, cg.classname
@@ -51,44 +47,61 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
         IEnumerable<AcademicPeriodClassSummary> rows = await connection.QueryAsync<AcademicPeriodClassSummary>(
             new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, ActiveBranchId = activeBranchId },
+                new { ActiveBranchId = activeBranchId },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
     }
 
     public async Task<IReadOnlyList<ClassAcademicPeriodEntity>> GetByClassAsync(
         Guid classId,
-        Guid academicYearId,
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         string sql = $"""
             SELECT id AS Id,
                    classgroupid AS ClassGroupId,
-                   academicyearid AS AcademicYearId,
-                   periodtype AS PeriodType,
                    periodindex AS PeriodIndex,
-                   name AS Name,
-                   startdate AS StartDate,
-                   enddate AS EndDate
+                   name AS Name
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassAcademicPeriods}
             WHERE classgroupid = @ClassGroupId
-              AND academicyearid = @AcademicYearId
               AND isactive = true
             ORDER BY periodindex;
             """;
         IEnumerable<ClassAcademicPeriodEntity> rows = await connection.QueryAsync<ClassAcademicPeriodEntity>(
             new CommandDefinition(
                 sql,
-                new { ClassGroupId = classId, AcademicYearId = academicYearId },
+                new { ClassGroupId = classId },
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return rows.ToList();
     }
 
+    public async Task<ClassAcademicPeriodEntity?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id,
+                   classgroupid AS ClassGroupId,
+                   periodindex AS PeriodIndex,
+                   name AS Name,
+                   isactive AS IsActive,
+                   createdby AS CreatedBy,
+                   createdon AS CreatedOn,
+                   updatedby AS UpdatedBy,
+                   updatedon AS UpdatedOn,
+                   versionno AS VersionNo
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassAcademicPeriods}
+            WHERE id = @Id;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<ClassAcademicPeriodEntity>(
+            new CommandDefinition(sql, new { Id = id }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     public async Task SaveAsync(
         Guid classId,
-        Guid academicYearId,
         IReadOnlyList<ClassAcademicPeriodEntity> periods,
         CancellationToken cancellationToken = default)
     {
@@ -108,17 +121,15 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                     updatedon = @UtcNow,
                     versionno = versionno + 1
                 WHERE classgroupid = @ClassGroupId
-                  AND academicyearid = @AcademicYearId
                   AND isactive = true;
                 """,
-                new { ClassGroupId = classId, AcademicYearId = academicYearId, ActorId = actorId, UtcNow = utcNow },
+                new { ClassGroupId = classId, ActorId = actorId, UtcNow = utcNow },
                 tx).ConfigureAwait(false);
 
             foreach (ClassAcademicPeriodEntity period in periods.OrderBy(p => p.PeriodIndex))
             {
                 period.Id = Guid.NewGuid();
                 period.ClassGroupId = classId;
-                period.AcademicYearId = academicYearId;
                 period.Name = period.Name.Trim();
                 EnsureInsertAudit(period, utcNow, actorId);
                 await InsertAsync(conn, schema, table, period, tx).ConfigureAwait(false);
@@ -128,14 +139,11 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                 $"""
                 UPDATE {schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
                 SET periodlabel = p.name,
-                    periodstart = p.startdate,
-                    periodend = p.enddate,
                     updatedby = @ActorId,
                     updatedon = @UtcNow,
                     versionno = cfi.versionno + 1
                 FROM {schema}.{DatabaseConfig.TableClassAcademicPeriods} p
                 WHERE cfi.classgroupid = @ClassGroupId
-                  AND cfi.academicyearid = @AcademicYearId
                   AND cfi.periodindex = p.periodindex
                   AND cfi.isactive = true
                   AND EXISTS (
@@ -145,7 +153,6 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                         AND ft.frequency = 0
                         AND ft.isactive = true)
                   AND p.classgroupid = @ClassGroupId
-                  AND p.academicyearid = @AcademicYearId
                   AND p.isactive = true;
 
                 UPDATE {schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
@@ -154,7 +161,6 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                     updatedon = @UtcNow,
                     versionno = cfi.versionno + 1
                 WHERE cfi.classgroupid = @ClassGroupId
-                  AND cfi.academicyearid = @AcademicYearId
                   AND cfi.isactive = true
                   AND EXISTS (
                       SELECT 1
@@ -166,14 +172,11 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                       SELECT 1
                       FROM {schema}.{DatabaseConfig.TableClassAcademicPeriods} p
                       WHERE p.classgroupid = @ClassGroupId
-                        AND p.academicyearid = @AcademicYearId
                         AND p.periodindex = cfi.periodindex
                         AND p.isactive = true);
 
                 UPDATE {schema}.{DatabaseConfig.TableStudentFeeInstallments} sfi
                 SET periodlabel = cfi.periodlabel,
-                    periodstart = cfi.periodstart,
-                    periodend = cfi.periodend,
                     isactive = cfi.isactive,
                     updatedby = @ActorId,
                     updatedon = @UtcNow,
@@ -181,17 +184,15 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                 FROM {schema}.{DatabaseConfig.TableClassFeeInstallments} cfi
                 WHERE sfi.classfeeinstallmentid = cfi.id
                   AND cfi.classgroupid = @ClassGroupId
-                  AND cfi.academicyearid = @AcademicYearId
                   AND sfi.isactive = true;
                 """,
-                new { ClassGroupId = classId, AcademicYearId = academicYearId, ActorId = actorId, UtcNow = utcNow },
+                new { ClassGroupId = classId, ActorId = actorId, UtcNow = utcNow },
                 tx).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
     public async Task<bool> HasPaidInstallmentsAsync(
         Guid classId,
-        Guid academicYearId,
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -205,13 +206,12 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                     ON cfi.id = sfi.classfeeinstallmentid
                 INNER JOIN {Context.OperationalSchema}.{DatabaseConfig.TableFeeHead} ft
                     ON ft.id = cfi.feeheadid AND ft.frequency = 0
-                WHERE cfi.classgroupid = @ClassGroupId
-                  AND cfi.academicyearid = @AcademicYearId);
+                WHERE cfi.classgroupid = @ClassGroupId);
             """;
         return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(
                 sql,
-                new { ClassGroupId = classId, AcademicYearId = academicYearId },
+                new { ClassGroupId = classId },
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }

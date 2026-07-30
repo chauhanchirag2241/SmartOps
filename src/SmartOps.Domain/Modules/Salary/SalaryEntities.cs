@@ -6,7 +6,6 @@ public class SalaryStructureVersionEntity : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid BranchId { get; set; }
-    public Guid AcademicYearId { get; set; }
     public int VersionNumber { get; set; }
     public SalaryStructureVersionStatus Status { get; set; } = SalaryStructureVersionStatus.Draft;
     public DateOnly? EffectiveDate { get; set; }

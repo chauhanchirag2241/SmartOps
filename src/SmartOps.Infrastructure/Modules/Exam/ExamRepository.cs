@@ -293,25 +293,22 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             SELECT g.id AS Id,
                    g.name AS Name,
                    g.description AS Description,
-                   g.academicyearid AS AcademicYearId,
-                   COALESCE(ay.title, '') AS AcademicYearTitle,
                    g.gradescaleid AS GradeScaleId,
                    gs.name AS GradeScaleName,
                    g.evaluationtype::int AS EvaluationType,
                    COALESCE(COUNT(e.id), 0)::int AS ExamCount
             FROM {Schema}.{DatabaseConfig.TableExamGroups} g
-            LEFT JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay ON ay.id = g.academicyearid
             LEFT JOIN {Schema}.{DatabaseConfig.TableExamGradeScales} gs ON gs.id = g.gradescaleid AND gs.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableExams} e ON e.examgroupid = g.id AND e.isactive = true
-            WHERE g.isactive = true{YearFilter("g")}{branchFilter}
-            GROUP BY g.id, g.name, g.description, g.academicyearid, ay.title, g.gradescaleid, gs.name, g.evaluationtype, g.createdon
+            WHERE g.isactive = true{branchFilter}
+            GROUP BY g.id, g.name, g.description, g.gradescaleid, gs.name, g.evaluationtype, g.createdon
             ORDER BY g.createdon DESC;
             """;
 
         IEnumerable<ExamGroupRow> rows = await connection.QueryAsync<ExamGroupRow>(
                 new CommandDefinition(
                     sql,
-                    new { ScopeAcademicYearId = _scope.ActiveAcademicYearId, ActiveBranchId = activeBranchId },
+                    new { ActiveBranchId = activeBranchId },
                     cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
@@ -322,7 +319,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
         string sql = $"""
-            SELECT id, branchid, academicyearid, name, description, gradescaleid, evaluationtype,
+            SELECT id, branchid, name, description, gradescaleid, evaluationtype,
                    isactive, versionno, createdby, createdon, updatedby, updatedon
             FROM {Schema}.{DatabaseConfig.TableExamGroups}
             WHERE id = @Id AND isactive = true;
@@ -345,10 +342,10 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableExamGroups}
-                (id, branchid, academicyearid, name, description, gradescaleid, evaluationtype,
+                (id, branchid, name, description, gradescaleid, evaluationtype,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @BranchId, @AcademicYearId, @Name, @Description, @GradeScaleId, @EvaluationType,
+                (@Id, @BranchId, @Name, @Description, @GradeScaleId, @EvaluationType,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
 
@@ -363,8 +360,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamGroups}
-            SET academicyearid = @AcademicYearId,
-                name = @Name,
+            SET name = @Name,
                 description = @Description,
                 gradescaleid = @GradeScaleId,
                 evaluationtype = @EvaluationType,

@@ -46,8 +46,6 @@ public sealed class ExamGroupRow
     public Guid Id { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
-    public Guid AcademicYearId { get; init; }
-    public string AcademicYearTitle { get; init; } = string.Empty;
     public Guid? GradeScaleId { get; init; }
     public string? GradeScaleName { get; init; }
     public int EvaluationType { get; init; }

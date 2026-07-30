@@ -17,7 +17,7 @@ public sealed class FeeCollectionRepository : BaseRepository, IFeeCollectionRepo
     private readonly IBranchContext _branchContext;
 
     private const string ClassDisplayNameSql =
-        "cg.classname || CASE c.section WHEN 1 THEN ' - A' WHEN 2 THEN ' - B' WHEN 3 THEN ' - C' WHEN 4 THEN ' - D' ELSE '' END";
+        "cg.classname || ' - ' || c.section";
 
     public FeeCollectionRepository(
         DapperContext context,

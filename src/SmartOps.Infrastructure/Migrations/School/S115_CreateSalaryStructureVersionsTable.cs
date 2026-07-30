@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S115_CreateSalaryStructureVersionsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private const string VersionYearUnique = "uq_salarystructureversions_year_version";
+    private const string VersionBranchUnique = "uq_salarystructureversions_branch_version";
 
     public override void Up()
     {
@@ -21,7 +21,6 @@ public sealed class S115_CreateSalaryStructureVersionsTable : Migration
         Create.Table(DatabaseConfig.TableSalaryStructureVersions).InSchema(S)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("branchid").AsGuid().NotNullable()
-            .WithColumn("academicyearid").AsGuid().NotNullable()
             .WithColumn("versionnumber").AsInt32().NotNullable()
             .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
             .WithColumn("effectivedate").AsDate().Nullable()
@@ -37,9 +36,9 @@ ALTER TABLE {S}.{DatabaseConfig.TableSalaryStructureVersions}
 CREATE INDEX ix_salarystructureversions_branchid ON {S}.{DatabaseConfig.TableSalaryStructureVersions} (branchid);
 """);
 
-        Create.UniqueConstraint(VersionYearUnique)
+        Create.UniqueConstraint(VersionBranchUnique)
             .OnTable(DatabaseConfig.TableSalaryStructureVersions).WithSchema(S)
-            .Columns("branchid", "academicyearid", "versionnumber");
+            .Columns("branchid", "versionnumber");
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TableSalaryStructureVersions).InSchema(S);

@@ -82,10 +82,8 @@ ORDER BY startdate DESC
                 new CommandDefinition(
                     $"""
 SELECT c.id AS Id,
-       trim(cg.classname || COALESCE(' - ' || NULLIF(trim(
-           CASE c.section WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE '' END
-       ), ''), '')) AS Name,
-       CASE c.section WHEN 1 THEN 'A' WHEN 2 THEN 'B' WHEN 3 THEN 'C' WHEN 4 THEN 'D' ELSE '' END AS SubLabel
+       trim(cg.classname || COALESCE(' - ' || NULLIF(trim(c.section), ''), '')) AS Name,
+       c.section AS SubLabel
 FROM {schema}.{DatabaseConfig.TableClasses} c
 INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 WHERE c.isactive = true{classBranchFilter}

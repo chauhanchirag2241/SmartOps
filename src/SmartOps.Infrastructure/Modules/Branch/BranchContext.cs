@@ -18,6 +18,7 @@ public sealed class BranchContext : IBranchContext
     private readonly IUserRepository _userRepository;
     private readonly TenantContext _tenantContext;
     private bool _resolved;
+    private string? _resolvedForSchoolId;
 
     public BranchContext(
         IHttpContextAccessor httpContextAccessor,
@@ -43,13 +44,21 @@ public sealed class BranchContext : IBranchContext
 
     public async Task EnsureResolvedAsync(CancellationToken cancellationToken = default)
     {
-        if (_resolved)
+        string? schoolIdRaw = _tenantContext.SchoolId;
+        if (_resolved && string.Equals(_resolvedForSchoolId, schoolIdRaw, StringComparison.Ordinal))
         {
             return;
         }
 
-        if (!Guid.TryParse(_tenantContext.SchoolId, out Guid schoolId))
+        AllowedBranchIds = [];
+        ActiveBranchId = null;
+        SelectedBranchIds = [];
+        CanViewAllBranches = false;
+        _resolved = false;
+
+        if (!Guid.TryParse(schoolIdRaw, out Guid schoolId))
         {
+            _resolvedForSchoolId = schoolIdRaw;
             _resolved = true;
             return;
         }
@@ -57,6 +66,7 @@ public sealed class BranchContext : IBranchContext
         Guid? userId = GetCurrentUserId();
         if (userId is null)
         {
+            _resolvedForSchoolId = schoolIdRaw;
             _resolved = true;
             return;
         }
@@ -65,7 +75,11 @@ public sealed class BranchContext : IBranchContext
             .GetUserTypeCodeAsync(userId.Value, cancellationToken)
             .ConfigureAwait(false);
 
-        CanViewAllBranches = UserTypeCodes.IsGlobalScope(userTypeCode);
+        // Platform Admin (Config UI) lives in global.users — after BindSchoolTenant the
+        // identity schema is man, so usertype lookup returns null. JWT Admin role still
+        // authorizes full branch access for school setup endpoints.
+        CanViewAllBranches = UserTypeCodes.IsGlobalScope(userTypeCode)
+            || (string.IsNullOrWhiteSpace(userTypeCode) && IsPlatformAdmin());
 
         if (CanViewAllBranches)
         {
@@ -84,11 +98,18 @@ public sealed class BranchContext : IBranchContext
         ActiveBranchId = ResolveActiveBranchId();
         SelectedBranchIds = ResolveSelectedBranchIds();
 
+        _resolvedForSchoolId = schoolIdRaw;
         _resolved = true;
     }
 
     public bool HasBranchAccess(Guid branchId) =>
         CanViewAllBranches || AllowedBranchIds.Contains(branchId);
+
+    private bool IsPlatformAdmin()
+    {
+        ClaimsPrincipal? user = _httpContextAccessor.HttpContext?.User;
+        return user?.IsInRole(RoleNames.Admin) == true;
+    }
 
     private Guid? ResolveActiveBranchId()
     {

@@ -13,8 +13,9 @@ public interface ISubjectRepository
         string? searchTerm, 
         string? sortColumn, 
         string? sortDirection, 
-        string? filter, 
-        CancellationToken cancellationToken);
+        string? filter,
+        Guid? classGroupId = null,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DropdownDto>> GetSubjectDropdownAsync(CancellationToken cancellationToken);
     Task<SubjectEntity?> GetSubjectByIdAsync(Guid id, CancellationToken cancellationToken, bool includeInactive = false);
     Task UpdateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken);

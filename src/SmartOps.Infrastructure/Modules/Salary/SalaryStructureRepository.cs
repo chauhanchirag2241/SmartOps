@@ -36,7 +36,6 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             : DatabaseConfig.Schema_School;
 
     public async Task<IList<SalaryStructureVersionListRow>> GetVersionsAsync(
-        Guid? academicYearId,
         SalaryStructureVersionStatus? status,
         CancellationToken ct = default)
     {
@@ -46,8 +45,6 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
         string sql = $"""
             SELECT v.id AS Id,
-                   v.academicyearid AS AcademicYearId,
-                   COALESCE(ay.title, '') AS AcademicYearTitle,
                    v.versionnumber AS VersionNumber,
                    v.status AS Status,
                    v.effectivedate AS EffectiveDate,
@@ -60,11 +57,9 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                        WHERE es.salarystructureversionid = v.id AND es.isactive = true
                    ) AS HasAssignedEmployees
             FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
-            LEFT JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay ON ay.id = v.academicyearid
             WHERE v.isactive = true{branchFilter}
-            {(academicYearId.HasValue ? "AND v.academicyearid = @AcademicYearId" : string.Empty)}
             {(status.HasValue ? "AND v.status = @Status" : string.Empty)}
-            ORDER BY ay.title, v.versionnumber DESC;
+            ORDER BY v.versionnumber DESC;
             """;
 
         IEnumerable<SalaryStructureVersionListRow> rows = await connection
@@ -72,7 +67,6 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                 sql,
                 new
                 {
-                    AcademicYearId = academicYearId,
                     Status = status.HasValue ? (short)status.Value : (short?)null,
                     ActiveBranchId = activeBranchId
                 },
@@ -85,7 +79,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
+            SELECT id AS Id, branchid AS BranchId, versionnumber AS VersionNumber,
                    status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
                    activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -98,68 +92,74 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
     }
 
-    public async Task<SalaryStructureVersionEntity?> GetActiveVersionForYearAsync(Guid academicYearId, CancellationToken ct = default)
+    public async Task<SalaryStructureVersionEntity?> GetActiveVersionAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
-                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
-                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
-            WHERE academicyearid = @AcademicYearId AND status = @ActiveStatus AND isactive = true
-            ORDER BY versionnumber DESC
+            SELECT v.id AS Id, v.branchid AS BranchId, v.versionnumber AS VersionNumber,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
+                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            WHERE v.status = @ActiveStatus AND v.isactive = true{branchFilter}
+            ORDER BY v.versionnumber DESC
             LIMIT 1;
             """;
         return await connection
             .QueryFirstOrDefaultAsync<SalaryStructureVersionEntity>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, ActiveStatus = (short)SalaryStructureVersionStatus.Active },
+                new { ActiveStatus = (short)SalaryStructureVersionStatus.Active, ActiveBranchId = activeBranchId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<SalaryStructureVersionEntity?> GetAdmissionVersionForYearAsync(
-        Guid academicYearId,
-        CancellationToken ct = default)
+    public async Task<SalaryStructureVersionEntity?> GetAdmissionVersionAsync(CancellationToken ct = default)
     {
-        SalaryStructureVersionEntity? active = await GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        SalaryStructureVersionEntity? active = await GetActiveVersionAsync(ct).ConfigureAwait(false);
         if (active is not null)
         {
             return active;
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, academicyearid AS AcademicYearId, versionnumber AS VersionNumber,
-                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
-                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
-            WHERE academicyearid = @AcademicYearId
-              AND status = @PublishedStatus
-              AND isactive = true
-            ORDER BY versionnumber DESC
+            SELECT v.id AS Id, v.branchid AS BranchId, v.versionnumber AS VersionNumber,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
+                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            WHERE v.status = @PublishedStatus
+              AND v.isactive = true{branchFilter}
+            ORDER BY v.versionnumber DESC
             LIMIT 1;
             """;
         return await connection
             .QueryFirstOrDefaultAsync<SalaryStructureVersionEntity>(new CommandDefinition(
                 sql,
-                new { AcademicYearId = academicYearId, PublishedStatus = (short)SalaryStructureVersionStatus.Published },
+                new { PublishedStatus = (short)SalaryStructureVersionStatus.Published, ActiveBranchId = activeBranchId },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
-    public async Task<int> GetNextVersionNumberAsync(Guid academicYearId, CancellationToken ct = default)
+    public async Task<int> GetNextVersionNumberAsync(CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "v", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT COALESCE(MAX(versionnumber), 0) + 1
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
-            WHERE academicyearid = @AcademicYearId;
+            SELECT COALESCE(MAX(v.versionnumber), 0) + 1
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            WHERE v.isactive = true{branchFilter};
             """;
         return await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, new { AcademicYearId = academicYearId }, cancellationToken: ct))
+            new CommandDefinition(sql, new { ActiveBranchId = activeBranchId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -174,10 +174,10 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
-                (id, branchid, academicyearid, versionnumber, status, effectivedate, publishedon, activatedon,
+                (id, branchid, versionnumber, status, effectivedate, publishedon, activatedon,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @BranchId, @AcademicYearId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
+                (@Id, @BranchId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
@@ -216,65 +216,66 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
     }
 
-    public async Task ArchiveActiveVersionsForYearAsync(Guid academicYearId, Guid exceptVersionId, CancellationToken ct = default)
+    public async Task ArchiveActiveVersionsAsync(Guid exceptVersionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
+        await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+        Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
+        string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
                 versionno = versionno + 1
-            WHERE academicyearid = @AcademicYearId
-              AND id <> @ExceptVersionId
+            WHERE id <> @ExceptVersionId
               AND status = @ActiveStatus
-              AND isactive = true;
+              AND isactive = true{branchFilter};
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new
             {
-                AcademicYearId = academicYearId,
                 ExceptVersionId = exceptVersionId,
                 ActiveStatus = (short)SalaryStructureVersionStatus.Active,
                 ArchivedStatus = (short)SalaryStructureVersionStatus.Archived,
                 UpdatedBy = actorId,
-                UpdatedOn = utcNow
+                UpdatedOn = utcNow,
+                ActiveBranchId = activeBranchId
             },
             cancellationToken: ct)).ConfigureAwait(false);
     }
 
-    public async Task ArchivePublishedVersionsForYearAsync(
-        Guid academicYearId,
-        Guid exceptVersionId,
-        CancellationToken ct = default)
+    public async Task ArchivePublishedVersionsAsync(Guid exceptVersionId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
+        await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+        Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
+        string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
                 versionno = versionno + 1
-            WHERE academicyearid = @AcademicYearId
-              AND id <> @ExceptVersionId
+            WHERE id <> @ExceptVersionId
               AND status = @PublishedStatus
-              AND isactive = true;
+              AND isactive = true{branchFilter};
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new
             {
-                AcademicYearId = academicYearId,
                 ExceptVersionId = exceptVersionId,
                 PublishedStatus = (short)SalaryStructureVersionStatus.Published,
                 ArchivedStatus = (short)SalaryStructureVersionStatus.Archived,
                 UpdatedBy = actorId,
-                UpdatedOn = utcNow
+                UpdatedOn = utcNow,
+                ActiveBranchId = activeBranchId
             },
             cancellationToken: ct)).ConfigureAwait(false);
     }
@@ -466,18 +467,6 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             """;
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
-            .ConfigureAwait(false);
-    }
-
-    public async Task<string?> GetAcademicYearTitleAsync(Guid academicYearId, CancellationToken ct = default)
-    {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        string sql = $"""
-            SELECT title FROM {Schema}.{DatabaseConfig.TableAcademicYears}
-            WHERE id = @Id AND isactive = true;
-            """;
-        return await connection.ExecuteScalarAsync<string?>(
-            new CommandDefinition(sql, new { Id = academicYearId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 }

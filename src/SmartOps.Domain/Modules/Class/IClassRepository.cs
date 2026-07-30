@@ -22,23 +22,49 @@ public interface IClassRepository
         string? sortColumn = null,
         string? sortDirection = null,
         ClassFilter filter = ClassFilter.Active,
+        Guid? classGroupId = null,
         CancellationToken cancellationToken = default);
+
+    Task<PagedResult<ClassGroupListModel>> GetAllClassGroupsAsync(
+        int pageIndex,
+        int pageSize,
+        string? searchTerm = null,
+        string? sortColumn = null,
+        string? sortDirection = null,
+        ClassFilter filter = ClassFilter.Active,
+        bool scopeToActiveBranch = false,
+        CancellationToken cancellationToken = default);
+
+    Task<Guid> CreateClassGroupAsync(ClassGroupEntity group, CancellationToken cancellationToken = default);
+
+    Task UpdateClassGroupAsync(ClassGroupEntity group, CancellationToken cancellationToken = default);
+
+    Task DeleteClassGroupAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ClassGroupSubjectListModel>> GetClassGroupSubjectsAsync(
+        Guid classGroupId,
+        CancellationToken cancellationToken = default);
+
+    Task<Guid> AddClassGroupSubjectAsync(
+        Guid classGroupId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default);
+
+    Task RemoveClassGroupSubjectAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>Section-scoped dropdown (Class 1 - A).</summary>
     Task<IReadOnlyList<DropdownDto>> GetClassDropdownAsync(
         Guid? academicYearId = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Class-group dropdown (Class 1) for fees / academic periods.</summary>
+    /// <summary>Class-group dropdown (Class 1) for fees / academic periods / Add Class.</summary>
     Task<IReadOnlyList<DropdownDto>> GetClassGroupDropdownAsync(
         Guid? academicYearId = null,
         CancellationToken cancellationToken = default);
 
     Task UpdateClassAsync(ClassEntity classEntity, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Soft deletes a class section; soft-deletes the group when no active sections remain.
-    /// </summary>
+    /// <summary>Soft deletes a class section.</summary>
     Task DeleteClassAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>

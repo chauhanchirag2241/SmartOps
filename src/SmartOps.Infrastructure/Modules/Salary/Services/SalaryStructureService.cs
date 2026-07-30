@@ -1,4 +1,3 @@
-using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Salary;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common;
@@ -9,24 +8,18 @@ namespace SmartOps.Infrastructure.Modules.Salary.Services;
 public sealed class SalaryStructureService : ISalaryStructureService
 {
     private readonly ISalaryStructureRepository _repo;
-    private readonly IUserScopeContext _scope;
 
-    public SalaryStructureService(ISalaryStructureRepository repo, IUserScopeContext scope)
+    public SalaryStructureService(ISalaryStructureRepository repo)
     {
         _repo = repo;
-        _scope = scope;
     }
 
     public async Task<Result<IList<SalaryStructureVersionListItemDto>>> GetVersionsAsync(
-        Guid? academicYearId,
         string? statusFilter,
         CancellationToken ct = default)
     {
-        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        Guid? effectiveYearId = academicYearId ?? _scope.ActiveAcademicYearId;
-
         SalaryStructureVersionStatus? status = ParseStatusFilter(statusFilter);
-        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(effectiveYearId, status, ct).ConfigureAwait(false);
+        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(status, ct).ConfigureAwait(false);
         IList<SalaryStructureVersionListItemDto> dtos = rows.Select(MapVersionListItem).ToList();
         return Result<IList<SalaryStructureVersionListItemDto>>.Success(dtos);
     }
@@ -40,13 +33,10 @@ public sealed class SalaryStructureService : ISalaryStructureService
         }
 
         IList<SalaryVersionComponentListRow> components = await _repo.GetComponentsAsync(versionId, ct).ConfigureAwait(false);
-        string? yearTitle = await _repo.GetAcademicYearTitleAsync(version.AcademicYearId, ct).ConfigureAwait(false);
         bool hasEmployees = await _repo.VersionHasAssignedEmployeesAsync(versionId, ct).ConfigureAwait(false);
 
         return Result<SalaryStructureVersionDetailDto>.Success(new SalaryStructureVersionDetailDto(
             version.Id,
-            version.AcademicYearId,
-            yearTitle ?? string.Empty,
             version.VersionNumber,
             version.Status,
             SalaryLabelHelper.VersionStatusLabel(version.Status),
@@ -62,15 +52,9 @@ public sealed class SalaryStructureService : ISalaryStructureService
         CreateSalaryStructureVersionRequestDto request,
         CancellationToken ct = default)
     {
-        if (request.AcademicYearId == Guid.Empty)
-        {
-            return Result<SalaryStructureVersionListItemDto>.Failure("Academic year is required.");
-        }
-
-        int versionNumber = await _repo.GetNextVersionNumberAsync(request.AcademicYearId, ct).ConfigureAwait(false);
+        int versionNumber = await _repo.GetNextVersionNumberAsync(ct).ConfigureAwait(false);
         var entity = new SalaryStructureVersionEntity
         {
-            AcademicYearId = request.AcademicYearId,
             VersionNumber = versionNumber,
             Status = SalaryStructureVersionStatus.Draft,
             EffectiveDate = request.EffectiveDate
@@ -110,7 +94,7 @@ public sealed class SalaryStructureService : ISalaryStructureService
             return Result<SalaryStructureVersionListItemDto>.Failure("Add at least one salary component before publishing.");
         }
 
-        await _repo.ArchivePublishedVersionsForYearAsync(version.AcademicYearId, versionId, ct).ConfigureAwait(false);
+        await _repo.ArchivePublishedVersionsAsync(versionId, ct).ConfigureAwait(false);
         version.Status = SalaryStructureVersionStatus.Published;
         version.PublishedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
@@ -130,7 +114,7 @@ public sealed class SalaryStructureService : ISalaryStructureService
             return Result<SalaryStructureVersionListItemDto>.Failure("Only published salary structures can be activated.");
         }
 
-        await _repo.ArchiveActiveVersionsForYearAsync(version.AcademicYearId, versionId, ct).ConfigureAwait(false);
+        await _repo.ArchiveActiveVersionsAsync(versionId, ct).ConfigureAwait(false);
         version.Status = SalaryStructureVersionStatus.Active;
         version.ActivatedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
@@ -153,7 +137,6 @@ public sealed class SalaryStructureService : ISalaryStructureService
         }
 
         return await CreateVersionAsync(new CreateSalaryStructureVersionRequestDto(
-            source.AcademicYearId,
             source.EffectiveDate,
             source.Id), ct).ConfigureAwait(false);
     }
@@ -272,15 +255,15 @@ public sealed class SalaryStructureService : ISalaryStructureService
         return Result<bool>.Success(true);
     }
 
-    public async Task<Guid?> ResolveActiveVersionIdForYearAsync(Guid academicYearId, CancellationToken ct = default)
+    public async Task<Guid?> ResolveActiveVersionIdAsync(CancellationToken ct = default)
     {
-        SalaryStructureVersionEntity? active = await _repo.GetActiveVersionForYearAsync(academicYearId, ct).ConfigureAwait(false);
+        SalaryStructureVersionEntity? active = await _repo.GetActiveVersionAsync(ct).ConfigureAwait(false);
         return active?.Id;
     }
 
     private async Task<Result<SalaryStructureVersionListItemDto>> GetVersionListItemByIdAsync(Guid versionId, CancellationToken ct)
     {
-        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(null, null, ct).ConfigureAwait(false);
+        IList<SalaryStructureVersionListRow> rows = await _repo.GetVersionsAsync(null, ct).ConfigureAwait(false);
         SalaryStructureVersionListRow? row = rows.FirstOrDefault(r => r.Id == versionId);
         if (row is null)
         {
@@ -290,14 +273,11 @@ public sealed class SalaryStructureService : ISalaryStructureService
                 return Result<SalaryStructureVersionListItemDto>.Failure("Salary structure version not found.");
             }
 
-            string? title = await _repo.GetAcademicYearTitleAsync(version.AcademicYearId, ct).ConfigureAwait(false);
             bool hasEmployees = await _repo.VersionHasAssignedEmployeesAsync(versionId, ct).ConfigureAwait(false);
             int componentCount = await _repo.CountActiveComponentsForVersionAsync(versionId, ct).ConfigureAwait(false);
             row = new SalaryStructureVersionListRow
             {
                 Id = version.Id,
-                AcademicYearId = version.AcademicYearId,
-                AcademicYearTitle = title ?? string.Empty,
                 VersionNumber = version.VersionNumber,
                 Status = version.Status,
                 EffectiveDate = version.EffectiveDate,
@@ -349,8 +329,6 @@ public sealed class SalaryStructureService : ISalaryStructureService
 
     private static SalaryStructureVersionListItemDto MapVersionListItem(SalaryStructureVersionListRow row) => new(
         row.Id,
-        row.AcademicYearId,
-        row.AcademicYearTitle,
         row.VersionNumber,
         row.Status,
         SalaryLabelHelper.VersionStatusLabel(row.Status),

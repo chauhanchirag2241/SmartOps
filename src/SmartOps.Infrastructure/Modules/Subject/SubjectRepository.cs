@@ -33,6 +33,11 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
     public async Task<Guid> CreateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken)
     {
+        if (!subject.ClassGroupId.HasValue || subject.ClassGroupId.Value == Guid.Empty)
+        {
+            throw new InvalidOperationException("Class group is required. Create subjects from a class.");
+        }
+
         var utcNow = DateTime.UtcNow;
         if (subject.Id == Guid.Empty)
         {
@@ -61,8 +66,9 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         string? searchTerm, 
         string? sortColumn, 
         string? sortDirection, 
-        string? filter, 
-        CancellationToken cancellationToken)
+        string? filter,
+        Guid? classGroupId = null,
+        CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -70,6 +76,11 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
         await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
 
         var whereClause = BuildListWhereClause(filter, ref searchTerm);
+        if (classGroupId.HasValue && classGroupId.Value != Guid.Empty)
+        {
+            whereClause += " AND s.classgroupid = @ClassGroupId";
+        }
+
         whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "s", ref whereClause);
         if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
@@ -129,6 +140,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
                 {
                     SearchTerm = searchTerm,
                     Filter = filter,
+                    ClassGroupId = classGroupId,
                     ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray(),
                     ActiveBranchId = _branchContext.ActiveBranchId
                 },

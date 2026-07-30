@@ -5,7 +5,6 @@ namespace SmartOps.Application.Modules.Salary.Interfaces;
 public interface ISalaryStructureService
 {
     Task<Result<IList<SalaryStructureVersionListItemDto>>> GetVersionsAsync(
-        Guid? academicYearId,
         string? statusFilter,
         CancellationToken ct = default);
 
@@ -36,5 +35,5 @@ public interface ISalaryStructureService
 
     Task<Result<bool>> DeleteComponentAsync(Guid id, CancellationToken ct = default);
 
-    Task<Guid?> ResolveActiveVersionIdForYearAsync(Guid academicYearId, CancellationToken ct = default);
+    Task<Guid?> ResolveActiveVersionIdAsync(CancellationToken ct = default);
 }

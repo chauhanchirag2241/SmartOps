@@ -3,7 +3,6 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Domain.Common.Configuration;
-using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.Exam;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
@@ -47,7 +46,7 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
             INNER JOIN {Schema}.{DatabaseConfig.TableAcademicYears} ay
                 ON ay.id = sa.academicyearid
                AND ay.isactive = true
-               AND ay.status = {(int)AcademicYearStatus.Current}
+               AND CURRENT_DATE BETWEEN ay.startdate AND ay.enddate
             WHERE st.isactive = true
             ORDER BY sa.rollnumber NULLS LAST, u.firstname, u.lastname;
             """;

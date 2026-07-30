@@ -90,7 +90,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         ClassFeeSummaryRow? summary = summaries.FirstOrDefault(s => s.ClassId == classGroupId);
         IList<ClassFeeAmountRow> rows = await _repo.GetAmountsByClassAsync(classGroupId, academicYearId, versionId, ct).ConfigureAwait(false);
         IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
-            .GetByClassAsync(classGroupId, academicYearId, ct)
+            .GetByClassAsync(classGroupId, ct)
             .ConfigureAwait(false);
 
         IList<ClassFeeAmountItemDto> items = rows
@@ -110,11 +110,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
             FeeLabelHelper.VersionStatusLabel(version.Status),
             IsClassAmountsEditable(version.Status, classHasConfiguredAmounts),
             items.Sum(i => FeeCategoryHelper.SignedAnnualTotal(i.Category, i.AnnualTotal)),
-            periods.Select(p => new ClassFeePeriodDto(
-                p.PeriodIndex,
-                p.Name,
-                p.StartDate,
-                p.EndDate)).ToList(),
+            periods.Select(p => new ClassFeePeriodDto(p.PeriodIndex, p.Name)).ToList(),
             items));
     }
 
@@ -156,7 +152,7 @@ public sealed class ClassFeeAmountService : IClassFeeAmountService
         }
 
         IReadOnlyList<ClassAcademicPeriodEntity> periods = await _periodRepo
-            .GetByClassAsync(classGroupId, request.AcademicYearId, ct)
+            .GetByClassAsync(classGroupId, ct)
             .ConfigureAwait(false);
         IList<ClassFeeAmountRow> feeHeads = await _repo
             .GetAmountsByClassAsync(classGroupId, request.AcademicYearId, request.FeeStructureId, ct)

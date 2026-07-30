@@ -1,7 +1,8 @@
 namespace SmartOps.Domain.Modules.AcademicYear;
 
 /// <summary>
-/// Lifecycle of an academic year. Soft-deleted rows use IsActive=false (list status "Deleted").
+/// Legacy DB column values. Display status (Current / Upcoming / Past) is derived from dates;
+/// soft-deleted rows use IsActive=false (list status "Deleted").
 /// </summary>
 public enum AcademicYearStatus
 {

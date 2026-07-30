@@ -12,10 +12,18 @@ public class AcademicYearEntity : AuditableEntity
     public DateOnly EndDate { get; set; }
     public bool IsActive { get; set; }
 
+    /// <summary>Legacy column retained for schema compatibility; current year is date-derived.</summary>
     public AcademicYearStatus Status { get; set; } = AcademicYearStatus.Draft;
 
-    /// <summary>Derived from Status == Current (not stored in DB).</summary>
+    /// <summary>True when today falls between StartDate and EndDate (inclusive).</summary>
     [DbIgnore]
     [TrackHistoryIgnore]
-    public bool IsCurrent => Status == AcademicYearStatus.Current;
+    public bool IsCurrent
+    {
+        get
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            return IsActive && today >= StartDate && today <= EndDate;
+        }
+    }
 }

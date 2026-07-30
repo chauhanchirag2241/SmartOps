@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S124_FeeSemesterRestructure : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private const string ClassPeriodUnique = "uq_classacademicperiods_classgroup_year_index";
+    private const string ClassPeriodUnique = "uq_classacademicperiods_classgroup_index";
     private const string FeePeriodUnique = "uq_classfeeperiodamounts_amount_period";
 
     public override void Up()
@@ -19,31 +19,22 @@ public sealed class S124_FeeSemesterRestructure : Migration
             Create.Table(DatabaseConfig.TableClassAcademicPeriods).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classgroupid").AsGuid().NotNullable()
-                .WithColumn("academicyearid").AsGuid().NotNullable()
-                // 1=Semester, 2=Term, 3=Quarter, 4=Custom
-                .WithColumn("periodtype").AsInt16().NotNullable()
                 .WithColumn("periodindex").AsInt32().NotNullable()
                 .WithColumn("name").AsString(100).NotNullable()
-                .WithColumn("startdate").AsDate().NotNullable()
-                .WithColumn("enddate").AsDate().NotNullable()
                 .WithAuditColumns();
 
             Execute.Sql($"""
 ALTER TABLE {S}.{DatabaseConfig.TableClassAcademicPeriods}
     ADD CONSTRAINT fk_classacademicperiods_classgroup FOREIGN KEY (classgroupid)
     REFERENCES {S}.{DatabaseConfig.TableClassGroups}(id),
-    ADD CONSTRAINT fk_classacademicperiods_year FOREIGN KEY (academicyearid)
-    REFERENCES {S}.{DatabaseConfig.TableAcademicYears}(id),
-    ADD CONSTRAINT ck_classacademicperiods_index CHECK (periodindex > 0),
-    ADD CONSTRAINT ck_classacademicperiods_dates CHECK (enddate >= startdate),
-    ADD CONSTRAINT ck_classacademicperiods_type CHECK (periodtype BETWEEN 1 AND 4);
+    ADD CONSTRAINT ck_classacademicperiods_index CHECK (periodindex > 0);
 
 CREATE UNIQUE INDEX {ClassPeriodUnique}
-    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, academicyearid, periodindex)
+    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, periodindex)
     WHERE isactive = true;
 
-CREATE UNIQUE INDEX uq_classacademicperiods_classgroup_year_name
-    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, academicyearid, LOWER(name))
+CREATE UNIQUE INDEX uq_classacademicperiods_classgroup_name
+    ON {S}.{DatabaseConfig.TableClassAcademicPeriods} (classgroupid, LOWER(name))
     WHERE isactive = true;
 """);
         }

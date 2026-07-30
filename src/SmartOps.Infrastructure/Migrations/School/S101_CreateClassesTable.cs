@@ -43,8 +43,6 @@ CREATE INDEX ix_shifts_branchid ON {S}.{DatabaseConfig.TableShifts} (branchid);
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("branchid").AsGuid().NotNullable()
                 .WithColumn("classname").AsString(50).NotNullable()
-                .WithColumn("streamgroup").AsInt32().Nullable()
-                .WithColumn("medium").AsInt32().Nullable()
                 .WithColumn("description").AsString(1000).Nullable()
                 .WithAuditColumns();
 
@@ -52,15 +50,14 @@ CREATE INDEX ix_shifts_branchid ON {S}.{DatabaseConfig.TableShifts} (branchid);
 ALTER TABLE {S}.{DatabaseConfig.TableClassGroups}
     ADD CONSTRAINT fk_classgroups_branchid FOREIGN KEY (branchid)
     REFERENCES {G}.{DatabaseConfig.TableSchoolBranches}(id);
+
+CREATE UNIQUE INDEX uq_classgroups_identity
+    ON {S}.{DatabaseConfig.TableClassGroups} (branchid, lower(classname))
+    WHERE isactive = true;
+
+CREATE INDEX ix_classgroups_branchid
+    ON {S}.{DatabaseConfig.TableClassGroups} (branchid);
 """);
-
-            Create.UniqueConstraint("uq_classgroups_identity")
-                .OnTable(DatabaseConfig.TableClassGroups).WithSchema(S)
-                .Columns("branchid", "classname", "streamgroup");
-
-            Create.Index("ix_classgroups_branchid")
-                .OnTable(DatabaseConfig.TableClassGroups).InSchema(S)
-                .OnColumn("branchid").Ascending();
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableClasses).Exists())
@@ -69,20 +66,21 @@ ALTER TABLE {S}.{DatabaseConfig.TableClassGroups}
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("classgroupid").AsGuid().NotNullable()
                     .ForeignKey("fk_classes_classgroupid", S, DatabaseConfig.TableClassGroups, "id")
-                .WithColumn("section").AsInt32().NotNullable().WithDefaultValue(1)
+                .WithColumn("section").AsString(100).NotNullable()
                 .WithColumn("capacity").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithColumn("roomnumber").AsString(50).Nullable()
                 .WithColumn("shiftid").AsGuid().Nullable()
                     .ForeignKey("fk_classes_shiftid", S, DatabaseConfig.TableShifts, "id")
                 .WithAuditColumns();
 
-            Create.UniqueConstraint("uq_classes_identity")
-                .OnTable(DatabaseConfig.TableClasses).WithSchema(S)
-                .Columns("classgroupid", "section");
+            Execute.Sql($"""
+CREATE UNIQUE INDEX uq_classes_identity
+    ON {S}.{DatabaseConfig.TableClasses} (classgroupid, lower(section))
+    WHERE isactive = true;
 
-            Create.Index("ix_classes_classgroupid")
-                .OnTable(DatabaseConfig.TableClasses).InSchema(S)
-                .OnColumn("classgroupid").Ascending();
+CREATE INDEX ix_classes_classgroupid
+    ON {S}.{DatabaseConfig.TableClasses} (classgroupid);
+""");
         }
     }
 

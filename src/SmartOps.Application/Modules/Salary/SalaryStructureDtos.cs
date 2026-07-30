@@ -4,8 +4,6 @@ namespace SmartOps.Application.Modules.Salary;
 
 public record SalaryStructureVersionListItemDto(
     Guid Id,
-    Guid AcademicYearId,
-    string AcademicYearTitle,
     int VersionNumber,
     SalaryStructureVersionStatus Status,
     string StatusLabel,
@@ -18,8 +16,6 @@ public record SalaryStructureVersionListItemDto(
 
 public record SalaryStructureVersionDetailDto(
     Guid Id,
-    Guid AcademicYearId,
-    string AcademicYearTitle,
     int VersionNumber,
     SalaryStructureVersionStatus Status,
     string StatusLabel,
@@ -31,7 +27,6 @@ public record SalaryStructureVersionDetailDto(
     IList<SalaryVersionComponentDto> Components);
 
 public record CreateSalaryStructureVersionRequestDto(
-    Guid AcademicYearId,
     DateOnly? EffectiveDate,
     Guid? CloneFromVersionId);
 

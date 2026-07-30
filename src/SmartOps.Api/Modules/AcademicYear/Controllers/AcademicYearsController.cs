@@ -48,6 +48,13 @@ public sealed class AcademicYearsController(
             return BadRequest("An academic year with this title already exists.");
         }
 
+        if (await academicYearRepository
+                .HasOverlappingDatesAsync(request.StartDate, request.EndDate, null, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return BadRequest("Academic year dates overlap with an existing academic year.");
+        }
+
         var entity = request.ToEntity();
         Guid id = await academicYearRepository.CreateAcademicYearAsync(entity, cancellationToken).ConfigureAwait(false);
 
@@ -95,23 +102,6 @@ public sealed class AcademicYearsController(
             .GetAcademicYearDropdownAsync(currentAndFutureOnly, cancellationToken)
             .ConfigureAwait(false);
         return Ok(result.Select(i => i.ToDropdownDto()).ToList());
-    }
-
-    [HttpPut("{id:guid}/set-current")]
-    [Authorize(Policy = MenuPolicies.AcademicYears.Edit)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> SetCurrentAcademicYear(Guid id, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await academicYearRepository.SetCurrentAcademicYearAsync(id, cancellationToken).ConfigureAwait(false);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
     }
 
     [HttpGet("{id:guid}/history")]
@@ -169,6 +159,13 @@ public sealed class AcademicYearsController(
         if (await academicYearRepository.TitleExistsAsync(request.Title, id, cancellationToken).ConfigureAwait(false))
         {
             return BadRequest("An academic year with this title already exists.");
+        }
+
+        if (await academicYearRepository
+                .HasOverlappingDatesAsync(request.StartDate, request.EndDate, id, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return BadRequest("Academic year dates overlap with an existing academic year.");
         }
 
         try

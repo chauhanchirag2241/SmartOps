@@ -892,7 +892,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
         public string ClassName { get; init; } = string.Empty;
 
-        public int Section { get; init; }
+        public string Section { get; init; } = string.Empty;
 
         public DateTime CreatedOn { get; init; }
     }
@@ -903,7 +903,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
         public string ClassName { get; init; } = string.Empty;
 
-        public int Section { get; init; }
+        public string Section { get; init; } = string.Empty;
 
         public DateTime DueDate { get; init; }
     }
@@ -912,7 +912,7 @@ WHERE id = @Id AND isactive = true LIMIT 1
     {
         public string ClassName { get; init; } = string.Empty;
 
-        public int Section { get; init; }
+        public string Section { get; init; } = string.Empty;
 
         public int StudentCount { get; init; }
 

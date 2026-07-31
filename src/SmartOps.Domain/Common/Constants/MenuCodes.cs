@@ -114,6 +114,8 @@ public static class MenuCodes
 
     public const string FeeMaster = "FEE_MASTER";
 
+    public const string FeeCollection = "FEE_COLLECTION";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -167,6 +169,7 @@ public static class MenuCodes
         MyTimetable,
         TeacherTimetableReport,
         FeeManagement,
-        FeeMaster
+        FeeMaster,
+        FeeCollection
     ];
 }

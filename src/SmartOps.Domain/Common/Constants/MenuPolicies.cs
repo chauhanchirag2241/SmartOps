@@ -156,6 +156,15 @@ public static class MenuPolicies
         public const string Export = "Menu:FEE_MASTER:Export";
     }
 
+    public static class FeeCollection
+    {
+        public const string View = "Menu:FEE_COLLECTION:View";
+        public const string Add = "Menu:FEE_COLLECTION:Add";
+        public const string Edit = "Menu:FEE_COLLECTION:Edit";
+        public const string Delete = "Menu:FEE_COLLECTION:Delete";
+        public const string Export = "Menu:FEE_COLLECTION:Export";
+    }
+
     public static class AcademicYears
     {
         public const string View = "Menu:ACADEMIC_YEARS:View";

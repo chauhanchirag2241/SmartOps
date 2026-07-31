@@ -102,6 +102,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IFeeMasterRepository, FeeMasterRepository>();
         services.AddScoped<IFeeHeadRepository, FeeHeadRepository>();
         services.AddScoped<IFeeStudentAmountRepository, FeeStudentAmountRepository>();
+        services.AddScoped<IFeePaymentRepository, FeePaymentRepository>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();

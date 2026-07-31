@@ -61,6 +61,8 @@ public static class DatabaseConfig
     public const string TableFeeHeadPeriodAmount = "feeheadperiodamount";
     public const string TableFeeStudentAmount = "feestudentamount";
     public const string TableFeeMasterClassGroup = "feemasterclassgroup";
+    public const string TableFeePayment = "feepayment";
+    public const string TableFeePaymentLine = "feepaymentline";
 
     // Employee Module
     public const string TableEmployees = "employees";

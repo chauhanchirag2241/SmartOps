@@ -19,6 +19,7 @@ public sealed class FeeMastersController(
     IFeeMasterRepository feeMasterRepository,
     IFeeHeadRepository feeHeadRepository,
     IFeeStudentAmountRepository feeStudentAmountRepository,
+    IFeePaymentRepository feePaymentRepository,
     IAcademicPeriodRepository academicPeriodRepository,
     IAuditLogRepository auditLogRepository) : ControllerBase
 {
@@ -122,6 +123,11 @@ public sealed class FeeMastersController(
             return NotFound();
         }
 
+        if (IsPublishStarted(existing.PublishedOn))
+        {
+            return BadRequest("Fee master cannot be edited after the published-on date has started.");
+        }
+
         var dateError = ValidateFeeDates(
             request.PublishedOn,
             request.DefaultDueDate,
@@ -166,6 +172,11 @@ public sealed class FeeMastersController(
         if (existing is null)
         {
             return NotFound();
+        }
+
+        if (IsPublishStarted(existing.PublishedOn))
+        {
+            return BadRequest("Fee master cannot be edited after the published-on date has started.");
         }
 
         var dateError = ValidateFeeDates(
@@ -265,6 +276,11 @@ public sealed class FeeMastersController(
             return NotFound();
         }
 
+        if (IsPublishStarted(parent.PublishedOn))
+        {
+            return BadRequest("Fee heads cannot be added after the published-on date has started.");
+        }
+
         var validationError = await ValidateFeeHeadRequestAsync(parent, request, ct).ConfigureAwait(false);
         if (validationError is not null)
         {
@@ -304,6 +320,11 @@ public sealed class FeeMastersController(
             return NotFound();
         }
 
+        if (IsPublishStarted(parent.PublishedOn))
+        {
+            return BadRequest("Fee heads cannot be edited after the published-on date has started.");
+        }
+
         var validationError = await ValidateFeeHeadRequestAsync(parent, request, ct).ConfigureAwait(false);
         if (validationError is not null)
         {
@@ -328,6 +349,18 @@ public sealed class FeeMastersController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteHead(Guid id, CancellationToken ct)
     {
+        var existing = await feeHeadRepository.GetEntityByIdAsync(id, ct).ConfigureAwait(false);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        var parent = await feeMasterRepository.GetByIdAsync(existing.FeeMasterId, ct).ConfigureAwait(false);
+        if (parent is not null && IsPublishStarted(parent.PublishedOn))
+        {
+            return BadRequest("Fee heads cannot be deleted after the published-on date has started.");
+        }
+
         await feeHeadRepository.DeleteAsync(id, ct).ConfigureAwait(false);
         return NoContent();
     }
@@ -493,6 +526,11 @@ public sealed class FeeMastersController(
             return NotFound();
         }
 
+        if (await feePaymentRepository.HasPaymentAsync(studentId, feeMasterId, ct).ConfigureAwait(false))
+        {
+            return BadRequest("Student fee amounts cannot be edited after fee has been collected.");
+        }
+
         var headMap = detail.Heads.ToDictionary(h => h.FeeHeadId);
         var rows = new List<FeeStudentAmountEntity>();
 
@@ -622,6 +660,16 @@ public sealed class FeeMastersController(
         }
 
         return null;
+    }
+
+    private static bool IsPublishStarted(DateOnly? publishedOn)
+    {
+        if (!publishedOn.HasValue)
+        {
+            return false;
+        }
+
+        return publishedOn.Value <= DateOnly.FromDateTime(DateTime.UtcNow);
     }
 
     private static string? ValidateFeeDates(

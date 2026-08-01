@@ -30,8 +30,6 @@ public sealed class S103_CreateEmployeesTable : Migration
                 .WithColumn("joiningdate").AsDate().NotNullable()
                 .WithColumn("designation").AsString(100).Nullable()
                 .WithColumn("experience").AsInt32().WithDefaultValue(0)
-                .WithColumn("salarygrade").AsString(50).Nullable()
-                .WithColumn("employmenttype").AsString(50).WithDefaultValue("Full-time")
                 .WithColumn("qualifications").AsString(2000).Nullable()
                 .WithColumn("bankaccountnumber").AsString(50).Nullable()
                 .WithColumn("bankifsccode").AsString(20).Nullable()

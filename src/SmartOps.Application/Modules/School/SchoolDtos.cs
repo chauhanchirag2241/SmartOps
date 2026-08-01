@@ -17,13 +17,11 @@ public sealed class CreateSchoolDto
     public string? State { get; set; }
     public string? Pincode { get; set; }
     public string Country { get; set; } = "India";
-    public string? Timezone { get; set; }
     public string? GoogleMapsLink { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public string? PrimaryPhone { get; set; }
     public string? AlternatePhone { get; set; }
-    public string? Fax { get; set; }
     public string? PrimaryEmail { get; set; }
     public string? PrincipalEmail { get; set; }
     public string? Website { get; set; }
@@ -46,13 +44,11 @@ public sealed class CreateSchoolDto
             State = State,
             Pincode = Pincode,
             Country = string.IsNullOrWhiteSpace(Country) ? "India" : Country,
-            Timezone = Timezone,
             GoogleMapsLink = GoogleMapsLink,
             Latitude = Latitude,
             Longitude = Longitude,
             PrimaryPhone = PrimaryPhone,
             AlternatePhone = AlternatePhone,
-            Fax = Fax,
             PrimaryEmail = PrimaryEmail,
             PrincipalEmail = PrincipalEmail,
             Website = Website,
@@ -88,13 +84,11 @@ public sealed class UpdateSchoolDto
     public string? State { get; set; }
     public string? Pincode { get; set; }
     public string Country { get; set; } = "India";
-    public string? Timezone { get; set; }
     public string? GoogleMapsLink { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public string? PrimaryPhone { get; set; }
     public string? AlternatePhone { get; set; }
-    public string? Fax { get; set; }
     public string? PrimaryEmail { get; set; }
     public string? PrincipalEmail { get; set; }
     public string? Website { get; set; }
@@ -114,13 +108,11 @@ public sealed class UpdateSchoolDto
         school.State = State;
         school.Pincode = Pincode;
         school.Country = string.IsNullOrWhiteSpace(Country) ? "India" : Country;
-        school.Timezone = Timezone;
         school.GoogleMapsLink = GoogleMapsLink;
         school.Latitude = Latitude;
         school.Longitude = Longitude;
         school.PrimaryPhone = PrimaryPhone;
         school.AlternatePhone = AlternatePhone;
-        school.Fax = Fax;
         school.PrimaryEmail = PrimaryEmail;
         school.PrincipalEmail = PrincipalEmail;
         school.Website = Website;

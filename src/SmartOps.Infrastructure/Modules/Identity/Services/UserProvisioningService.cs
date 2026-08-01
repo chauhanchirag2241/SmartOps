@@ -1,15 +1,19 @@
+using System.Data;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Identity.Models;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Employee.Entities;
 using SmartOps.Domain.Modules.Identity.Entities;
 using SmartOps.Domain.Modules.Student.Entities;
+using SmartOps.Infrastructure.Persistence;
+using SmartOps.Infrastructure.Persistence.Context;
 
 namespace SmartOps.Infrastructure.Modules.Identity.Services;
 
-public sealed class UserProvisioningService : IUserProvisioningService
+public sealed class UserProvisioningService : BaseRepository, IUserProvisioningService
 {
     public const string DefaultPortalPassword = "SmartOps@123";
 
@@ -18,9 +22,12 @@ public sealed class UserProvisioningService : IUserProvisioningService
     private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
 
     public UserProvisioningService(
+        DapperContext context,
+        ICurrentUserService currentUser,
         IUserRepository users,
         IUserTypeRepository userTypes,
         IPasswordHasher<ApplicationUser> passwordHasher)
+        : base(context, currentUser)
     {
         _users = users;
         _userTypes = userTypes;
@@ -30,6 +37,24 @@ public sealed class UserProvisioningService : IUserProvisioningService
     public async Task<ProvisionUserResult> ProvisionSchoolUserAsync(
         ProvisionUserRequest request,
         CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await WithTransactionAsync(
+                connection,
+                (conn, tx) => ProvisionSchoolUserCoreAsync(request, tx, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    public Task<ProvisionUserResult> ProvisionSchoolUserAsync(
+        ProvisionUserRequest request,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        ProvisionSchoolUserCoreAsync(request, transaction, cancellationToken);
+
+    private async Task<ProvisionUserResult> ProvisionSchoolUserCoreAsync(
+        ProvisionUserRequest request,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken)
     {
         string firstName = RequireName(request.FirstName, "First name");
         string lastName = RequireName(request.LastName, "Last name");
@@ -47,13 +72,17 @@ public sealed class UserProvisioningService : IUserProvisioningService
             throw new InvalidOperationException($"Unknown user type '{userTypeCode}'.");
         }
 
-        ApplicationUser? byUsername = await _users.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
+        ApplicationUser? byUsername = await _users
+            .GetByUsernameAsync(username, transaction, cancellationToken)
+            .ConfigureAwait(false);
         if (byUsername is not null)
         {
             throw new InvalidOperationException($"Username '{username}' already exists.");
         }
 
-        ApplicationUser? byEmail = await _users.GetByEmailAsync(email, cancellationToken).ConfigureAwait(false);
+        ApplicationUser? byEmail = await _users
+            .GetByEmailAsync(email, transaction, cancellationToken)
+            .ConfigureAwait(false);
         if (byEmail is not null)
         {
             throw new InvalidOperationException($"Email '{email}' already exists.");
@@ -73,11 +102,14 @@ public sealed class UserProvisioningService : IUserProvisioningService
         user.PasswordHash = _passwordHasher.HashPassword(user, DefaultPortalPassword);
         user.SecurityStamp = Guid.NewGuid().ToString("N");
 
-        await _users.CreateAsync(user, cancellationToken).ConfigureAwait(false);
+        await _users.CreateAsync(user, transaction, cancellationToken).ConfigureAwait(false);
 
-        if (!string.IsNullOrWhiteSpace(request.RoleName))
+        string? roleName = string.IsNullOrWhiteSpace(request.RoleName)
+            ? RoleNames.FromUserType(userTypeCode)
+            : request.RoleName.Trim();
+        if (!string.IsNullOrWhiteSpace(roleName))
         {
-            await _users.AddUserToRoleAsync(user.Id, request.RoleName.Trim(), cancellationToken).ConfigureAwait(false);
+            await _users.AddUserToRoleAsync(user.Id, roleName, transaction, cancellationToken).ConfigureAwait(false);
         }
 
         return new ProvisionUserResult
@@ -88,10 +120,24 @@ public sealed class UserProvisioningService : IUserProvisioningService
         };
     }
 
-    public async Task<Guid> ProvisionEmployeeUserAsync(
+    public Task<Guid> ProvisionEmployeeUserAsync(
         EmployeeEntity employee,
         Guid schoolId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ProvisionEmployeeUserCoreAsync(employee, schoolId, transaction: null, cancellationToken);
+
+    public Task<Guid> ProvisionEmployeeUserAsync(
+        EmployeeEntity employee,
+        Guid schoolId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        ProvisionEmployeeUserCoreAsync(employee, schoolId, transaction, cancellationToken);
+
+    private async Task<Guid> ProvisionEmployeeUserCoreAsync(
+        EmployeeEntity employee,
+        Guid schoolId,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         string userTypeCode = string.IsNullOrWhiteSpace(employee.UserTypeCode)
             ? UserTypeCodes.Teacher
@@ -102,45 +148,65 @@ public sealed class UserProvisioningService : IUserProvisioningService
             userTypeCode = UserTypeCodes.Teacher;
         }
 
-        ProvisionUserResult result = await ProvisionSchoolUserAsync(
-            new ProvisionUserRequest
-            {
-                SchoolId = schoolId,
-                UserTypeCode = userTypeCode,
-                FirstName = employee.FirstName,
-                LastName = employee.LastName,
-                Email = employee.Email,
-                Mobile = employee.Mobile,
-                Username = employee.Username
-            },
-            cancellationToken).ConfigureAwait(false);
+        var request = new ProvisionUserRequest
+        {
+            SchoolId = schoolId,
+            UserTypeCode = userTypeCode,
+            RoleName = RoleNames.ResolveForProvision(userTypeCode, employee.PortalRoleName),
+            FirstName = employee.FirstName,
+            LastName = employee.LastName,
+            Email = employee.Email,
+            Mobile = employee.Mobile,
+            Username = employee.Username
+        };
+
+        ProvisionUserResult result = transaction is null
+            ? await ProvisionSchoolUserAsync(request, cancellationToken).ConfigureAwait(false)
+            : await ProvisionSchoolUserAsync(request, transaction, cancellationToken).ConfigureAwait(false);
 
         employee.UserId = result.UserId;
         employee.Username = BuildUsername(employee.FirstName, employee.LastName, employee.Username);
         return result.UserId;
     }
 
-    public async Task<Guid> ProvisionStudentUserAsync(
+    public Task<Guid> ProvisionStudentUserAsync(
         StudentEntity student,
         Guid schoolId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ProvisionStudentUserCoreAsync(student, schoolId, transaction: null, cancellationToken);
+
+    public Task<Guid> ProvisionStudentUserAsync(
+        StudentEntity student,
+        Guid schoolId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        ProvisionStudentUserCoreAsync(student, schoolId, transaction, cancellationToken);
+
+    private async Task<Guid> ProvisionStudentUserCoreAsync(
+        StudentEntity student,
+        Guid schoolId,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(student.Email))
         {
             throw new InvalidOperationException("Student email is required to create a portal user.");
         }
 
-        ProvisionUserResult result = await ProvisionSchoolUserAsync(
-            new ProvisionUserRequest
-            {
-                SchoolId = schoolId,
-                UserTypeCode = UserTypeCodes.Student,
-                FirstName = student.FirstName,
-                LastName = student.LastName,
-                Email = student.Email,
-                Mobile = student.Mobile
-            },
-            cancellationToken).ConfigureAwait(false);
+        var request = new ProvisionUserRequest
+        {
+            SchoolId = schoolId,
+            UserTypeCode = UserTypeCodes.Student,
+            RoleName = RoleNames.Student,
+            FirstName = student.FirstName,
+            LastName = student.LastName,
+            Email = student.Email,
+            Mobile = student.Mobile
+        };
+
+        ProvisionUserResult result = transaction is null
+            ? await ProvisionSchoolUserAsync(request, cancellationToken).ConfigureAwait(false)
+            : await ProvisionSchoolUserAsync(request, transaction, cancellationToken).ConfigureAwait(false);
 
         student.UserId = result.UserId;
         return result.UserId;
@@ -158,11 +224,13 @@ public sealed class UserProvisioningService : IUserProvisioningService
         CancellationToken cancellationToken = default)
     {
         _ = personaRoleLabel;
+        string resolvedType = string.IsNullOrWhiteSpace(userTypeCode) ? UserTypeCodes.OfficeStaff : userTypeCode;
         ProvisionUserResult result = await ProvisionSchoolUserAsync(
             new ProvisionUserRequest
             {
                 SchoolId = schoolId,
-                UserTypeCode = string.IsNullOrWhiteSpace(userTypeCode) ? UserTypeCodes.OfficeStaff : userTypeCode,
+                UserTypeCode = resolvedType,
+                RoleName = RoleNames.ResolveForProvision(resolvedType, personaRoleLabel),
                 FirstName = firstName,
                 LastName = lastName,
                 Email = email,

@@ -28,7 +28,7 @@ INSERT INTO {man}.{DatabaseConfig.TableRoleMenuPermissions}
     (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT gen_random_uuid(), r.id, '{menuId}', true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {man}.{DatabaseConfig.TableRoles} r
-WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}'))
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.SchoolAdmin}'))
   AND NOT EXISTS (
     SELECT 1 FROM {man}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = '{menuId}'
@@ -44,7 +44,7 @@ WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}'))
 
         Execute.Sql($"""
 DELETE FROM {man}.{DatabaseConfig.TableRoleMenuPermissions}
-WHERE roleid IN (SELECT id FROM {man}.{DatabaseConfig.TableRoles} WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}')))
+WHERE roleid IN (SELECT id FROM {man}.{DatabaseConfig.TableRoles} WHERE lower(trim(name)) = lower(trim('{RoleNames.SchoolAdmin}')))
   AND menuid IN ('{menuIds}');
 """);
     }

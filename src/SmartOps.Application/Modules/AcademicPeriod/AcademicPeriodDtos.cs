@@ -2,34 +2,49 @@ using SmartOps.Domain.Modules.AcademicPeriod;
 
 namespace SmartOps.Application.Modules.AcademicPeriod;
 
-public sealed record AcademicPeriodClassSummaryDto(
-    Guid ClassId,
-    string ClassName,
-    int PeriodCount);
+public sealed class ClassAcademicPeriodDto
+{
+    public Guid Id { get; init; }
+    public int PeriodIndex { get; init; }
+    public string Name { get; init; } = string.Empty;
+}
 
-public sealed record ClassAcademicPeriodDto(
-    Guid Id,
-    int PeriodIndex,
-    string Name);
+public sealed class ClassAcademicPeriodSetupDto
+{
+    public Guid ClassId { get; init; }
+    public IReadOnlyList<ClassAcademicPeriodDto> Periods { get; init; } = [];
+}
 
-public sealed record ClassAcademicPeriodSetupDto(
-    Guid ClassId,
-    IReadOnlyList<ClassAcademicPeriodDto> Periods);
+public sealed class SaveClassAcademicPeriodsRequest
+{
+    public IReadOnlyList<SaveClassAcademicPeriodItem> Periods { get; init; } = [];
+}
 
-public sealed record SaveClassAcademicPeriodsRequest(
-    IReadOnlyList<SaveClassAcademicPeriodItem> Periods);
-
-public sealed record SaveClassAcademicPeriodItem(
-    int PeriodIndex,
-    string Name);
+public sealed class SaveClassAcademicPeriodItem
+{
+    public Guid? Id { get; init; }
+    public int PeriodIndex { get; init; }
+    public string Name { get; init; } = string.Empty;
+}
 
 public static class AcademicPeriodMapping
 {
     public static ClassAcademicPeriodDto ToDto(this ClassAcademicPeriodEntity entity) =>
-        new(entity.Id, entity.PeriodIndex, entity.Name);
+        new()
+        {
+            Id = entity.Id,
+            PeriodIndex = entity.PeriodIndex,
+            Name = entity.Name,
+        };
 
-    public static AcademicPeriodClassSummaryDto ToDto(this AcademicPeriodClassSummary row) =>
-        new(row.ClassId, row.ClassName, row.PeriodCount);
+    public static ClassAcademicPeriodSetupDto ToSetupDto(
+        Guid classId,
+        IEnumerable<ClassAcademicPeriodEntity> periods) =>
+        new()
+        {
+            ClassId = classId,
+            Periods = periods.Select(p => p.ToDto()).ToList(),
+        };
 }
 
 public static class AcademicPeriodValidation

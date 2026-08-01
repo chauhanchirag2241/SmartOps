@@ -19,7 +19,7 @@ public sealed class SubjectsController(
     IAuditLogRepository auditLogRepository) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Policy = MenuPolicies.Subjects.Add)]
+    [Authorize(Policy = MenuPolicies.Classes.Add)]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CreateSubjectResponse>> CreateSubject([FromBody] CreateSubjectDto request, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ public sealed class SubjectsController(
     }
 
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.Subjects.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     [ProducesResponseType(typeof(PagedResult<SubjectListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllSubjects(
         [FromQuery] int pageIndex = 1,
@@ -65,7 +65,7 @@ public sealed class SubjectsController(
     }
 
     [HttpGet("/api/subject/dropdown")]
-    [Authorize(Policy = MenuPolicies.Subjects.ListForTimetableDropdown)]
+    [Authorize(Policy = MenuPolicies.Classes.ListForTimetableDropdown)]
     [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSubjectDropdown(CancellationToken ct)
     {
@@ -74,7 +74,7 @@ public sealed class SubjectsController(
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.Subjects.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     [ProducesResponseType(typeof(SubjectEntity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SubjectEntity>> GetSubjectById(Guid id, CancellationToken ct)
@@ -84,7 +84,7 @@ public sealed class SubjectsController(
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.Subjects.Edit)]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> UpdateSubject(Guid id, [FromBody] CreateSubjectDto request, CancellationToken ct)
     {
@@ -112,7 +112,7 @@ public sealed class SubjectsController(
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.Subjects.Delete)]
+    [Authorize(Policy = MenuPolicies.Classes.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteSubject(Guid id, CancellationToken ct)
     {
@@ -121,7 +121,7 @@ public sealed class SubjectsController(
     }
 
     [HttpGet("{id:guid}/history")]
-    [Authorize(Policy = MenuPolicies.Subjects.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     public async Task<IActionResult> GetHistory(
         [FromRoute] Guid id,
         [FromQuery] int page = 1,

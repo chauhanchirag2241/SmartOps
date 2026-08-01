@@ -15,10 +15,9 @@ public record AttendanceReportStudentDto(
     string AvatarInitials,
     int TotalPresent,
     int TotalAbsent,
-    int TotalLeave,
     int TotalLate,
     decimal AttendancePercentage,
-    IDictionary<int, string> DailyStatus // Key: day of month (1-31), Value: "P", "A", "L", "late", "H", "S"
+    IDictionary<int, string> DailyStatus // Key: day of month (1-31), Value: "P", "A", "late", "H", "S"
 );
 
 public record AttendanceReportResponseDto(

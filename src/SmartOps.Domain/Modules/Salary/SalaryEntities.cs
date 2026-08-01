@@ -9,8 +9,6 @@ public class SalaryStructureVersionEntity : AuditableEntity
     public int VersionNumber { get; set; }
     public SalaryStructureVersionStatus Status { get; set; } = SalaryStructureVersionStatus.Draft;
     public DateOnly? EffectiveDate { get; set; }
-    public DateTime? PublishedOn { get; set; }
-    public DateTime? ActivatedOn { get; set; }
 }
 
 public class SalaryVersionComponentEntity : AuditableEntity
@@ -44,6 +42,7 @@ public class EmployeeSalaryComponentEntity : AuditableEntity
 public class PayrollRunEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
     public int PayYear { get; set; }
     public int PayMonth { get; set; }
     public PayrollRunStatus Status { get; set; } = PayrollRunStatus.Draft;

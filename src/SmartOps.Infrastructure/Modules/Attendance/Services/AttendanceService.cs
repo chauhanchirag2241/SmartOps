@@ -105,7 +105,6 @@ public sealed class AttendanceService : IAttendanceService
         var total = records.Count;
         var present = records.Count(r => r.Status == AttendanceStatus.Present);
         var absent = records.Count(r => r.Status == AttendanceStatus.Absent);
-        var leave = records.Count(r => r.Status == AttendanceStatus.Leave);
         var late = records.Count(r => r.Status == AttendanceStatus.Late);
 
         var percentage = total > 0
@@ -120,7 +119,6 @@ public sealed class AttendanceService : IAttendanceService
             total,
             present,
             absent,
-            leave,
             late,
             percentage);
 
@@ -140,7 +138,6 @@ public sealed class AttendanceService : IAttendanceService
             students.Count,
             students.Count(s => s.Status == AttendanceStatus.Present),
             students.Count(s => s.Status == AttendanceStatus.Absent),
-            students.Count(s => s.Status == AttendanceStatus.Leave),
             students.Count(s => s.Status == AttendanceStatus.Late),
             isSubmitted,
             students);

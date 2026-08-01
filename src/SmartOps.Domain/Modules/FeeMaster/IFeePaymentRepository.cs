@@ -10,6 +10,14 @@ public interface IFeePaymentRepository
     Task<IReadOnlyDictionary<Guid, decimal>> GetPaidByHeadAsync(
         Guid studentId,
         Guid feeMasterId,
+        Guid? academicPeriodId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Period-wise due amounts per fee head for the student's class group.</summary>
+    Task<IReadOnlyList<FeeCollectionPeriodHeadDue>> GetPeriodHeadDuesAsync(
+        Guid feeMasterId,
+        Guid studentId,
+        Guid academicPeriodId,
         CancellationToken cancellationToken = default);
 
     Task<Guid> CreatePaymentAsync(
@@ -19,5 +27,9 @@ public interface IFeePaymentRepository
 
     Task<FeeCollectionDetailModel?> GetStudentCollectionDetailAsync(
         Guid studentId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<FeeCollectionStudentSummaryModel>> GetStudentCollectionSummariesAsync(
+        IReadOnlyList<Guid> studentIds,
         CancellationToken cancellationToken = default);
 }

@@ -102,7 +102,20 @@ public sealed class UsersController(
 
         try
         {
-            await SyncUserRolesAsync(user.Id, request.RoleNames, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<string> rolesToAssign = request.RoleNames;
+            if (rolesToAssign.Count == 0)
+            {
+                string? userTypeName = UserTypeCodes.GetName(user.UserTypeId)
+                    ?? (await userTypeRepository.GetAllActiveAsync(cancellationToken).ConfigureAwait(false))
+                        .FirstOrDefault(t => t.Id == user.UserTypeId)?.Name;
+                string? defaultRole = RoleNames.FromUserType(userTypeName);
+                if (!string.IsNullOrWhiteSpace(defaultRole))
+                {
+                    rolesToAssign = [defaultRole];
+                }
+            }
+
+            await SyncUserRolesAsync(user.Id, rolesToAssign, cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {

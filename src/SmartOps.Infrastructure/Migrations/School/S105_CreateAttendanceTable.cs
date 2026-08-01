@@ -23,7 +23,7 @@ public sealed class S105_CreateAttendanceTable : Migration
                 .WithColumn("studentid").AsGuid().NotNullable()
                 .WithColumn("markedby").AsGuid().NotNullable()
                 .WithColumn("attendancedate").AsDate().NotNullable()
-                .WithColumn("status").AsInt16().NotNullable()
+                .WithColumn("status").AsInt16().NotNullable() // 1=Present, 2=Absent, 3=Late
                 .WithColumn("remarks").AsString(int.MaxValue).Nullable()
                 .WithAuditColumns();
         }

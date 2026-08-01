@@ -26,6 +26,7 @@ using SmartOps.Infrastructure.Persistence;
 
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Infrastructure.Modules.Branch;
+using SmartOps.Infrastructure.MultiTenancy;
 
 
 
@@ -106,122 +107,131 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
 
     public async Task<Guid> CreateSchoolAsync(SchoolEntity school, CancellationToken cancellationToken = default)
-
     {
-
         var utcNow = DateTime.UtcNow;
-
         if (school.Id == Guid.Empty)
-
         {
-
             school.Id = Guid.NewGuid();
-
         }
-
-
 
         EnsureInsertAudit(school, utcNow);
 
+        string? provisionedDatabaseName = null;
+        bool platformRowInserted = false;
 
-
-        await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-
-
-        Guid schoolId = await WithTransactionAsync(connection, async (conn, tx) =>
-
+        try
         {
+            await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-            // Schools registry only on platform. Branches SoT is school man.schoolbranches.
-            await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSchools, school, tx)
-
-                .ConfigureAwait(false);
-
-
-
-            foreach (var branch in school.Branches)
-
+            Guid schoolId = await WithTransactionAsync(connection, async (conn, tx) =>
             {
+                // Schools registry only on platform. Branches SoT is school man.schoolbranches.
+                await InsertAsync(conn, DatabaseConfig.Schema_Global, DatabaseConfig.TableSchools, school, tx)
+                    .ConfigureAwait(false);
 
-                branch.Id = branch.Id == Guid.Empty ? Guid.NewGuid() : branch.Id;
+                foreach (var branch in school.Branches)
+                {
+                    branch.Id = branch.Id == Guid.Empty ? Guid.NewGuid() : branch.Id;
+                    branch.SchoolId = school.Id;
+                    EnsureInsertAudit(branch, utcNow);
+                }
 
-                branch.SchoolId = school.Id;
+                return school.Id;
+            }).ConfigureAwait(false);
 
-                EnsureInsertAudit(branch, utcNow);
+            platformRowInserted = true;
 
+            if (_perSchoolDbOptions.Enabled)
+            {
+                provisionedDatabaseName = SchoolDatabaseConnectionBuilder.BuildDatabaseName(
+                    _perSchoolDbOptions.DatabaseNamePrefix,
+                    school.Subdomain);
+
+                (string databaseName, string connectionString) = await _schoolDatabaseProvisioner
+                    .ProvisionAsync(schoolId, school.Subdomain, cancellationToken)
+                    .ConfigureAwait(false);
+
+                provisionedDatabaseName = databaseName;
+                school.DatabaseName = databaseName;
+                school.ConnectionString = connectionString;
+                await UpdateSchoolConnectionAsync(school, cancellationToken).ConfigureAwait(false);
+            }
+            else if (!string.IsNullOrWhiteSpace(school.SchemaName))
+            {
+                await _tenantProvisioning
+                    .ProvisionSchemaAsync(school.SchemaName, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
+            if (!string.IsNullOrWhiteSpace(school.ConnectionString) && school.Branches.Count > 0)
+            {
+                await InsertBranchesIntoSchoolDatabaseAsync(school.ConnectionString, school.Branches, cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
+            if (!_perSchoolDbOptions.Enabled)
+            {
+                await _schoolSettings.SeedLeaveDefaultsAsync(schoolId, cancellationToken).ConfigureAwait(false);
+            }
 
-            return school.Id;
+            await _defaultAdminProvisioner.ProvisionAsync(school, cancellationToken).ConfigureAwait(false);
+            await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
 
-        }).ConfigureAwait(false);
-
-
-
-        if (_perSchoolDbOptions.Enabled)
-
+            return schoolId;
+        }
+        catch
         {
-
-            (string databaseName, string connectionString) = await _schoolDatabaseProvisioner
-
-                .ProvisionAsync(schoolId, school.Subdomain, cancellationToken)
-
+            await CompensateFailedCreateAsync(
+                    school.Id,
+                    platformRowInserted,
+                    provisionedDatabaseName,
+                    cancellationToken)
                 .ConfigureAwait(false);
-
-
-
-            school.DatabaseName = databaseName;
-
-            school.ConnectionString = connectionString;
-
-            await UpdateSchoolConnectionAsync(school, cancellationToken).ConfigureAwait(false);
-
+            throw;
         }
+    }
 
-        else if (!string.IsNullOrWhiteSpace(school.SchemaName))
-
+    private async Task CompensateFailedCreateAsync(
+        Guid schoolId,
+        bool platformRowInserted,
+        string? databaseName,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(databaseName) && _perSchoolDbOptions.Enabled)
         {
-
-            await _tenantProvisioning
-
-                .ProvisionSchemaAsync(school.SchemaName, cancellationToken)
-
-                .ConfigureAwait(false);
-
+            try
+            {
+                await _schoolDatabaseProvisioner
+                    .DropDatabaseIfExistsAsync(databaseName, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best-effort cleanup; original exception is rethrown by caller.
+            }
         }
 
-
-
-        if (!string.IsNullOrWhiteSpace(school.ConnectionString) && school.Branches.Count > 0)
-
+        if (!platformRowInserted)
         {
-
-            await InsertBranchesIntoSchoolDatabaseAsync(school.ConnectionString, school.Branches, cancellationToken)
-
-                .ConfigureAwait(false);
-
+            return;
         }
 
-
-
-        if (!_perSchoolDbOptions.Enabled)
-
+        try
         {
-
-            await _schoolSettings.SeedLeaveDefaultsAsync(schoolId, cancellationToken).ConfigureAwait(false);
-
+            await using NpgsqlConnection connection = await OpenPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+WHERE id = @Id;
+""",
+                    new { Id = schoolId },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
-
-
-
-        await _defaultAdminProvisioner.ProvisionAsync(school, cancellationToken).ConfigureAwait(false);
-
-        await _branchOperationalSeedService.SeedForSchoolAsync(school, cancellationToken).ConfigureAwait(false);
-
-        return schoolId;
-
+        catch
+        {
+            // Best-effort cleanup; original exception is rethrown by caller.
+        }
     }
 
 

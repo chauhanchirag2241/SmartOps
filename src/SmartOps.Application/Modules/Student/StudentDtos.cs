@@ -52,7 +52,8 @@ public class CreateStudentAcademicDto
 {
     public DateOnly? AdmissionDate { get; set; }
     public Guid AcademicYearId { get; set; }
-    public Guid ClassId { get; set; }
+    public Guid ClassGroupId { get; set; }
+    public Guid? ClassId { get; set; }
     public string? RollNumber { get; set; }
 }
 
@@ -99,6 +100,21 @@ public sealed class PromoteReadinessResponse
     public string? Message { get; set; }
 }
 
+public sealed class UpdateRollNumbersRequest
+{
+    public Guid AcademicYearId { get; set; }
+    public Guid ClassId { get; set; }
+    public List<UpdateRollNumberItemDto> Students { get; set; } = new();
+}
+
+public sealed class UpdateRollNumberItemDto
+{
+    public Guid StudentId { get; set; }
+    public string? RollNumber { get; set; }
+}
+
+public sealed record UpdateRollNumbersResponse(int UpdatedCount, IReadOnlyList<string> Errors);
+
 public static class StudentMappingExtensions
 {
     public static StudentEntity ToEntity(this CreateStudentDto dto)
@@ -129,12 +145,17 @@ public static class StudentMappingExtensions
                 Email = p.Email,
                 Occupation = p.Occupation
             }).ToList(),
-            Academics = dto.Academics.Select(a => new StudentAcademicEntity
+            Academics = dto.Academics.Select(a =>
             {
-                AdmissionDate = a.AdmissionDate,
-                AcademicYearId = a.AcademicYearId,
-                ClassId = a.ClassId,
-                RollNumber = a.RollNumber
+                Guid? classId = a.ClassId is { } id && id != Guid.Empty ? id : null;
+                return new StudentAcademicEntity
+                {
+                    AdmissionDate = a.AdmissionDate,
+                    AcademicYearId = a.AcademicYearId,
+                    ClassGroupId = a.ClassGroupId,
+                    ClassId = classId,
+                    RollNumber = classId.HasValue ? a.RollNumber : null
+                };
             }).ToList(),
             PreviousSchools = dto.PreviousSchools.Select(ps => new StudentPreviousSchoolEntity
             {

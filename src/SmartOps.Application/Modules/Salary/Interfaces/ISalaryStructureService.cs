@@ -14,6 +14,11 @@ public interface ISalaryStructureService
         CreateSalaryStructureVersionRequestDto request,
         CancellationToken ct = default);
 
+    Task<Result<SalaryStructureVersionListItemDto>> UpdateVersionBasicAsync(
+        Guid versionId,
+        UpdateSalaryStructureVersionBasicRequestDto request,
+        CancellationToken ct = default);
+
     Task<Result<SalaryStructureVersionListItemDto>> PublishVersionAsync(Guid versionId, CancellationToken ct = default);
 
     Task<Result<SalaryStructureVersionListItemDto>> ActivateVersionAsync(Guid versionId, CancellationToken ct = default);

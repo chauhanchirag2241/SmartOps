@@ -38,16 +38,7 @@ public interface IClassSubjectTeacherMappingRepository
 
     Task<int> UpdateAsync(ClassSubjectTeacherMappingEntity entity, CancellationToken cancellationToken = default);
 
-    Task<bool> SetClassTeacherFlagAsync(
-        Guid mappingId,
-        Guid classId,
-        Guid academicYearId,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default);
-
     Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default);
-
-    Task ClearClassTeacherFlagAsync(Guid classId, Guid academicYearId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Guid>> GetClassIdsForTeacherUserAsync(
         Guid userId,

@@ -870,6 +870,35 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         return schedule.Id;
     }
 
+    public async Task CreateSchedulesAsync(IList<ExamScheduleEntity> schedules, CancellationToken ct = default)
+    {
+        if (schedules.Count == 0)
+        {
+            return;
+        }
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        DateTime utcNow = DateTime.UtcNow;
+        Guid actorId = ResolveInsertActor();
+
+        foreach (ExamScheduleEntity schedule in schedules)
+        {
+            schedule.Id = schedule.Id == Guid.Empty ? Guid.NewGuid() : schedule.Id;
+            EnsureInsertAudit(schedule, utcNow, actorId);
+        }
+
+        string sql = $"""
+            INSERT INTO {Schema}.{DatabaseConfig.TableExamSchedules}
+                (id, examid, classid, subjectid, examdate, starttime, endtime, roomno, invigilatorid,
+                 isactive, versionno, createdby, createdon, updatedby, updatedon)
+            VALUES
+                (@Id, @ExamId, @ClassId, @SubjectId, @ExamDate, @StartTime, @EndTime, @RoomNo, @InvigilatorId,
+                 @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(sql, schedules, cancellationToken: ct)).ConfigureAwait(false);
+    }
+
     public async Task UpdateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);

@@ -5,6 +5,7 @@ namespace SmartOps.Domain.Modules.Student;
 public class StudentListModel
 {
     public Guid Id { get; set; }
+    public Guid? ClassGroupId { get; set; }
     public Guid? ClassId { get; set; }
     public string Name { get; set; } = null!;
     public string Email { get; set; } = null!;

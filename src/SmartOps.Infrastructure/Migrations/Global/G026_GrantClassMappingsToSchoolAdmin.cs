@@ -5,10 +5,10 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>
-/// Ensures CLASS_MAPPINGS is granted to platform Admin (idempotent with G014).
+/// Ensures TEACHERS is granted to platform Admin (idempotent with G014).
 /// </summary>
 [Tags("Global")]
-[Migration(26, "Global — grant class mapping menu to admin")]
+[Migration(26, "Global — grant Teachers menu to admin")]
 public sealed class G026_GrantClassMappingsToSchoolAdmin : Migration
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
@@ -24,7 +24,7 @@ INSERT INTO {g}.{DatabaseConfig.TableRoleMenuPermissions}
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {g}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {g}.{DatabaseConfig.TableMenus} m
-WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code = '{MenuCodes.ClassMappings}'
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.SmartOpsAdmin}')) AND m.code = '{MenuCodes.Teachers}'
   AND NOT EXISTS (
     SELECT 1 FROM {g}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id
@@ -38,8 +38,8 @@ WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code = '{Menu
 
         Execute.Sql($"""
 DELETE FROM {g}.{DatabaseConfig.TableRoleMenuPermissions}
-WHERE roleid IN (SELECT id FROM {g}.{DatabaseConfig.TableRoles} WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}')))
-  AND menuid IN (SELECT id FROM {g}.{DatabaseConfig.TableMenus} WHERE code = '{MenuCodes.ClassMappings}');
+WHERE roleid IN (SELECT id FROM {g}.{DatabaseConfig.TableRoles} WHERE lower(trim(name)) = lower(trim('{RoleNames.SmartOpsAdmin}')))
+  AND menuid IN (SELECT id FROM {g}.{DatabaseConfig.TableMenus} WHERE code = '{MenuCodes.Teachers}');
 """);
     }
 }

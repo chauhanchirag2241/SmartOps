@@ -76,6 +76,61 @@ public sealed class SchoolDatabaseProvisioner : ISchoolDatabaseProvisioner
         return (databaseName, schoolConnectionString);
     }
 
+    public async Task DropDatabaseIfExistsAsync(
+        string databaseName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(databaseName))
+        {
+            return;
+        }
+
+        // Reject identifiers that are not our generated school DB names.
+        if (!databaseName.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+        {
+            throw new InvalidOperationException($"Refusing to drop unexpected database name '{databaseName}'.");
+        }
+
+        string platformConnectionString = await _connectionFactory
+            .GetPlatformConnectionStringAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        string adminConnectionString = SchoolDatabaseConnectionBuilder.BuildAdminConnectionString(
+            platformConnectionString);
+
+        await using NpgsqlConnection admin = new(adminConnectionString);
+        await admin.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        bool exists = await admin.ExecuteScalarAsync<bool>(
+            new CommandDefinition(
+                "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = @Name);",
+                new { Name = databaseName },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (!exists)
+        {
+            return;
+        }
+
+        await admin.ExecuteAsync(
+            new CommandDefinition(
+                """
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = @Name
+  AND pid <> pg_backend_pid();
+""",
+                new { Name = databaseName },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        await admin.ExecuteAsync(
+            new CommandDefinition(
+                $"""DROP DATABASE IF EXISTS "{databaseName}";""",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        _logger.LogWarning("Dropped school database {DatabaseName} after failed provision.", databaseName);
+    }
+
     private async Task CreateDatabaseIfNotExistsAsync(
         string platformConnectionString,
         string databaseName,

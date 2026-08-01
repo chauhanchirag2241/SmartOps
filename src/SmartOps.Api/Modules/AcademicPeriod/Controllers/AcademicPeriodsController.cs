@@ -17,18 +17,8 @@ public sealed class AcademicPeriodsController(
     IClassRepository classRepository,
     IAuditLogRepository auditLogRepository) : ControllerBase
 {
-    [HttpGet("classes")]
-    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
-    public async Task<ActionResult<IReadOnlyList<AcademicPeriodClassSummaryDto>>> GetClasses(
-        CancellationToken cancellationToken)
-    {
-        IReadOnlyList<AcademicPeriodClassSummary> rows =
-            await periodRepository.GetClassesAsync(cancellationToken).ConfigureAwait(false);
-        return Ok(rows.Select(x => x.ToDto()).ToList());
-    }
-
     [HttpGet("classes/{classId:guid}")]
-    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     public async Task<ActionResult<ClassAcademicPeriodSetupDto>> GetByClass(
         Guid classId,
         CancellationToken cancellationToken)
@@ -43,13 +33,11 @@ public sealed class AcademicPeriodsController(
         IReadOnlyList<ClassAcademicPeriodEntity> periods =
             await periodRepository.GetByClassAsync(classId, cancellationToken).ConfigureAwait(false);
 
-        return Ok(new ClassAcademicPeriodSetupDto(
-            classId,
-            periods.Select(x => x.ToDto()).ToList()));
+        return Ok(AcademicPeriodMapping.ToSetupDto(classId, periods));
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     public async Task<ActionResult<ClassAcademicPeriodDto>> GetById(
         Guid id,
         CancellationToken cancellationToken)
@@ -65,7 +53,7 @@ public sealed class AcademicPeriodsController(
     }
 
     [HttpGet("{id:guid}/history")]
-    [Authorize(Policy = MenuPolicies.AcademicPeriods.View)]
+    [Authorize(Policy = MenuPolicies.Classes.View)]
     public async Task<IActionResult> GetHistory(
         [FromRoute] Guid id,
         [FromQuery] int page = 1,
@@ -82,7 +70,7 @@ public sealed class AcademicPeriodsController(
     }
 
     [HttpPut("classes/{classId:guid}")]
-    [Authorize(Policy = MenuPolicies.AcademicPeriods.Edit)]
+    [Authorize(Policy = MenuPolicies.Classes.Edit)]
     public async Task<ActionResult<ClassAcademicPeriodSetupDto>> Save(
         Guid classId,
         [FromBody] SaveClassAcademicPeriodsRequest request,
@@ -103,6 +91,7 @@ public sealed class AcademicPeriodsController(
         List<ClassAcademicPeriodEntity> entities = request.Periods
             .Select(p => new ClassAcademicPeriodEntity
             {
+                Id = p.Id.GetValueOrDefault(),
                 ClassGroupId = classId,
                 PeriodIndex = p.PeriodIndex,
                 Name = p.Name.Trim(),
@@ -116,8 +105,6 @@ public sealed class AcademicPeriodsController(
         IReadOnlyList<ClassAcademicPeriodEntity> saved =
             await periodRepository.GetByClassAsync(classId, cancellationToken)
                 .ConfigureAwait(false);
-        return Ok(new ClassAcademicPeriodSetupDto(
-            classId,
-            saved.Select(x => x.ToDto()).ToList()));
+        return Ok(AcademicPeriodMapping.ToSetupDto(classId, saved));
     }
 }

@@ -18,7 +18,19 @@ public sealed class UserRepository : BaseRepository, IUserRepository
     {
     }
 
-    public async Task<ApplicationUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    public Task<ApplicationUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
+        GetByEmailCoreAsync(email, transaction: null, cancellationToken);
+
+    public Task<ApplicationUser?> GetByEmailAsync(
+        string email,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        GetByEmailCoreAsync(email, transaction, cancellationToken);
+
+    private async Task<ApplicationUser?> GetByEmailCoreAsync(
+        string email,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         string sql = $"""
 SELECT
@@ -45,8 +57,12 @@ WHERE lower(trim(email)) = lower(trim(@Email)) AND isactive = true
 LIMIT 1
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        CommandDefinition command = new(sql, new { Email = email.Trim() }, cancellationToken: cancellationToken);
+        IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
+        CommandDefinition command = new(
+            sql,
+            new { Email = email.Trim() },
+            transaction: transaction,
+            cancellationToken: cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 
@@ -82,7 +98,19 @@ LIMIT 1
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 
-    public async Task<ApplicationUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
+    public Task<ApplicationUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) =>
+        GetByUsernameCoreAsync(username, transaction: null, cancellationToken);
+
+    public Task<ApplicationUser?> GetByUsernameAsync(
+        string username,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        GetByUsernameCoreAsync(username, transaction, cancellationToken);
+
+    private async Task<ApplicationUser?> GetByUsernameCoreAsync(
+        string username,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         string sql = $"""
 SELECT
@@ -109,8 +137,12 @@ WHERE lower(trim(username)) = lower(trim(@Username)) AND isactive = true
 LIMIT 1
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        CommandDefinition command = new(sql, new { Username = username.Trim() }, cancellationToken: cancellationToken);
+        IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
+        CommandDefinition command = new(
+            sql,
+            new { Username = username.Trim() },
+            transaction: transaction,
+            cancellationToken: cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<ApplicationUser>(command).ConfigureAwait(false);
     }
 
@@ -203,7 +235,19 @@ LIMIT 1
         return digits;
     }
 
-    public async Task CreateAsync(ApplicationUser user, CancellationToken cancellationToken = default)
+    public Task CreateAsync(ApplicationUser user, CancellationToken cancellationToken = default) =>
+        CreateCoreAsync(user, transaction: null, cancellationToken);
+
+    public Task CreateAsync(
+        ApplicationUser user,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        CreateCoreAsync(user, transaction, cancellationToken);
+
+    private async Task CreateCoreAsync(
+        ApplicationUser user,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         if (user.Id == Guid.Empty)
         {
@@ -258,8 +302,8 @@ VALUES
 )
 """;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        CommandDefinition command = new(sql, user, cancellationToken: cancellationToken);
+        IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
+        CommandDefinition command = new(sql, user, transaction: transaction, cancellationToken: cancellationToken);
         await connection.ExecuteAsync(command).ConfigureAwait(false);
     }
 
@@ -421,12 +465,26 @@ LIMIT 1
         return row is null ? null : (row.RoleId, row.RoleName);
     }
 
-    public async Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default)
+    public Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default) =>
+        AddUserToRoleCoreAsync(userId, roleName, transaction: null, cancellationToken);
+
+    public Task AddUserToRoleAsync(
+        Guid userId,
+        string roleName,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        AddUserToRoleCoreAsync(userId, roleName, transaction, cancellationToken);
+
+    private async Task AddUserToRoleCoreAsync(
+        Guid userId,
+        string roleName,
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
     {
         Guid actor = ResolveUpdateActor(userId);
         DateTime utcNow = DateTime.UtcNow;
 
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
 
         string roleSql = $"""
 SELECT id
@@ -436,7 +494,11 @@ LIMIT 1
 """;
 
         Guid? roleId = await connection.QuerySingleOrDefaultAsync<Guid?>(
-            new CommandDefinition(roleSql, new { RoleName = roleName }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(
+                roleSql,
+                new { RoleName = roleName },
+                transaction: transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         if (roleId is null || roleId.Value == Guid.Empty)
         {
@@ -454,6 +516,7 @@ LIMIT 1
             new CommandDefinition(
                 mappingSql,
                 new { UserId = userId, RoleId = roleId },
+                transaction: transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         if (mappingRow is not null)
@@ -483,6 +546,7 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = false AND versionno =
                         Now = utcNow,
                         VersionNo = mappingRow.VersionNo
                     },
+                    transaction: transaction,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             if (revived == 0)
@@ -528,6 +592,7 @@ VALUES
                     Actor = actor,
                     Now = utcNow
                 },
+                transaction: transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
@@ -652,6 +717,18 @@ ORDER BY u.username
         IEnumerable<ApplicationUser> rows = await connection.QueryAsync<ApplicationUser>(
             new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
+    }
+
+    private async Task<IDbConnection> ResolveConnectionAsync(
+        IDbTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        if (transaction?.Connection is not null)
+        {
+            return transaction.Connection;
+        }
+
+        return await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class UserRoleMappingRow

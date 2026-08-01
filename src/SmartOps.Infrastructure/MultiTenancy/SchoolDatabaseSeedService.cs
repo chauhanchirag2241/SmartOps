@@ -7,13 +7,12 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 /// <summary>
-/// Seeds school-local identity defaults (Admin role, leave settings, Admin menu/widget permissions).
+/// Seeds school-local identity defaults (default roles, leave settings, full-access menu/widget permissions).
 /// Catalog tables (menus, widgets, usertypes) stay on the platform global database.
 /// </summary>
 public sealed class SchoolDatabaseSeedService
 {
     private static readonly Guid SeedActor = Guid.Parse(DatabaseConfig.SystemUserId);
-    private static readonly Guid AdminRoleId = Guid.Parse("20000000-0000-0000-0000-000000000001");
 
     private readonly ILogger<SchoolDatabaseSeedService> _logger;
 
@@ -28,45 +27,17 @@ public sealed class SchoolDatabaseSeedService
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        await EnsureAdminRoleAsync(schoolDb, cancellationToken).ConfigureAwait(false);
+        await SchoolDefaultRoleSeeder.EnsureDefaultRolesAsync(schoolDb, cancellationToken).ConfigureAwait(false);
         await SeedLeaveSettingsAsync(schoolDb, schoolId, cancellationToken).ConfigureAwait(false);
-        await GrantAdminSchoolMenuPermissionsAsync(platform, schoolDb, cancellationToken).ConfigureAwait(false);
-        await GrantAdminWidgetPermissionsAsync(platform, schoolDb, cancellationToken).ConfigureAwait(false);
+        await GrantFullAccessSchoolMenuPermissionsAsync(platform, schoolDb, cancellationToken).ConfigureAwait(false);
+        await SchoolDefaultRoleSeeder.GrantDefaultRoleMenuPermissionsAsync(schoolDb, cancellationToken)
+            .ConfigureAwait(false);
+        await GrantFullAccessWidgetPermissionsAsync(platform, schoolDb, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Seeded school-local identity defaults for school {SchoolId}.", schoolId);
     }
 
-    private static async Task EnsureAdminRoleAsync(
-        NpgsqlConnection schoolDb,
-        CancellationToken cancellationToken)
-    {
-        string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
-
-        string sql = $"""
-INSERT INTO {man}.{DatabaseConfig.TableRoles}
-    (id, name, description, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT @Id, @Name, @Description, true, 1, @Actor, @Now, @Actor, @Now
-WHERE NOT EXISTS (
-    SELECT 1 FROM {man}.{DatabaseConfig.TableRoles}
-    WHERE lower(trim(name)) = lower(trim(@Name))
-);
-""";
-        await schoolDb.ExecuteAsync(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    Id = AdminRoleId,
-                    Name = RoleNames.Admin,
-                    Description = "Default administrator role",
-                    Actor = SeedActor,
-                    Now = utcNow,
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    private static async Task GrantAdminSchoolMenuPermissionsAsync(
+    private static async Task GrantFullAccessSchoolMenuPermissionsAsync(
         NpgsqlConnection platform,
         NpgsqlConnection schoolDb,
         CancellationToken cancellationToken)
@@ -75,15 +46,14 @@ WHERE NOT EXISTS (
         string man = DatabaseConfig.Schema_Man;
         DateTime utcNow = DateTime.UtcNow;
 
-        string menusSql = $"""
+        List<Guid> menuIds = (await platform.QueryAsync<Guid>(
+            new CommandDefinition(
+                $"""
 SELECT id
 FROM {g}.{DatabaseConfig.TableMenus}
 WHERE isactive = true
   AND application IN (@SchoolApp, @CommonApp)
-""";
-        List<Guid> menuIds = (await platform.QueryAsync<Guid>(
-            new CommandDefinition(
-                menusSql,
+""",
                 new { SchoolApp = MenuApplications.School, CommonApp = MenuApplications.Common },
                 cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
 
@@ -92,17 +62,8 @@ WHERE isactive = true
             return;
         }
 
-        Guid? adminRoleId = await schoolDb.ExecuteScalarAsync<Guid?>(
-            new CommandDefinition(
-                $"""
-SELECT id FROM {man}.{DatabaseConfig.TableRoles}
-WHERE lower(trim(name)) = lower(trim(@Name)) AND isactive = true
-LIMIT 1
-""",
-                new { Name = RoleNames.Admin },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        if (adminRoleId is null || adminRoleId == Guid.Empty)
+        List<Guid> roleIds = await ResolveFullAccessRoleIdsAsync(schoolDb, man, cancellationToken).ConfigureAwait(false);
+        if (roleIds.Count == 0)
         {
             return;
         }
@@ -117,17 +78,20 @@ WHERE NOT EXISTS (
 );
 """;
 
-        foreach (Guid menuId in menuIds)
+        foreach (Guid roleId in roleIds)
         {
-            await schoolDb.ExecuteAsync(
-                new CommandDefinition(
-                    insertSql,
-                    new { RoleId = adminRoleId, MenuId = menuId, Actor = SeedActor, Now = utcNow },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            foreach (Guid menuId in menuIds)
+            {
+                await schoolDb.ExecuteAsync(
+                    new CommandDefinition(
+                        insertSql,
+                        new { RoleId = roleId, MenuId = menuId, Actor = SeedActor, Now = utcNow },
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
+            }
         }
     }
 
-    private static async Task GrantAdminWidgetPermissionsAsync(
+    private static async Task GrantFullAccessWidgetPermissionsAsync(
         NpgsqlConnection platform,
         NpgsqlConnection schoolDb,
         CancellationToken cancellationToken)
@@ -149,17 +113,8 @@ WHERE isactive = true
             return;
         }
 
-        Guid? adminRoleId = await schoolDb.ExecuteScalarAsync<Guid?>(
-            new CommandDefinition(
-                $"""
-SELECT id FROM {man}.{DatabaseConfig.TableRoles}
-WHERE lower(trim(name)) = lower(trim(@Name)) AND isactive = true
-LIMIT 1
-""",
-                new { Name = RoleNames.Admin },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        if (adminRoleId is null || adminRoleId == Guid.Empty)
+        List<Guid> roleIds = await ResolveFullAccessRoleIdsAsync(schoolDb, man, cancellationToken).ConfigureAwait(false);
+        if (roleIds.Count == 0)
         {
             return;
         }
@@ -174,14 +129,43 @@ WHERE NOT EXISTS (
 );
 """;
 
-        foreach (Guid widgetId in widgetIds)
+        foreach (Guid roleId in roleIds)
         {
-            await schoolDb.ExecuteAsync(
-                new CommandDefinition(
-                    insertSql,
-                    new { RoleId = adminRoleId, WidgetId = widgetId, Actor = SeedActor, Now = utcNow },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            foreach (Guid widgetId in widgetIds)
+            {
+                await schoolDb.ExecuteAsync(
+                    new CommandDefinition(
+                        insertSql,
+                        new { RoleId = roleId, WidgetId = widgetId, Actor = SeedActor, Now = utcNow },
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
+            }
         }
+    }
+
+    private static async Task<List<Guid>> ResolveFullAccessRoleIdsAsync(
+        NpgsqlConnection schoolDb,
+        string man,
+        CancellationToken cancellationToken)
+    {
+        var ids = new List<Guid>();
+        foreach (string roleName in RoleNames.FullAccessSchoolRoles)
+        {
+            Guid? roleId = await schoolDb.ExecuteScalarAsync<Guid?>(
+                new CommandDefinition(
+                    $"""
+SELECT id FROM {man}.{DatabaseConfig.TableRoles}
+WHERE lower(trim(name)) = lower(trim(@Name)) AND isactive = true
+LIMIT 1
+""",
+                    new { Name = roleName },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            if (roleId is not null && roleId != Guid.Empty)
+            {
+                ids.Add(roleId.Value);
+            }
+        }
+
+        return ids;
     }
 
     private static async Task SeedLeaveSettingsAsync(

@@ -2,9 +2,6 @@ namespace SmartOps.Domain.Modules.AcademicPeriod;
 
 public interface IAcademicPeriodRepository
 {
-    Task<IReadOnlyList<AcademicPeriodClassSummary>> GetClassesAsync(
-        CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<ClassAcademicPeriodEntity>> GetByClassAsync(
         Guid classId,
         CancellationToken cancellationToken = default);

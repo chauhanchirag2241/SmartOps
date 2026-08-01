@@ -8,13 +8,22 @@ public interface IClassSubjectTeacherMappingService
         Guid? academicYearId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassIdAsync(
+    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeAsync(
+        Guid employeeId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassAsync(
         Guid classId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default);
 
     Task<ClassSubjectTeacherMappingDto> AddMappingAsync(
         CreateClassSubjectTeacherMappingDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<BulkCreateClassSubjectTeacherMappingsResultDto> BulkAddMappingsAsync(
+        BulkCreateClassSubjectTeacherMappingsRequestDto request,
         CancellationToken cancellationToken = default);
 
     Task<ClassSubjectTeacherMappingDto> UpdateMappingAsync(
@@ -32,5 +41,5 @@ public interface IClassSubjectTeacherMappingService
         AssignTeacherLaterRequestDto request,
         CancellationToken cancellationToken = default);
 
-    Task RemoveMappingAsync(Guid id, CancellationToken cancellationToken = default);
+    Task DeleteMappingAsync(Guid id, CancellationToken cancellationToken = default);
 }

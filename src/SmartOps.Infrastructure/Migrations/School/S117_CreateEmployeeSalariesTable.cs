@@ -22,8 +22,8 @@ public sealed class S117_CreateEmployeeSalariesTable : Migration
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
             .WithColumn("employeeid").AsGuid().NotNullable()
                 .ForeignKey("fk_employeesalaries_employeeid", S, DatabaseConfig.TableEmployees, "id")
-            .WithColumn("salarystructureversionid").AsGuid().NotNullable()
-                .ForeignKey("fk_employeesalaries_salarystructureversionid", S, DatabaseConfig.TableSalaryStructureVersions, "id")
+            .WithColumn("salarystructureid").AsGuid().NotNullable()
+                .ForeignKey("fk_employeesalaries_salarystructureid", S, DatabaseConfig.TableSalaryStructure, "id")
             .WithColumn("effectivedate").AsDate().NotNullable()
             .WithAuditColumns();
 

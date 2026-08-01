@@ -1,3 +1,4 @@
+using System.Data;
 using SmartOps.Domain.Modules.Identity.Entities;
 
 namespace SmartOps.Application.Modules.Identity.Interfaces;
@@ -6,14 +7,29 @@ public interface IUserRepository
 {
     Task<ApplicationUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
 
+    Task<ApplicationUser?> GetByEmailAsync(
+        string email,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
     Task<ApplicationUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<ApplicationUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+    Task<ApplicationUser?> GetByUsernameAsync(
+        string username,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Resolves user by email, username, or school mobile (when tenant is set).</summary>
     Task<ApplicationUser?> GetByLoginIdentifierAsync(string login, CancellationToken cancellationToken = default);
 
     Task CreateAsync(ApplicationUser user, CancellationToken cancellationToken = default);
+
+    Task CreateAsync(
+        ApplicationUser user,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
 
     Task UpdateAsync(ApplicationUser user, CancellationToken cancellationToken = default);
 
@@ -26,6 +42,12 @@ public interface IUserRepository
     Task<(Guid RoleId, string RoleName)?> GetPrimaryRoleAsync(Guid userId, CancellationToken cancellationToken = default);
 
     Task AddUserToRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
+
+    Task AddUserToRoleAsync(
+        Guid userId,
+        string roleName,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
 
     Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default);
 

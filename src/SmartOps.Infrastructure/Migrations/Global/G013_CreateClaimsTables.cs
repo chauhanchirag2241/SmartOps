@@ -10,7 +10,7 @@ public sealed class G013_CreateClaimsTables : Migration
 {
     public override void Up()
     {
-        // Intentionally empty. Legacy claim schema removed in favor of ClassSubjectTeacherMappings.
+        // Intentionally empty. Legacy claim schema removed; access uses menu RBAC.
     }
 
     public override void Down()

@@ -105,11 +105,6 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
             return Result<EmployeeSalaryDetailDto>.Failure("Salary structure version not found.");
         }
 
-        if (version.Status is not (SalaryStructureVersionStatus.Published or SalaryStructureVersionStatus.Active))
-        {
-            return Result<EmployeeSalaryDetailDto>.Failure("Assign salary only from a published or active structure version.");
-        }
-
         EmployeeSalaryContextRow? employee = await _employeeRepo.GetEmployeeSalaryContextAsync(employeeId, ct).ConfigureAwait(false);
         if (employee is null)
         {

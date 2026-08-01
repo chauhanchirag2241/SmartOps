@@ -50,8 +50,6 @@ public sealed class SalaryStructureVersionListRow
     public int VersionNumber { get; init; }
     public SalaryStructureVersionStatus Status { get; init; }
     public DateOnly? EffectiveDate { get; init; }
-    public DateTime? PublishedOn { get; init; }
-    public DateTime? ActivatedOn { get; init; }
     public int ComponentCount { get; init; }
     public bool HasAssignedEmployees { get; init; }
 }

@@ -78,6 +78,30 @@ public static class MenuPolicies
 
         /// <summary>STUDENTS.View or ATTENDANCE.View — list/roster for attendance module.</summary>
         public const string ListForAttendanceOrModule = "Menu:STUDENTS:ViewOrAttendanceView";
+
+        /// <summary>STUDENTS.Edit or PROMOTE_STUDENTS.Edit — promote students to next year.</summary>
+        public const string Promote = "Menu:STUDENTS:EditOrPromoteStudentsEdit";
+
+        /// <summary>STUDENTS.Edit or ROLL_NUMBERS.Edit — bulk update class roll numbers.</summary>
+        public const string UpdateRollNumbers = "Menu:STUDENTS:EditOrRollNumbersEdit";
+    }
+
+    public static class PromoteStudents
+    {
+        public const string View = "Menu:PROMOTE_STUDENTS:View";
+        public const string Add = "Menu:PROMOTE_STUDENTS:Add";
+        public const string Edit = "Menu:PROMOTE_STUDENTS:Edit";
+        public const string Delete = "Menu:PROMOTE_STUDENTS:Delete";
+        public const string Export = "Menu:PROMOTE_STUDENTS:Export";
+    }
+
+    public static class RollNumbers
+    {
+        public const string View = "Menu:ROLL_NUMBERS:View";
+        public const string Add = "Menu:ROLL_NUMBERS:Add";
+        public const string Edit = "Menu:ROLL_NUMBERS:Edit";
+        public const string Delete = "Menu:ROLL_NUMBERS:Delete";
+        public const string Export = "Menu:ROLL_NUMBERS:Export";
     }
 
     public static class Employees
@@ -90,16 +114,18 @@ public static class MenuPolicies
 
         /// <summary>EMPLOYEES.View or CLASS_TIMETABLE.View — teacher dropdown on timetable assign.</summary>
         public const string ListForTimetableDropdown = "Menu:EMPLOYEES:ViewOrClassTimetableView";
+
+        /// <summary>EMPLOYEES.View or TEACHERS.View — staff list used by Teachers screen.</summary>
+        public const string ListOrTeachersView = "Menu:EMPLOYEES:ViewOrTeachersView";
     }
 
-    [Obsolete("Use Employees instead.")]
     public static class Teachers
     {
-        public const string View = Employees.View;
-        public const string Add = Employees.Add;
-        public const string Edit = Employees.Edit;
-        public const string Delete = Employees.Delete;
-        public const string Export = Employees.Export;
+        public const string View = "Menu:TEACHERS:View";
+        public const string Add = "Menu:TEACHERS:Add";
+        public const string Edit = "Menu:TEACHERS:Edit";
+        public const string Delete = "Menu:TEACHERS:Delete";
+        public const string Export = "Menu:TEACHERS:Export";
     }
 
     public static class Classes
@@ -115,27 +141,9 @@ public static class MenuPolicies
         /// (attendance, homework, timetable, fees, exams).
         /// </summary>
         public const string ListForAttendanceDropdown = "Menu:CLASSES:ViewOrAttendanceView";
-    }
 
-    public static class ClassMappings
-    {
-        public const string View = "Menu:CLASS_MAPPINGS:View";
-        public const string Add = "Menu:CLASS_MAPPINGS:Add";
-        public const string Edit = "Menu:CLASS_MAPPINGS:Edit";
-        public const string Delete = "Menu:CLASS_MAPPINGS:Delete";
-        public const string Export = "Menu:CLASS_MAPPINGS:Export";
-    }
-
-    public static class Subjects
-    {
-        public const string View = "Menu:SUBJECTS:View";
-        public const string Add = "Menu:SUBJECTS:Add";
-        public const string Edit = "Menu:SUBJECTS:Edit";
-        public const string Delete = "Menu:SUBJECTS:Delete";
-        public const string Export = "Menu:SUBJECTS:Export";
-
-        /// <summary>SUBJECTS.View or CLASS_TIMETABLE.View — subject dropdown on timetable assign.</summary>
-        public const string ListForTimetableDropdown = "Menu:SUBJECTS:ViewOrClassTimetableView";
+        /// <summary>CLASSES.View or CLASS_TIMETABLE.View — subject dropdown on timetable assign.</summary>
+        public const string ListForTimetableDropdown = "Menu:CLASSES:ViewOrClassTimetableView";
     }
 
     public static class Shifts
@@ -172,15 +180,6 @@ public static class MenuPolicies
         public const string Edit = "Menu:ACADEMIC_YEARS:Edit";
         public const string Delete = "Menu:ACADEMIC_YEARS:Delete";
         public const string Export = "Menu:ACADEMIC_YEARS:Export";
-    }
-
-    public static class AcademicPeriods
-    {
-        public const string View = "Menu:ACADEMIC_PERIODS:View";
-        public const string Add = "Menu:ACADEMIC_PERIODS:Add";
-        public const string Edit = "Menu:ACADEMIC_PERIODS:Edit";
-        public const string Delete = "Menu:ACADEMIC_PERIODS:Delete";
-        public const string Export = "Menu:ACADEMIC_PERIODS:Export";
     }
 
     public static class Attendance

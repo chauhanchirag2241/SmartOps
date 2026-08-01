@@ -33,7 +33,6 @@ public record ClassAttendanceResponseDto(
     int Total,
     int Present,
     int Absent,
-    int Leave,
     int Late,
     bool IsSubmitted,
     IList<AttendanceResponseDto> Students
@@ -52,7 +51,6 @@ public record StudentAttendanceSummaryDto(
     int TotalDays,
     int PresentDays,
     int AbsentDays,
-    int LeaveDays,
     int LateDays,
     decimal Percentage
 );

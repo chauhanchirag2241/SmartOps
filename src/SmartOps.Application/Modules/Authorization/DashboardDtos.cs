@@ -59,8 +59,6 @@ public sealed class AttendanceTodayDto
 
     public int Absent { get; init; }
 
-    public int Leave { get; init; }
-
     public int Late { get; init; }
 
     public double PresentPercent { get; init; }
@@ -146,8 +144,6 @@ public sealed class ClassOverviewDto
     public int Late { get; init; }
 
     public int Absent { get; init; }
-
-    public int OnLeave { get; init; }
 
     public decimal FeeCollectedToday { get; init; }
 }

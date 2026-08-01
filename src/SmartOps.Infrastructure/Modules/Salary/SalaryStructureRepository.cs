@@ -48,15 +48,13 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                    v.versionnumber AS VersionNumber,
                    v.status AS Status,
                    v.effectivedate AS EffectiveDate,
-                   v.publishedon AS PublishedOn,
-                   v.activatedon AS ActivatedOn,
                    (SELECT COUNT(*)::int FROM {Schema}.{DatabaseConfig.TableSalaryVersionComponents} sc
-                    WHERE sc.salarystructureversionid = v.id AND sc.isactive = true) AS ComponentCount,
+                    WHERE sc.salarystructureid = v.id AND sc.isactive = true) AS ComponentCount,
                    EXISTS (
                        SELECT 1 FROM {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
-                       WHERE es.salarystructureversionid = v.id AND es.isactive = true
+                       WHERE es.salarystructureid = v.id AND es.isactive = true
                    ) AS HasAssignedEmployees
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructure} v
             WHERE v.isactive = true{branchFilter}
             {(status.HasValue ? "AND v.status = @Status" : string.Empty)}
             ORDER BY v.versionnumber DESC;
@@ -80,10 +78,9 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT id AS Id, branchid AS BranchId, versionnumber AS VersionNumber,
-                   status AS Status, effectivedate AS EffectiveDate, publishedon AS PublishedOn,
-                   activatedon AS ActivatedOn, isactive AS IsActive, versionno AS VersionNo,
+                   status AS Status, effectivedate AS EffectiveDate, isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructure}
             WHERE id = @Id AND isactive = true;
             """;
         return await connection
@@ -100,10 +97,9 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
         string sql = $"""
             SELECT v.id AS Id, v.branchid AS BranchId, v.versionnumber AS VersionNumber,
-                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
-                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.isactive AS IsActive, v.versionno AS VersionNo,
                    v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructure} v
             WHERE v.status = @ActiveStatus AND v.isactive = true{branchFilter}
             ORDER BY v.versionnumber DESC
             LIMIT 1;
@@ -130,10 +126,9 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
         string sql = $"""
             SELECT v.id AS Id, v.branchid AS BranchId, v.versionnumber AS VersionNumber,
-                   v.status AS Status, v.effectivedate AS EffectiveDate, v.publishedon AS PublishedOn,
-                   v.activatedon AS ActivatedOn, v.isactive AS IsActive, v.versionno AS VersionNo,
+                   v.status AS Status, v.effectivedate AS EffectiveDate, v.isactive AS IsActive, v.versionno AS VersionNo,
                    v.createdby AS CreatedBy, v.createdon AS CreatedOn, v.updatedby AS UpdatedBy, v.updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructure} v
             WHERE v.status = @PublishedStatus
               AND v.isactive = true{branchFilter}
             ORDER BY v.versionnumber DESC
@@ -155,7 +150,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
             .ConfigureAwait(false);
         string sql = $"""
             SELECT COALESCE(MAX(v.versionnumber), 0) + 1
-            FROM {Schema}.{DatabaseConfig.TableSalaryStructureVersions} v
+            FROM {Schema}.{DatabaseConfig.TableSalaryStructure} v
             WHERE v.isactive = true{branchFilter};
             """;
         return await connection.ExecuteScalarAsync<int>(
@@ -173,11 +168,11 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
-            INSERT INTO {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
-                (id, branchid, versionnumber, status, effectivedate, publishedon, activatedon,
+            INSERT INTO {Schema}.{DatabaseConfig.TableSalaryStructure}
+                (id, branchid, versionnumber, status, effectivedate,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @BranchId, @VersionNumber, @Status, @EffectiveDate, @PublishedOn, @ActivatedOn,
+                (@Id, @BranchId, @VersionNumber, @Status, @EffectiveDate,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
         await connection.ExecuteAsync(new CommandDefinition(sql, entity, cancellationToken: ct)).ConfigureAwait(false);
@@ -189,11 +184,9 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructure}
             SET status = @Status,
                 effectivedate = @EffectiveDate,
-                publishedon = @PublishedOn,
-                activatedon = @ActivatedOn,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
                 versionno = versionno + 1
@@ -208,7 +201,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         Guid actorId = ResolveInsertActor();
         DateTime utcNow = DateTime.UtcNow;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructure}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE id = @Id;
             """;
@@ -225,7 +218,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
         string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructure}
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
@@ -257,7 +250,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
         string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructureVersions}
+            UPDATE {Schema}.{DatabaseConfig.TableSalaryStructure}
             SET status = @ArchivedStatus,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
@@ -286,7 +279,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         string sql = $"""
             SELECT EXISTS(
                 SELECT 1 FROM {Schema}.{DatabaseConfig.TableEmployeeSalaries}
-                WHERE salarystructureversionid = @VersionId AND isactive = true);
+                WHERE salarystructureid = @VersionId AND isactive = true);
             """;
         return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))
@@ -309,12 +302,12 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
 
             IList<SalaryVersionComponentEntity> sourceComponents = (await connection.QueryAsync<SalaryVersionComponentEntity>(new CommandDefinition(
                 $"""
-                SELECT id AS Id, salarystructureversionid AS SalaryStructureVersionId, name AS Name,
+                SELECT id AS Id, salarystructureid AS SalaryStructureVersionId, name AS Name,
                        shortcode AS ShortCode, componenttype AS ComponentType,
                        calculationtype AS CalculationType, value AS Value, istaxable AS IsTaxable,
                        isactive AS IsActive
                 FROM {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
-                WHERE salarystructureversionid = @SourceVersionId AND isactive = true;
+                WHERE salarystructureid = @SourceVersionId AND isactive = true;
                 """,
                 new { SourceVersionId = sourceVersionId },
                 transaction,
@@ -337,7 +330,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
-                        (id, salarystructureversionid, name, shortcode, componenttype, calculationtype, value, istaxable,
+                        (id, salarystructureid, name, shortcode, componenttype, calculationtype, value, istaxable,
                          isactive, versionno, createdby, createdon, updatedby, updatedon)
                     VALUES
                         (@Id, @SalaryStructureVersionId, @Name, @ShortCode, @ComponentType, @CalculationType, @Value, @IsTaxable,
@@ -365,7 +358,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT sc.id AS Id,
-                   sc.salarystructureversionid AS SalaryStructureVersionId,
+                   sc.salarystructureid AS SalaryStructureVersionId,
                    sc.name AS Name,
                    sc.shortcode AS ShortCode,
                    sc.componenttype AS ComponentType,
@@ -374,7 +367,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                    sc.istaxable AS IsTaxable,
                    sc.isactive AS IsActive
             FROM {Schema}.{DatabaseConfig.TableSalaryVersionComponents} sc
-            WHERE sc.salarystructureversionid = @VersionId AND sc.isactive = true
+            WHERE sc.salarystructureid = @VersionId AND sc.isactive = true
             ORDER BY sc.componenttype, sc.name;
             """;
         IEnumerable<SalaryVersionComponentListRow> rows = await connection
@@ -390,7 +383,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, salarystructureversionid AS SalaryStructureVersionId, name AS Name,
+            SELECT id AS Id, salarystructureid AS SalaryStructureVersionId, name AS Name,
                    shortcode AS ShortCode, componenttype AS ComponentType,
                    calculationtype AS CalculationType, value AS Value, istaxable AS IsTaxable,
                    isactive AS IsActive, versionno AS VersionNo,
@@ -414,7 +407,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
-                (id, salarystructureversionid, name, shortcode, componenttype, calculationtype, value, istaxable,
+                (id, salarystructureid, name, shortcode, componenttype, calculationtype, value, istaxable,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
                 (@Id, @SalaryStructureVersionId, @Name, @ShortCode, @ComponentType, @CalculationType, @Value, @IsTaxable,
@@ -463,7 +456,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT COUNT(*) FROM {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
-            WHERE salarystructureversionid = @VersionId AND isactive = true;
+            WHERE salarystructureid = @VersionId AND isactive = true;
             """;
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(sql, new { VersionId = versionId }, cancellationToken: ct))

@@ -30,6 +30,7 @@ public interface IExamService
     // Schedules
     Task<Result<IList<ExamScheduleItemDto>>> GetSchedulesAsync(Guid? examId, Guid? classId, CancellationToken ct = default);
     Task<Result<ExamScheduleItemDto>> CreateScheduleAsync(SaveExamScheduleRequestDto request, CancellationToken ct = default);
+    Task<Result<BulkCreateExamSchedulesResultDto>> BulkCreateSchedulesAsync(BulkCreateExamSchedulesRequestDto request, CancellationToken ct = default);
     Task<Result<ExamScheduleItemDto>> UpdateScheduleAsync(Guid id, SaveExamScheduleRequestDto request, CancellationToken ct = default);
     Task<Result<bool>> DeleteScheduleAsync(Guid id, CancellationToken ct = default);
 }

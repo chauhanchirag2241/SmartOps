@@ -14,6 +14,9 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
 {
     private readonly IBranchContext _branchContext;
 
+    /// <summary>Temporary periodindex values used while swapping active indexes (must be &gt; 0 for CHECK).</summary>
+    private const int TempIndexOffset = 100_000;
+
     public AcademicPeriodRepository(
         DapperContext context,
         ICurrentUserService currentUser,
@@ -21,35 +24,6 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
         : base(context, currentUser)
     {
         _branchContext = branchContext;
-    }
-
-    public async Task<IReadOnlyList<AcademicPeriodClassSummary>> GetClassesAsync(
-        CancellationToken cancellationToken = default)
-    {
-        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
-            .GetActiveBranchFilterAsync(_branchContext, "cg", cancellationToken)
-            .ConfigureAwait(false);
-
-        string sql = $"""
-            SELECT cg.id AS ClassId,
-                   cg.classname AS ClassName,
-                   COUNT(p.id)::int AS PeriodCount
-            FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassGroups} cg
-            LEFT JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClassAcademicPeriods} p
-              ON p.classgroupid = cg.id
-             AND p.isactive = true
-            WHERE cg.isactive = true{branchFilter}
-            GROUP BY cg.id, cg.classname
-            ORDER BY cg.classname;
-            """;
-
-        IEnumerable<AcademicPeriodClassSummary> rows = await connection.QueryAsync<AcademicPeriodClassSummary>(
-            new CommandDefinition(
-                sql,
-                new { ActiveBranchId = activeBranchId },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.ToList();
     }
 
     public async Task<IReadOnlyList<ClassAcademicPeriodEntity>> GetByClassAsync(
@@ -61,7 +35,11 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
             SELECT id AS Id,
                    classgroupid AS ClassGroupId,
                    periodindex AS PeriodIndex,
-                   name AS Name
+                   name AS Name,
+                   versionno AS VersionNo,
+                   createdby AS CreatedBy,
+                   createdon AS CreatedOn,
+                   isactive AS IsActive
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassAcademicPeriods}
             WHERE classgroupid = @ClassGroupId
               AND isactive = true
@@ -111,29 +89,121 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
         string schema = Context.OperationalSchema;
         string table = DatabaseConfig.TableClassAcademicPeriods;
 
+        IReadOnlyList<ClassAcademicPeriodEntity> existing =
+            await GetByClassAsync(classId, cancellationToken).ConfigureAwait(false);
+
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            await conn.ExecuteAsync(
-                $"""
-                UPDATE {schema}.{table}
-                SET isactive = false,
-                    updatedby = @ActorId,
-                    updatedon = @UtcNow,
-                    versionno = versionno + 1
-                WHERE classgroupid = @ClassGroupId
-                  AND isactive = true;
-                """,
-                new { ClassGroupId = classId, ActorId = actorId, UtcNow = utcNow },
-                tx).ConfigureAwait(false);
+            HashSet<Guid> claimedIds = [];
+            List<(ClassAcademicPeriodEntity Incoming, ClassAcademicPeriodEntity Current)> updates = [];
+            List<ClassAcademicPeriodEntity> inserts = [];
 
-            foreach (ClassAcademicPeriodEntity period in periods.OrderBy(p => p.PeriodIndex))
+            foreach (ClassAcademicPeriodEntity incoming in periods.OrderBy(p => p.PeriodIndex))
             {
-                period.Id = Guid.NewGuid();
-                period.ClassGroupId = classId;
-                period.Name = period.Name.Trim();
-                EnsureInsertAudit(period, utcNow, actorId);
-                await InsertAsync(conn, schema, table, period, tx).ConfigureAwait(false);
+                incoming.ClassGroupId = classId;
+                incoming.Name = incoming.Name.Trim();
+
+                ClassAcademicPeriodEntity? current =
+                    MatchExisting(incoming, existing, claimedIds);
+
+                if (current is not null)
+                {
+                    claimedIds.Add(current.Id);
+                    updates.Add((incoming, current));
+                }
+                else
+                {
+                    inserts.Add(incoming);
+                }
+            }
+
+            // Remove periods dropped from the list first (frees unique index/name slots).
+            foreach (ClassAcademicPeriodEntity old in existing)
+            {
+                if (!claimedIds.Contains(old.Id))
+                {
+                    await SoftDeleteAsync(conn, schema, table, old.Id, tx).ConfigureAwait(false);
+                }
+            }
+
+            bool needsIndexPark = updates.Any(u => u.Incoming.PeriodIndex != u.Current.PeriodIndex);
+            if (needsIndexPark)
+            {
+                for (int i = 0; i < updates.Count; i++)
+                {
+                    (_, ClassAcademicPeriodEntity current) = updates[i];
+                    ClassAcademicPeriodEntity parked = CloneForUpdate(
+                        current,
+                        classId,
+                        TempIndexOffset + i + 1,
+                        $"__park_{current.Id:N}");
+                    ApplyUpdateAudit(parked, actorId, utcNow);
+                    await UpdateAsync(conn, schema, table, parked, tx, "Id").ConfigureAwait(false);
+                    current.VersionNo = parked.VersionNo;
+                }
+            }
+
+            foreach ((ClassAcademicPeriodEntity incoming, ClassAcademicPeriodEntity current) in updates)
+            {
+                if (!needsIndexPark
+                    && string.Equals(current.Name, incoming.Name, StringComparison.Ordinal)
+                    && current.PeriodIndex == incoming.PeriodIndex)
+                {
+                    continue;
+                }
+
+                ClassAcademicPeriodEntity final = CloneForUpdate(
+                    current,
+                    classId,
+                    incoming.PeriodIndex,
+                    incoming.Name);
+                ApplyUpdateAudit(final, actorId, utcNow);
+                await UpdateAsync(conn, schema, table, final, tx, "Id").ConfigureAwait(false);
+            }
+
+            foreach (ClassAcademicPeriodEntity incoming in inserts)
+            {
+                incoming.Id = Guid.NewGuid();
+                EnsureInsertAudit(incoming, utcNow, actorId);
+                await InsertAsync(conn, schema, table, incoming, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
     }
+
+    private static ClassAcademicPeriodEntity? MatchExisting(
+        ClassAcademicPeriodEntity incoming,
+        IReadOnlyList<ClassAcademicPeriodEntity> existing,
+        HashSet<Guid> claimedIds)
+    {
+        if (incoming.Id != Guid.Empty)
+        {
+            ClassAcademicPeriodEntity? byId = existing.FirstOrDefault(e => e.Id == incoming.Id);
+            if (byId is not null && !claimedIds.Contains(byId.Id))
+            {
+                return byId;
+            }
+        }
+
+        // Fallback: same slot (period index) — keeps edit-in-place when client omits Id.
+        ClassAcademicPeriodEntity? byIndex = existing.FirstOrDefault(
+            e => e.PeriodIndex == incoming.PeriodIndex && !claimedIds.Contains(e.Id));
+        return byIndex;
+    }
+
+    private static ClassAcademicPeriodEntity CloneForUpdate(
+        ClassAcademicPeriodEntity current,
+        Guid classId,
+        int periodIndex,
+        string name) =>
+        new()
+        {
+            Id = current.Id,
+            ClassGroupId = classId,
+            PeriodIndex = periodIndex,
+            Name = name,
+            VersionNo = current.VersionNo,
+            CreatedBy = current.CreatedBy,
+            CreatedOn = current.CreatedOn,
+            IsActive = true,
+        };
 }

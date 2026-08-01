@@ -73,13 +73,20 @@ CREATE INDEX IF NOT EXISTS ix_students_branchid ON {S}.{DatabaseConfig.TableStud
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("studentid").AsGuid().NotNullable()
                     .ForeignKey("fk_studentacademics_studentid", S, DatabaseConfig.TableStudents, "id").OnDelete(System.Data.Rule.Cascade)
-                .WithColumn("classid").AsGuid().NotNullable()
+                .WithColumn("classgroupid").AsGuid().NotNullable()
+                    .ForeignKey("fk_studentacademics_classgroupid", S, DatabaseConfig.TableClassGroups, "id")
+                .WithColumn("classid").AsGuid().Nullable()
                     .ForeignKey("fk_studentacademics_classid", S, DatabaseConfig.TableClasses, "id")
                 .WithColumn("admissiondate").AsDate().Nullable()
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                     .ForeignKey("fk_studentacademics_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
                 .WithColumn("rollnumber").AsString(50).Nullable()
                 .WithAuditColumns();
+
+            Execute.Sql($"""
+CREATE INDEX IF NOT EXISTS ix_studentacademics_classgroupid
+    ON {S}.{DatabaseConfig.TableStudentAcademics} (classgroupid);
+""");
         }
 
         if (!Schema.Schema(S).Table(DatabaseConfig.TableStudentPreviousSchools).Exists())

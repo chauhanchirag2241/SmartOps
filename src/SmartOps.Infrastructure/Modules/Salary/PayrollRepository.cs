@@ -1,9 +1,11 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Salary;
+using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
 
@@ -12,14 +14,20 @@ namespace SmartOps.Infrastructure.Modules.Salary;
 public sealed class PayrollRepository : BaseRepository, IPayrollRepository
 {
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IBranchContext _branchContext;
+    private readonly IBranchScopedWriteHelper _branchWrite;
 
     public PayrollRepository(
         DapperContext context,
         ICurrentUserService currentUser,
-        ITenantSchemaProvider tenantSchema)
+        ITenantSchemaProvider tenantSchema,
+        IBranchContext branchContext,
+        IBranchScopedWriteHelper branchWrite)
         : base(context, currentUser)
     {
         _tenantSchema = tenantSchema;
+        _branchContext = branchContext;
+        _branchWrite = branchWrite;
     }
 
     private string Schema =>
@@ -32,19 +40,25 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task<PayrollRunEntity?> GetRunByYearMonthAsync(int payYear, int payMonth, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        (string branchFilter, Guid? activeBranchId) = await BranchSqlBuilder
+            .GetActiveBranchFilterAsync(_branchContext, "pr", ct)
+            .ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, payyear AS PayYear, paymonth AS PayMonth, status AS Status,
-                   useattendancewisesalary AS UseAttendanceWiseSalary,
-                   totalgross AS TotalGross, totaldeductions AS TotalDeductions, totalnet AS TotalNet,
-                   employeecount AS EmployeeCount, processedon AS ProcessedOn,
-                   isactive AS IsActive, versionno AS VersionNo,
-                   createdby AS CreatedBy, createdon AS CreatedOn,
-                   updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TablePayrollRuns}
-            WHERE payyear = @PayYear AND paymonth = @PayMonth AND isactive = true;
+            SELECT pr.id AS Id, pr.branchid AS BranchId, pr.payyear AS PayYear, pr.paymonth AS PayMonth, pr.status AS Status,
+                   pr.useattendancewisesalary AS UseAttendanceWiseSalary,
+                   pr.totalgross AS TotalGross, pr.totaldeductions AS TotalDeductions, pr.totalnet AS TotalNet,
+                   pr.employeecount AS EmployeeCount, pr.processedon AS ProcessedOn,
+                   pr.isactive AS IsActive, pr.versionno AS VersionNo,
+                   pr.createdby AS CreatedBy, pr.createdon AS CreatedOn,
+                   pr.updatedby AS UpdatedBy, pr.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TablePayrollRuns} pr
+            WHERE pr.payyear = @PayYear AND pr.paymonth = @PayMonth AND pr.isactive = true{branchFilter};
             """;
         return await connection
-            .QueryFirstOrDefaultAsync<PayrollRunEntity>(new CommandDefinition(sql, new { PayYear = payYear, PayMonth = payMonth }, cancellationToken: ct))
+            .QueryFirstOrDefaultAsync<PayrollRunEntity>(new CommandDefinition(
+                sql,
+                new { PayYear = payYear, PayMonth = payMonth, ActiveBranchId = activeBranchId },
+                cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -52,7 +66,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, payyear AS PayYear, paymonth AS PayMonth, status AS Status,
+            SELECT id AS Id, branchid AS BranchId, payyear AS PayYear, paymonth AS PayMonth, status AS Status,
                    useattendancewisesalary AS UseAttendanceWiseSalary,
                    totalgross AS TotalGross, totaldeductions AS TotalDeductions, totalnet AS TotalNet,
                    employeecount AS EmployeeCount, processedon AS ProcessedOn,
@@ -73,15 +87,16 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
+        entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
         EnsureInsertAudit(entity, utcNow, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TablePayrollRuns}
-                (id, payyear, paymonth, status, useattendancewisesalary,
+                (id, branchid, payyear, paymonth, status, useattendancewisesalary,
                  totalgross, totaldeductions, totalnet, employeecount, processedon,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
-                (@Id, @PayYear, @PayMonth, @Status, @UseAttendanceWiseSalary,
+                (@Id, @BranchId, @PayYear, @PayMonth, @Status, @UseAttendanceWiseSalary,
                  @TotalGross, @TotalDeductions, @TotalNet, @EmployeeCount, @ProcessedOn,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;

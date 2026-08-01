@@ -36,6 +36,15 @@ public sealed class ExamSchedulesController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpPost("bulk")]
+    [Authorize(Policy = MenuPolicies.ExamSchedule.Add)]
+    [ProducesResponseType(typeof(BulkCreateExamSchedulesResultDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> BulkCreate([FromBody] BulkCreateExamSchedulesRequestDto request, CancellationToken ct)
+    {
+        var result = await _service.BulkCreateSchedulesAsync(request, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPut("{id:guid}")]
     [Authorize(Policy = MenuPolicies.ExamSchedule.Edit)]
     [ProducesResponseType(typeof(ExamScheduleItemDto), StatusCodes.Status200OK)]

@@ -8,8 +8,6 @@ public record SalaryStructureVersionListItemDto(
     SalaryStructureVersionStatus Status,
     string StatusLabel,
     DateOnly? EffectiveDate,
-    DateTime? PublishedOn,
-    DateTime? ActivatedOn,
     int ComponentCount,
     bool HasAssignedEmployees,
     bool IsLocked);
@@ -20,8 +18,6 @@ public record SalaryStructureVersionDetailDto(
     SalaryStructureVersionStatus Status,
     string StatusLabel,
     DateOnly? EffectiveDate,
-    DateTime? PublishedOn,
-    DateTime? ActivatedOn,
     bool HasAssignedEmployees,
     bool IsLocked,
     IList<SalaryVersionComponentDto> Components);
@@ -29,6 +25,9 @@ public record SalaryStructureVersionDetailDto(
 public record CreateSalaryStructureVersionRequestDto(
     DateOnly? EffectiveDate,
     Guid? CloneFromVersionId);
+
+public record UpdateSalaryStructureVersionBasicRequestDto(
+    DateOnly? EffectiveDate);
 
 public record SalaryVersionComponentDto(
     Guid Id,

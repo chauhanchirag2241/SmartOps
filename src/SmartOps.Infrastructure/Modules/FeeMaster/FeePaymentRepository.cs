@@ -55,10 +55,14 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetPaidByHeadAsync(
         Guid studentId,
         Guid feeMasterId,
+        Guid? academicPeriodId = null,
         CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
+        var periodFilter = academicPeriodId.HasValue
+            ? "AND p.academicperiodid = @AcademicPeriodId"
+            : string.Empty;
         var sql = $"""
             SELECT l.feeheadid AS FeeHeadId, COALESCE(SUM(l.paidamount), 0) AS Paid
             FROM {schema}.{DatabaseConfig.TableFeePaymentLine} l
@@ -67,12 +71,78 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
               AND p.feemasterid = @FeeMasterId
               AND p.isactive = true
               AND l.isactive = true
+              {periodFilter}
             GROUP BY l.feeheadid;
             """;
         var rows = await connection.QueryAsync<(Guid FeeHeadId, decimal Paid)>(
-            new CommandDefinition(sql, new { StudentId = studentId, FeeMasterId = feeMasterId }, cancellationToken: cancellationToken))
+            new CommandDefinition(
+                sql,
+                new { StudentId = studentId, FeeMasterId = feeMasterId, AcademicPeriodId = academicPeriodId },
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return rows.ToDictionary(r => r.FeeHeadId, r => r.Paid);
+    }
+
+    public async Task<IReadOnlyList<FeeCollectionPeriodHeadDue>> GetPeriodHeadDuesAsync(
+        Guid feeMasterId,
+        Guid studentId,
+        Guid academicPeriodId,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+
+        var sql = $"""
+            SELECT
+                h.id AS FeeHeadId,
+                h.feeheadname AS FeeHeadName,
+                h.ismandatory AS IsMandatory,
+                h.iseditable AS IsEditable,
+                pa.academicperiodid AS AcademicPeriodId,
+                ap.name AS PeriodLabel,
+                ap.periodindex AS PeriodIndex,
+                COALESCE(fsa.amount, pa.amount) AS DueAmount,
+                COALESCE(fsa.isexcluded, false) AS IsExcluded
+            FROM {schema}.{DatabaseConfig.TableFeeHead} h
+            INNER JOIN {schema}.{DatabaseConfig.TableFeeHeadPeriodAmount} pa
+                ON pa.feeheadid = h.id AND pa.isactive = true
+            INNER JOIN {schema}.{DatabaseConfig.TableClassAcademicPeriods} ap
+                ON ap.id = pa.academicperiodid AND ap.isactive = true
+            LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa
+                ON fsa.feeheadid = h.id
+               AND fsa.studentid = @StudentId
+               AND fsa.academicperiodid = pa.academicperiodid
+               AND fsa.isactive = true
+            WHERE h.feemasterid = @FeeMasterId
+              AND h.isactive = true
+              AND pa.academicperiodid = @AcademicPeriodId
+              AND pa.classgroupid = (
+                    SELECT c.classgroupid
+                    FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
+                    INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
+                    WHERE sa.studentid = @StudentId
+                      AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause("sa")}
+                    ORDER BY sa.isactive DESC, sa.createdon DESC
+                    LIMIT 1
+              )
+            ORDER BY h.feeheadname ASC;
+            """;
+
+        var rows = (await connection.QueryAsync<FeeCollectionPeriodHeadDue>(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    FeeMasterId = feeMasterId,
+                    StudentId = studentId,
+                    AcademicPeriodId = academicPeriodId,
+                    ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                },
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
+
+        return rows;
     }
 
     public async Task<Guid> CreatePaymentAsync(
@@ -286,6 +356,98 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
 
         foreach (var master in masters)
         {
+            var isPeriodWise = string.Equals(
+                master.FeeType?.Replace(" ", string.Empty),
+                "PeriodWise",
+                StringComparison.OrdinalIgnoreCase);
+
+            var payments = await LoadPaymentsAsync(connection, schema, identity, studentId, master.Id, cancellationToken)
+                .ConfigureAwait(false);
+            var publishedStarted = IsPublishStarted(master.PublishedOn, today);
+
+            if (isPeriodWise)
+            {
+                var periodRows = await LoadAllPeriodHeadDuesAsync(connection, schema, master.Id, studentId, cancellationToken)
+                    .ConfigureAwait(false);
+                var periodGroups = periodRows
+                    .Where(r => !r.IsExcluded && r.DueAmount > 0)
+                    .GroupBy(r => new { r.AcademicPeriodId, r.PeriodLabel, r.PeriodIndex })
+                    .OrderBy(g => g.Key.PeriodIndex)
+                    .ThenBy(g => g.Key.PeriodLabel);
+
+                decimal masterDue = 0, masterPaid = 0;
+
+                foreach (var periodGroup in periodGroups)
+                {
+                    var paidByHead = await GetPaidByHeadAsync(
+                            studentId, master.Id, periodGroup.Key.AcademicPeriodId, cancellationToken)
+                        .ConfigureAwait(false);
+                    var hasPayment = paidByHead.Count > 0;
+                    var heads = new List<FeeCollectionHeadModel>();
+
+                    foreach (var row in periodGroup)
+                    {
+                        paidByHead.TryGetValue(row.FeeHeadId, out var paid);
+                        heads.Add(new FeeCollectionHeadModel
+                        {
+                            FeeHeadId = row.FeeHeadId,
+                            FeeHeadName = row.FeeHeadName,
+                            IsMandatory = row.IsMandatory,
+                            IsEditable = row.IsEditable,
+                            DueAmount = row.DueAmount,
+                            PaidAmount = paid,
+                            IsExcluded = false,
+                        });
+                    }
+
+                    if (heads.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var totalDue = heads.Sum(x => x.DueAmount);
+                    var totalPaid = heads.Sum(x => x.PaidAmount);
+                    var totalPending = Math.Max(0, totalDue - totalPaid);
+                    var status = ResolveStatus(totalDue, totalPaid);
+
+                    masterDue += totalDue;
+                    masterPaid += totalPaid;
+                    sumDue += totalDue;
+                    sumPaid += totalPaid;
+
+                    dueCards.Add(new FeeCollectionMasterCardModel
+                    {
+                        FeeMasterId = master.Id,
+                        FeeName = master.FeeName,
+                        FeeType = master.FeeType,
+                        PublishedOn = master.PublishedOn,
+                        DefaultDueDate = master.DefaultDueDate,
+                        AcademicPeriodId = periodGroup.Key.AcademicPeriodId,
+                        PeriodLabel = periodGroup.Key.PeriodLabel,
+                        TotalDue = totalDue,
+                        TotalPaid = totalPaid,
+                        TotalPending = totalPending,
+                        Status = status,
+                        IsPublished = publishedStarted,
+                        CanCollect = publishedStarted && totalPending > 0,
+                        StudentAmountsLocked = hasPayment,
+                        Heads = heads,
+                    });
+                }
+
+                history.Add(new FeeCollectionHistoryRowModel
+                {
+                    FeeMasterId = master.Id,
+                    FeeName = master.FeeName,
+                    TotalDue = masterDue,
+                    TotalPaid = masterPaid,
+                    TotalPending = Math.Max(0, masterDue - masterPaid),
+                    Status = ResolveStatus(masterDue, masterPaid),
+                    Payments = payments,
+                });
+                continue;
+            }
+
             var detail = await _studentAmounts
                 .GetStudentDetailAsync(master.Id, studentId, cancellationToken)
                 .ConfigureAwait(false);
@@ -294,9 +456,10 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
                 continue;
             }
 
-            var paidByHead = await GetPaidByHeadAsync(studentId, master.Id, cancellationToken).ConfigureAwait(false);
-            var hasPayment = paidByHead.Count > 0;
-            var heads = new List<FeeCollectionHeadModel>();
+            var paidByHeadFlat = await GetPaidByHeadAsync(studentId, master.Id, null, cancellationToken)
+                .ConfigureAwait(false);
+            var hasPaymentFlat = paidByHeadFlat.Count > 0;
+            var flatHeads = new List<FeeCollectionHeadModel>();
 
             foreach (var h in detail.Heads)
             {
@@ -306,32 +469,31 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
                 }
 
                 var due = h.Amount ?? h.DefaultAmount ?? 0m;
-                paidByHead.TryGetValue(h.FeeHeadId, out var paid);
-                heads.Add(new FeeCollectionHeadModel
+                paidByHeadFlat.TryGetValue(h.FeeHeadId, out var paid);
+                flatHeads.Add(new FeeCollectionHeadModel
                 {
                     FeeHeadId = h.FeeHeadId,
                     FeeHeadName = h.FeeHeadName,
                     IsMandatory = h.IsMandatory,
-                    IsEditable = h.IsEditable && !hasPayment,
+                    IsEditable = h.IsEditable,
                     DueAmount = due,
                     PaidAmount = paid,
                     IsExcluded = false,
                 });
             }
 
-            if (heads.Count == 0)
+            if (flatHeads.Count == 0)
             {
                 continue;
             }
 
-            var totalDue = heads.Sum(x => x.DueAmount);
-            var totalPaid = heads.Sum(x => x.PaidAmount);
-            var totalPending = Math.Max(0, totalDue - totalPaid);
-            var status = ResolveStatus(totalDue, totalPaid);
-            var publishedStarted = IsPublishStarted(master.PublishedOn, today);
+            var flatDue = flatHeads.Sum(x => x.DueAmount);
+            var flatPaid = flatHeads.Sum(x => x.PaidAmount);
+            var flatPending = Math.Max(0, flatDue - flatPaid);
+            var flatStatus = ResolveStatus(flatDue, flatPaid);
 
-            sumDue += totalDue;
-            sumPaid += totalPaid;
+            sumDue += flatDue;
+            sumPaid += flatPaid;
 
             dueCards.Add(new FeeCollectionMasterCardModel
             {
@@ -340,27 +502,24 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
                 FeeType = master.FeeType,
                 PublishedOn = master.PublishedOn,
                 DefaultDueDate = master.DefaultDueDate,
-                TotalDue = totalDue,
-                TotalPaid = totalPaid,
-                TotalPending = totalPending,
-                Status = status,
+                TotalDue = flatDue,
+                TotalPaid = flatPaid,
+                TotalPending = flatPending,
+                Status = flatStatus,
                 IsPublished = publishedStarted,
-                CanCollect = publishedStarted && totalPending > 0,
-                StudentAmountsLocked = hasPayment,
-                Heads = heads,
+                CanCollect = publishedStarted && flatPending > 0,
+                StudentAmountsLocked = hasPaymentFlat,
+                Heads = flatHeads,
             });
-
-            var payments = await LoadPaymentsAsync(connection, schema, identity, studentId, master.Id, cancellationToken)
-                .ConfigureAwait(false);
 
             history.Add(new FeeCollectionHistoryRowModel
             {
                 FeeMasterId = master.Id,
                 FeeName = master.FeeName,
-                TotalDue = totalDue,
-                TotalPaid = totalPaid,
-                TotalPending = totalPending,
-                Status = status,
+                TotalDue = flatDue,
+                TotalPaid = flatPaid,
+                TotalPending = flatPending,
+                Status = flatStatus,
                 Payments = payments,
             });
         }
@@ -374,6 +533,49 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
             DueCards = dueCards,
             History = history,
         };
+    }
+
+    public async Task<IReadOnlyList<FeeCollectionStudentSummaryModel>> GetStudentCollectionSummariesAsync(
+        IReadOnlyList<Guid> studentIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = (studentIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Take(100)
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        var results = new List<FeeCollectionStudentSummaryModel>(ids.Length);
+        foreach (var studentId in ids)
+        {
+            var detail = await GetStudentCollectionDetailAsync(studentId, cancellationToken)
+                .ConfigureAwait(false);
+            if (detail is null)
+            {
+                results.Add(new FeeCollectionStudentSummaryModel
+                {
+                    StudentId = studentId,
+                    Status = "Paid",
+                });
+                continue;
+            }
+
+            results.Add(new FeeCollectionStudentSummaryModel
+            {
+                StudentId = studentId,
+                TotalDue = detail.SummaryTotal,
+                TotalPaid = detail.SummaryPaid,
+                TotalPending = detail.SummaryPending,
+                Status = ResolveStatus(detail.SummaryTotal, detail.SummaryPaid),
+            });
+        }
+
+        return results;
     }
 
     private static async Task<IReadOnlyList<FeeCollectionHistoryPaymentModel>> LoadPaymentsAsync(
@@ -390,9 +592,12 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
                 p.paymentdate AS PaymentDate,
                 p.totalamount AS TotalAmount,
                 p.paymentmethod AS PaymentMethod,
+                p.academicperiodid AS AcademicPeriodId,
+                ap.name AS PeriodLabel,
                 p.remarks AS Remarks,
                 TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS CollectedBy
             FROM {schema}.{DatabaseConfig.TableFeePayment} p
+            LEFT JOIN {schema}.{DatabaseConfig.TableClassAcademicPeriods} ap ON ap.id = p.academicperiodid
             LEFT JOIN {identity}.{DatabaseConfig.TableUsers} u ON u.id = p.collectedbyuserid
             WHERE p.studentid = @StudentId
               AND p.feemasterid = @FeeMasterId
@@ -448,7 +653,80 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
                 .ToList();
         }
 
+        // Remaining after each payment (payments are newest-first; compute oldest-first).
+        var remainingByHead = new Dictionary<Guid, decimal>();
+        foreach (var payment in payments.AsEnumerable().Reverse())
+        {
+            foreach (var line in payment.Lines)
+            {
+                if (!remainingByHead.ContainsKey(line.FeeHeadId))
+                {
+                    remainingByHead[line.FeeHeadId] = line.DueAmount;
+                }
+
+                remainingByHead[line.FeeHeadId] = Math.Max(
+                    0,
+                    remainingByHead[line.FeeHeadId] - line.PaidAmount);
+                line.BalanceAfter = remainingByHead[line.FeeHeadId];
+            }
+        }
+
         return payments;
+    }
+
+    private async Task<IReadOnlyList<FeeCollectionPeriodHeadDue>> LoadAllPeriodHeadDuesAsync(
+        System.Data.IDbConnection connection,
+        string schema,
+        Guid feeMasterId,
+        Guid studentId,
+        CancellationToken cancellationToken)
+    {
+        var sql = $"""
+            SELECT
+                h.id AS FeeHeadId,
+                h.feeheadname AS FeeHeadName,
+                h.ismandatory AS IsMandatory,
+                h.iseditable AS IsEditable,
+                pa.academicperiodid AS AcademicPeriodId,
+                ap.name AS PeriodLabel,
+                ap.periodindex AS PeriodIndex,
+                COALESCE(fsa.amount, pa.amount) AS DueAmount,
+                COALESCE(fsa.isexcluded, false) AS IsExcluded
+            FROM {schema}.{DatabaseConfig.TableFeeHead} h
+            INNER JOIN {schema}.{DatabaseConfig.TableFeeHeadPeriodAmount} pa
+                ON pa.feeheadid = h.id AND pa.isactive = true
+            INNER JOIN {schema}.{DatabaseConfig.TableClassAcademicPeriods} ap
+                ON ap.id = pa.academicperiodid AND ap.isactive = true
+            LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa
+                ON fsa.feeheadid = h.id
+               AND fsa.studentid = @StudentId
+               AND fsa.academicperiodid = pa.academicperiodid
+               AND fsa.isactive = true
+            WHERE h.feemasterid = @FeeMasterId
+              AND h.isactive = true
+              AND pa.classgroupid = (
+                    SELECT c.classgroupid
+                    FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
+                    INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
+                    WHERE sa.studentid = @StudentId
+                      AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause("sa")}
+                    ORDER BY sa.isactive DESC, sa.createdon DESC
+                    LIMIT 1
+              )
+            ORDER BY ap.periodindex ASC, h.feeheadname ASC;
+            """;
+
+        return (await connection.QueryAsync<FeeCollectionPeriodHeadDue>(
+            new CommandDefinition(
+                sql,
+                new
+                {
+                    FeeMasterId = feeMasterId,
+                    StudentId = studentId,
+                    ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+                },
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
     }
 
     private static bool IsPublishStarted(DateOnly? publishedOn, DateOnly today)
@@ -464,6 +742,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
 
     private static string ResolveStatus(decimal totalDue, decimal totalPaid)
     {
+        if (totalDue <= 0) return "Paid";
         if (totalPaid <= 0) return "Pending";
         if (totalPaid >= totalDue) return "Paid";
         return "Partial";

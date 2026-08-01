@@ -3,6 +3,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Common.Enums;
@@ -20,21 +21,27 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
     private readonly IUserScopeContext _scope;
     private readonly IBranchContext _branchContext;
     private readonly IBranchScopedWriteHelper _branchWrite;
+    private readonly IUserProvisioningService _userProvisioning;
 
     public EmployeeRepository(
         DapperContext context,
         ICurrentUserService currentUser,
         IUserScopeContext scope,
         IBranchContext branchContext,
-        IBranchScopedWriteHelper branchWrite)
+        IBranchScopedWriteHelper branchWrite,
+        IUserProvisioningService userProvisioning)
         : base(context, currentUser)
     {
         _scope = scope;
         _branchContext = branchContext;
         _branchWrite = branchWrite;
+        _userProvisioning = userProvisioning;
     }
 
-    public async Task<Guid> CreateEmployeeAsync(EmployeeEntity employee, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateEmployeeAsync(
+        EmployeeEntity employee,
+        Guid schoolId,
+        CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;
         if (employee.Id == Guid.Empty)
@@ -52,9 +59,13 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
 
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
-            var employeeId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx)
+            Guid provisionedUserId = await _userProvisioning
+                .ProvisionEmployeeUserAsync(employee, schoolId, tx, cancellationToken)
                 .ConfigureAwait(false);
-            return employeeId;
+            employee.UserId = provisionedUserId;
+
+            return await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx)
+                .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
@@ -92,6 +103,7 @@ WHERE e.id = @Id{activeFilter}
         string? sortColumn = null,
         string? sortDirection = null,
         StaffFilter filter = StaffFilter.All,
+        bool teachersOnly = false,
         CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -106,6 +118,11 @@ WHERE e.id = @Id{activeFilter}
             case StaffFilter.Inactive:
                 whereClause += " AND e.isactive = false";
                 break;
+        }
+
+        if (teachersOnly)
+        {
+            whereClause += $" AND u.usertypeid = '{UserTypeCodes.Ids.Teacher}'";
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))

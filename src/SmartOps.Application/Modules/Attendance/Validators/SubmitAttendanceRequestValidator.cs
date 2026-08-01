@@ -28,7 +28,7 @@ public class SubmitAttendanceRequestValidator
 
             s.RuleFor(x => x.Status)
                 .IsInEnum()
-                .WithMessage("Status must be a valid AttendanceStatus value (1=Present, 2=Absent, 3=Leave, 4=Late).");
+                .WithMessage("Status must be a valid AttendanceStatus value (1=Present, 2=Absent, 3=Late).");
         });
     }
 }

@@ -156,14 +156,6 @@ public sealed class DashboardService : IDashboardService
         }
 
         int totalSubjects = 0;
-        if (visible.Contains(DashboardWidgetCodes.SubjectsStat))
-        {
-            totalSubjects = await CountSubjectsAsync(connection, schema, cancellationToken).ConfigureAwait(false);
-            if (summary is not null)
-            {
-                // Subjects count exposed via TotalSubjects on response
-            }
-        }
 
         DashboardAlertsDto? alerts = null;
         if (visible.Contains(DashboardWidgetCodes.AlertsActions))
@@ -187,29 +179,11 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    private async Task<DateOnly> ResolveSchoolTodayAsync(CancellationToken cancellationToken)
+    private Task<DateOnly> ResolveSchoolTodayAsync(CancellationToken cancellationToken)
     {
-        string? timeZoneId = await LoadSchoolTimeZoneAsync(cancellationToken).ConfigureAwait(false);
-        return SchoolLocalTime.Today(timeZoneId);
-    }
-
-    private async Task<string?> LoadSchoolTimeZoneAsync(CancellationToken cancellationToken)
-    {
-        string? schoolId = _tenantProvider.GetCurrentSchoolId();
-        if (string.IsNullOrWhiteSpace(schoolId) || !Guid.TryParse(schoolId, out Guid sid))
-        {
-            return null;
-        }
-
-        IDbConnection platform = await _context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
-        return await platform.QuerySingleOrDefaultAsync<string>(
-            new CommandDefinition(
-                $"""
-SELECT timezone FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
-WHERE id = @Id AND isactive = true LIMIT 1
-""",
-                new { Id = sid },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        _ = cancellationToken;
+        // Schools no longer store timezone; default to India (Asia/Kolkata).
+        return Task.FromResult(SchoolLocalTime.Today(null));
     }
 
     private static DashboardAttendanceDateRange BuildTodayRange(DateOnly schoolToday) =>
@@ -276,8 +250,7 @@ SELECT
 SELECT
     COUNT(*) FILTER (WHERE a.status = 1) AS Present,
     COUNT(*) FILTER (WHERE a.status = 2) AS Absent,
-    COUNT(*) FILTER (WHERE a.status = 3) AS Leave,
-    COUNT(*) FILTER (WHERE a.status = 4) AS Late
+    COUNT(*) FILTER (WHERE a.status = 3) AS Late
 FROM {schema}.{DatabaseConfig.TableAttendance} a
 WHERE a.attendancedate >= @AttendanceFromDate
   AND a.attendancedate <= @AttendanceToDate
@@ -290,7 +263,7 @@ WHERE a.attendancedate >= @AttendanceFromDate
                 BuildParameters(attendanceRange, attendanceRange.From),
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        int total = row.Present + row.Absent + row.Leave + row.Late;
+        int total = row.Present + row.Absent + row.Late;
         int attended = row.Present + row.Late;
         double percent = total > 0 ? Math.Round(attended * 100.0 / total, 1) : 0;
 
@@ -298,7 +271,6 @@ WHERE a.attendancedate >= @AttendanceFromDate
         {
             Present = row.Present,
             Absent = row.Absent,
-            Leave = row.Leave,
             Late = row.Late,
             PresentPercent = percent,
             DateLabel = FormatAttendanceDateLabel(attendanceRange.From, attendanceRange.To),
@@ -505,9 +477,8 @@ SELECT
     c.section AS Section,
     COUNT(DISTINCT sa.studentid) AS StudentCount,
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 1) AS Present,
-    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 4) AS Late,
+    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 3) AS Late,
     COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 2) AS Absent,
-    COUNT(DISTINCT a.studentid) FILTER (WHERE a.status = 3) AS OnLeave,
     0::numeric AS FeeCollectedToday
 FROM {schema}.{DatabaseConfig.TableClasses} c
 INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
@@ -532,23 +503,8 @@ ORDER BY cg.classname, c.section
             Present = r.Present,
             Late = r.Late,
             Absent = r.Absent,
-            OnLeave = r.OnLeave,
             FeeCollectedToday = r.FeeCollectedToday
         }).ToList();
-    }
-
-    private async Task<int> CountSubjectsAsync(
-        IDbConnection connection,
-        string schema,
-        CancellationToken cancellationToken)
-    {
-        string branchFilter = BuildBranchColumnFilter("sub");
-        string sql = $"""
-SELECT COUNT(*) FROM {schema}.{DatabaseConfig.TableSubjects} sub
-WHERE sub.isactive = true {branchFilter}
-""";
-        return await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, BuildParameters(), cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<(string? AcademicYear, string? SchoolName)> LoadContextLabelsAsync(CancellationToken cancellationToken)
@@ -851,8 +807,6 @@ WHERE id = @Id AND isactive = true LIMIT 1
 
         public int Absent { get; init; }
 
-        public int Leave { get; init; }
-
         public int Late { get; init; }
     }
 
@@ -913,8 +867,6 @@ WHERE id = @Id AND isactive = true LIMIT 1
         public int Late { get; init; }
 
         public int Absent { get; init; }
-
-        public int OnLeave { get; init; }
 
         public decimal FeeCollectedToday { get; init; }
     }

@@ -51,6 +51,18 @@ public sealed class SalaryStructureController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpPut("versions/{versionId:guid}/basic")]
+    [Authorize(Policy = MenuPolicies.SalaryStructure.Edit)]
+    [ProducesResponseType(typeof(SalaryStructureVersionListItemDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpdateVersionBasic(
+        Guid versionId,
+        [FromBody] UpdateSalaryStructureVersionBasicRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _service.UpdateVersionBasicAsync(versionId, request, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPost("versions/{versionId:guid}/publish")]
     [Authorize(Policy = MenuPolicies.SalaryStructure.Edit)]
     [ProducesResponseType(typeof(SalaryStructureVersionListItemDto), StatusCodes.Status200OK)]

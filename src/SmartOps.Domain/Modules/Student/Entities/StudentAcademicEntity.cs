@@ -8,6 +8,7 @@ public class StudentAcademicEntity : AuditableEntity
     public Guid StudentId { get; set; }
     public DateOnly? AdmissionDate { get; set; }
     public Guid AcademicYearId { get; set; }
-    public Guid ClassId { get; set; }
+    public Guid ClassGroupId { get; set; }
+    public Guid? ClassId { get; set; }
     public string? RollNumber { get; set; }
 }

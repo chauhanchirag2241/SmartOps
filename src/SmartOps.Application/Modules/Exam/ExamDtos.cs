@@ -154,6 +154,26 @@ public record SaveExamScheduleRequestDto(
     Guid? InvigilatorId
 );
 
+public record BulkExamScheduleSlotDto(
+    Guid ClassId,
+    Guid SubjectId,
+    DateOnly ExamDate,
+    string? StartTime,
+    string? EndTime,
+    string? RoomNo,
+    Guid? InvigilatorId
+);
+
+public record BulkCreateExamSchedulesRequestDto(
+    Guid ExamId,
+    IList<BulkExamScheduleSlotDto> Slots
+);
+
+public record BulkCreateExamSchedulesResultDto(
+    int CreatedCount,
+    IList<ExamScheduleItemDto> Created
+);
+
 // ── Marks entry ──────────────────────────────────────────────
 
 public record ExamComponentMarkDto(

@@ -30,6 +30,19 @@ public sealed class FeeCollectionsController(
         return detail is null ? NotFound() : Ok(detail);
     }
 
+    [HttpPost("students/summaries")]
+    [Authorize(Policy = MenuPolicies.FeeCollection.View)]
+    [ProducesResponseType(typeof(IReadOnlyList<FeeCollectionStudentSummaryModel>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<FeeCollectionStudentSummaryModel>>> GetStudentSummaries(
+        [FromBody] Guid[] studentIds,
+        CancellationToken ct)
+    {
+        var summaries = await feePaymentRepository
+            .GetStudentCollectionSummariesAsync(studentIds ?? [], ct)
+            .ConfigureAwait(false);
+        return Ok(summaries);
+    }
+
     [HttpPost("students/{studentId:guid}/collect")]
     [Authorize(Policy = MenuPolicies.FeeCollection.Edit)]
     [ProducesResponseType(typeof(CollectFeeResponse), StatusCodes.Status200OK)]
@@ -61,21 +74,49 @@ public sealed class FeeCollectionsController(
             return BadRequest("This fee is not published yet.");
         }
 
-        var detail = await feeStudentAmountRepository
-            .GetStudentDetailAsync(request.FeeMasterId, studentId, ct)
-            .ConfigureAwait(false);
-        if (detail is null)
+        var isPeriodWise = string.Equals(
+            master.FeeType?.Replace(" ", string.Empty),
+            "PeriodWise",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (isPeriodWise && (!request.AcademicPeriodId.HasValue || request.AcademicPeriodId == Guid.Empty))
         {
-            return NotFound("Student fee detail not found.");
+            return BadRequest("Academic period is required for period-wise fee collection.");
         }
 
         var paidByHead = await feePaymentRepository
-            .GetPaidByHeadAsync(studentId, request.FeeMasterId, ct)
+            .GetPaidByHeadAsync(studentId, request.FeeMasterId, request.AcademicPeriodId, ct)
             .ConfigureAwait(false);
 
-        var headMap = detail.Heads
-            .Where(h => !h.IsExcluded)
-            .ToDictionary(h => h.FeeHeadId);
+        Dictionary<Guid, (string Name, bool Mandatory, bool Editable, decimal Due)> headMap;
+
+        if (isPeriodWise)
+        {
+            var periodDues = await feePaymentRepository
+                .GetPeriodHeadDuesAsync(request.FeeMasterId, studentId, request.AcademicPeriodId!.Value, ct)
+                .ConfigureAwait(false);
+            headMap = periodDues
+                .Where(h => !h.IsExcluded)
+                .ToDictionary(
+                    h => h.FeeHeadId,
+                    h => (h.FeeHeadName, h.IsMandatory, h.IsEditable, h.DueAmount));
+        }
+        else
+        {
+            var detail = await feeStudentAmountRepository
+                .GetStudentDetailAsync(request.FeeMasterId, studentId, ct)
+                .ConfigureAwait(false);
+            if (detail is null)
+            {
+                return NotFound("Student fee detail not found.");
+            }
+
+            headMap = detail.Heads
+                .Where(h => !h.IsExcluded)
+                .ToDictionary(
+                    h => h.FeeHeadId,
+                    h => (h.FeeHeadName, h.IsMandatory, h.IsEditable, h.Amount ?? h.DefaultAmount ?? 0m));
+        }
 
         var paymentLines = new List<FeePaymentLineEntity>();
         foreach (var line in lines)
@@ -85,33 +126,34 @@ public sealed class FeeCollectionsController(
                 return BadRequest("Invalid fee head.");
             }
 
-            var due = head.Amount ?? head.DefaultAmount ?? 0m;
+            var due = head.Due;
             paidByHead.TryGetValue(line.FeeHeadId, out var alreadyPaid);
             var balance = Math.Max(0, due - alreadyPaid);
             if (balance <= 0)
             {
-                return BadRequest($"'{head.FeeHeadName}' is already fully paid.");
+                return BadRequest($"'{head.Name}' is already fully paid.");
             }
 
+            // Partial collection allowed for all heads (editable or locked).
             var payAmount = line.Amount;
-            if (!head.IsEditable)
+            if (payAmount <= 0)
             {
-                // Non-editable heads must collect remaining balance as-is.
-                payAmount = balance;
+                return BadRequest($"Amount for '{head.Name}' must be greater than zero.");
             }
-            else if (payAmount > balance)
+
+            if (payAmount > balance)
             {
-                return BadRequest($"Amount for '{head.FeeHeadName}' exceeds pending balance.");
+                return BadRequest($"Amount for '{head.Name}' exceeds pending balance ({balance:0.##}).");
             }
 
             paymentLines.Add(new FeePaymentLineEntity
             {
-                FeeHeadId = head.FeeHeadId,
-                FeeHeadName = head.FeeHeadName,
+                FeeHeadId = line.FeeHeadId,
+                FeeHeadName = head.Name,
                 DueAmount = due,
                 PaidAmount = payAmount,
-                IsMandatory = head.IsMandatory,
-                IsEditable = head.IsEditable,
+                IsMandatory = head.Mandatory,
+                IsEditable = head.Editable,
             });
         }
 

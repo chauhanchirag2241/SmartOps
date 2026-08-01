@@ -13,29 +13,22 @@ namespace SmartOps.Api.Modules.Teacher.Controllers;
 public sealed class ClassSubjectTeacherMappingsController(
     IClassSubjectTeacherMappingService mappingService) : ControllerBase
 {
-    [HttpGet("lookups")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.View)]
-    [ProducesResponseType(typeof(MappingLookupsResponseDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<MappingLookupsResponseDto>> GetLookups(
+    [HttpGet("by-employee/{employeeId:guid}")]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
+    [ProducesResponseType(typeof(IReadOnlyList<ClassSubjectTeacherMappingDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ClassSubjectTeacherMappingDto>>> GetByEmployee(
+        Guid employeeId,
         [FromQuery] Guid? academicYearId,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            MappingLookupsResponseDto result = await mappingService
-                .GetLookupsAsync(academicYearId, cancellationToken)
-                .ConfigureAwait(false);
-
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        IReadOnlyList<ClassSubjectTeacherMappingDto> rows = await mappingService
+            .GetByEmployeeAsync(employeeId, academicYearId, cancellationToken)
+            .ConfigureAwait(false);
+        return Ok(rows);
     }
 
     [HttpGet("by-class/{classId:guid}")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.View)]
+    [Authorize(Policy = MenuPolicies.Teachers.View)]
     [ProducesResponseType(typeof(IReadOnlyList<ClassSubjectTeacherMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ClassSubjectTeacherMappingDto>>> GetByClass(
         Guid classId,
@@ -43,105 +36,122 @@ public sealed class ClassSubjectTeacherMappingsController(
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ClassSubjectTeacherMappingDto> rows = await mappingService
-            .GetByClassIdAsync(classId, academicYearId, cancellationToken)
+            .GetByClassAsync(classId, academicYearId, cancellationToken)
             .ConfigureAwait(false);
-
         return Ok(rows);
     }
 
     [HttpPost]
-    [Authorize(Policy = MenuPolicies.ClassMappings.Edit)]
-    [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status201Created)]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
+    [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<ClassSubjectTeacherMappingDto>> Create(
         [FromBody] CreateClassSubjectTeacherMappingDto request,
         CancellationToken cancellationToken)
     {
+        if (request is null)
+        {
+            return BadRequest("Mapping data is required.");
+        }
+
         try
         {
             ClassSubjectTeacherMappingDto created = await mappingService
                 .AddMappingAsync(request, cancellationToken)
                 .ConfigureAwait(false);
-
-            return CreatedAtAction(nameof(GetByClass), new { classId = created.ClassId }, created);
+            return Ok(created);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("bulk")]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
+    [ProducesResponseType(typeof(BulkCreateClassSubjectTeacherMappingsResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<BulkCreateClassSubjectTeacherMappingsResultDto>> BulkCreate(
+        [FromBody] BulkCreateClassSubjectTeacherMappingsRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest("Mapping data is required.");
+        }
+
+        try
+        {
+            BulkCreateClassSubjectTeacherMappingsResultDto result = await mappingService
+                .BulkAddMappingsAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
         }
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.Edit)]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
     [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<ClassSubjectTeacherMappingDto>> Update(
         Guid id,
         [FromBody] UpdateClassSubjectTeacherMappingDto request,
         CancellationToken cancellationToken)
     {
+        if (request is null)
+        {
+            return BadRequest("Mapping data is required.");
+        }
+
         try
         {
             ClassSubjectTeacherMappingDto updated = await mappingService
                 .UpdateMappingAsync(id, request, cancellationToken)
                 .ConfigureAwait(false);
-
             return Ok(updated);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message);
         }
     }
 
-    [HttpPatch("{id:guid}/class-teacher")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.Edit)]
+    [HttpPut("{id:guid}/class-teacher")]
+    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
     [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<ClassSubjectTeacherMappingDto>> SetClassTeacher(
         Guid id,
-        [FromBody] SetClassTeacherRequestDto request,
+        [FromBody] SetClassTeacherRequestDto? request,
         CancellationToken cancellationToken)
     {
         try
         {
+            bool isClassTeacher = request?.IsClassTeacher ?? true;
             ClassSubjectTeacherMappingDto updated = await mappingService
-                .SetClassTeacherAsync(id, request.IsClassTeacher, cancellationToken)
+                .SetClassTeacherAsync(id, isClassTeacher, cancellationToken)
                 .ConfigureAwait(false);
-
             return Ok(updated);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    [HttpPatch("{id:guid}/assign-teacher")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.Edit)]
-    [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ClassSubjectTeacherMappingDto>> AssignTeacherLater(
-        Guid id,
-        [FromBody] AssignTeacherLaterRequestDto request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            ClassSubjectTeacherMappingDto updated = await mappingService
-                .AssignTeacherLaterAsync(id, request, cancellationToken)
-                .ConfigureAwait(false);
-
-            return Ok(updated);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(ex.Message);
         }
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.ClassMappings.Edit)]
+    [Authorize(Policy = MenuPolicies.Teachers.Delete)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        await mappingService.RemoveMappingAsync(id, cancellationToken).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await mappingService.DeleteMappingAsync(id, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }

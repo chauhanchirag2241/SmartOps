@@ -108,7 +108,8 @@ public sealed class BranchContext : IBranchContext
     private bool IsPlatformAdmin()
     {
         ClaimsPrincipal? user = _httpContextAccessor.HttpContext?.User;
-        return user?.IsInRole(RoleNames.Admin) == true;
+        return user?.IsInRole(RoleNames.SmartOpsAdmin) == true
+            || user?.IsInRole(RoleNames.SchoolAdmin) == true;
     }
 
     private Guid? ResolveActiveBranchId()

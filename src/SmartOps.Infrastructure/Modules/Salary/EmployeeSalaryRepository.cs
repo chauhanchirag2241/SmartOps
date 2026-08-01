@@ -43,7 +43,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
                    es.id AS EmployeeSalaryId,
-                   es.salarystructureversionid AS SalaryStructureVersionId
+                   es.salarystructureid AS SalaryStructureVersionId
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
             INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
@@ -71,7 +71,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, employeeid AS EmployeeId, salarystructureversionid AS SalaryStructureVersionId,
+            SELECT id AS Id, employeeid AS EmployeeId, salarystructureid AS SalaryStructureVersionId,
                    effectivedate AS EffectiveDate,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
@@ -98,7 +98,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
                    t.bankaccountnumber AS BankAccountNumber,
                    t.bankifsccode AS BankIfscCode,
                    es.id AS EmployeeSalaryId,
-                   es.salarystructureversionid AS SalaryStructureVersionId,
+                   es.salarystructureid AS SalaryStructureVersionId,
                    es.effectivedate AS EffectiveDate
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
             INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = t.userid
@@ -135,7 +135,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableEmployeeSalaries}
-                (id, employeeid, salarystructureversionid, effectivedate,
+                (id, employeeid, salarystructureid, effectivedate,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
                 (@Id, @EmployeeId, @SalaryStructureVersionId, @EffectiveDate,
@@ -151,7 +151,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeSalaries}
-            SET salarystructureversionid = @SalaryStructureVersionId,
+            SET salarystructureid = @SalaryStructureVersionId,
                 effectivedate = @EffectiveDate,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
@@ -225,7 +225,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT id AS Id, employeeid AS EmployeeId, salarystructureversionid AS SalaryStructureVersionId,
+            SELECT id AS Id, employeeid AS EmployeeId, salarystructureid AS SalaryStructureVersionId,
                    effectivedate AS EffectiveDate,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,

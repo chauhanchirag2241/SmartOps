@@ -68,6 +68,7 @@ public static class DatabaseConfig
     public const string TableEmployees = "employees";
     public const string TableDepartments = "departments";
     public const string TableClassSubjectTeacherMappings = "classsubjectteachermappings";
+    public const string TableClassSettings = "classsettings";
     public const string TableHodDepartmentAssignments = "hoddepartmentassignments";
     public const string TableParentStudentMappings = "parentstudentmappings";
     public const string TableStaffScopeAssignments = "staffscopeassignments";
@@ -80,7 +81,7 @@ public static class DatabaseConfig
     public const string TableHomeworkDetails = "homeworkdetails";
 
     // Salary Module
-    public const string TableSalaryStructureVersions = "salarystructureversions";
+    public const string TableSalaryStructure = "salarystructure";
     public const string TableSalaryVersionComponents = "salaryversioncomponents";
     public const string TableEmployeeSalaries = "employeesalaries";
     public const string TableEmployeeSalaryComponents = "employeesalarycomponents";

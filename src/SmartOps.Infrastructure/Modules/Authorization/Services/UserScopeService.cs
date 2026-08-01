@@ -173,12 +173,15 @@ public sealed class UserScopeService : IUserScopeService
         CancellationToken cancellationToken)
     {
         string sql = $"""
-SELECT DISTINCT m.classid
-FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+SELECT DISTINCT ct.classid
+FROM {schema}.{DatabaseConfig.TableClassTimetables} ct
+INNER JOIN {schema}.{DatabaseConfig.TableClassTimetableSlots} s ON s.timetableid = ct.id
+INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = s.employeeid
 WHERE t.departmentid = ANY(@DepartmentIds)
-  AND m.isactive = true
+  AND ct.isactive = true
+  AND s.isactive = true
   AND t.isactive = true
+  AND s.employeeid IS NOT NULL
 """;
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<Guid> rows = await connection.QueryAsync<Guid>(

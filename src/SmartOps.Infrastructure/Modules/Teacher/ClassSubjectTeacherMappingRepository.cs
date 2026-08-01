@@ -65,7 +65,7 @@ public sealed class ClassSubjectTeacherMappingRepository : BaseRepository, IClas
     {
         string sql = $"""
 SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
-       academicyearid AS AcademicYearId, isclassteacher AS IsClassTeacher,
+       academicyearid AS AcademicYearId,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
@@ -86,7 +86,7 @@ LIMIT 1
     {
         string sql = $"""
 SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
-       academicyearid AS AcademicYearId, isclassteacher AS IsClassTeacher,
+       academicyearid AS AcademicYearId,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
@@ -165,10 +165,10 @@ SELECT EXISTS (
 
         string sql = $"""
 INSERT INTO {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-    (id, classid, subjectid, employeeid, academicyearid, isclassteacher,
+    (id, classid, subjectid, employeeid, academicyearid,
      isactive, versionno, createdby, createdon, updatedby, updatedon)
 VALUES
-    (@Id, @ClassId, @SubjectId, @EmployeeId, @AcademicYearId, @IsClassTeacher,
+    (@Id, @ClassId, @SubjectId, @EmployeeId, @AcademicYearId,
      true, 1, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn)
 RETURNING id
 """;
@@ -186,8 +186,8 @@ RETURNING id
 
         string sql = $"""
 UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-SET employeeid = @EmployeeId,
-    isclassteacher = @IsClassTeacher,
+SET subjectid = @SubjectId,
+    employeeid = @EmployeeId,
     isactive = @IsActive,
     updatedby = @UpdatedBy,
     updatedon = @UpdatedOn,
@@ -207,53 +207,6 @@ WHERE id = @Id
         return affected;
     }
 
-    public async Task<bool> SetClassTeacherFlagAsync(
-        Guid mappingId,
-        Guid classId,
-        Guid academicYearId,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default)
-    {
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        if (isClassTeacher)
-        {
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-SET isclassteacher = false, updatedon = NOW(), versionno = versionno + 1
-WHERE classid = @ClassId AND academicyearid = @AcademicYearId AND isactive = true
-""",
-                    new { ClassId = classId, AcademicYearId = academicYearId },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        Guid actorId = ResolveUpdateActor();
-        DateTime utcNow = DateTime.UtcNow;
-
-        int affected = await connection.ExecuteAsync(
-            new CommandDefinition(
-                $"""
-UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-SET isclassteacher = @IsClassTeacher,
-    updatedby = @UpdatedBy,
-    updatedon = @UpdatedOn,
-    versionno = versionno + 1
-WHERE id = @MappingId AND isactive = true
-""",
-                new
-                {
-                    MappingId = mappingId,
-                    IsClassTeacher = isClassTeacher,
-                    UpdatedBy = actorId,
-                    UpdatedOn = utcNow,
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        return affected > 0;
-    }
-
     public async Task SoftDeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -265,20 +218,6 @@ SET isactive = false, updatedon = NOW(), versionno = versionno + 1
 WHERE id = @Id
 """,
                 new { Id = id },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    public async Task ClearClassTeacherFlagAsync(Guid classId, Guid academicYearId, CancellationToken cancellationToken = default)
-    {
-        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                $"""
-UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-SET isclassteacher = false, updatedon = NOW(), versionno = versionno + 1
-WHERE classid = @ClassId AND academicyearid = @AcademicYearId AND isactive = true
-""",
-                new { ClassId = classId, AcademicYearId = academicYearId },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
@@ -385,7 +324,10 @@ SELECT
     {SectionLabelSql} AS Section,
     COUNT(m.id) FILTER (WHERE m.isactive = true) AS SubjectCount,
     COUNT(m.id) FILTER (WHERE m.isactive = true AND m.employeeid IS NOT NULL) AS EmployeesAssignedCount,
-    COUNT(m.id) FILTER (WHERE m.isactive = true AND m.isclassteacher = true) AS ClassTeacherCount
+    CASE WHEN EXISTS (
+        SELECT 1 FROM {Schema}.{DatabaseConfig.TableClassSettings} cs
+        WHERE cs.sectionid = c.id AND cs.isactive = true AND cs.teacherid IS NOT NULL
+    ) THEN 1 ELSE 0 END AS ClassTeacherCount
 FROM {Schema}.{DatabaseConfig.TableClasses} c
 INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
@@ -415,20 +357,23 @@ ORDER BY cg.classname, c.section
 SELECT
     m.id AS Id,
     m.classid AS ClassId,
-    cg.classname AS ClassName,
+    trim(cg.classname || COALESCE(' - ' || NULLIF(trim(c.section), ''), '')) AS ClassName,
     m.subjectid AS SubjectId,
     s.subjectname AS SubjectName,
     s.subjectcode AS SubjectCode,
-    m.employeeid AS employeeid,
+    m.employeeid AS EmployeeId,
     CASE WHEN m.employeeid IS NULL THEN NULL ELSE trim(tu.firstname || ' ' || tu.lastname) END AS EmployeeName,
     m.academicyearid AS AcademicYearId,
-    m.isclassteacher AS IsClassTeacher
+    CASE WHEN cs.teacherid IS NOT NULL AND cs.teacherid = m.employeeid THEN true ELSE false END AS IsClassTeacher,
+    m.isactive AS IsActive
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = m.classid
 INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = m.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 LEFT JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
+LEFT JOIN {Schema}.{DatabaseConfig.TableClassSettings} cs
+    ON cs.sectionid = m.classid AND cs.isactive = true
 WHERE {whereClause}
 ORDER BY s.subjectname
 """;

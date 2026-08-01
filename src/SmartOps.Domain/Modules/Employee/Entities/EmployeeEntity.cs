@@ -29,8 +29,6 @@ public class EmployeeEntity : AuditableEntity
     public DateOnly JoiningDate { get; set; }
     public string? Designation { get; set; }
     public int Experience { get; set; }
-    public string? SalaryGrade { get; set; }
-    public string EmploymentType { get; set; } = "Full-time";
     public string? Qualifications { get; set; }
     public string? BankAccountNumber { get; set; }
     public string? BankIfscCode { get; set; }

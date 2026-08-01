@@ -33,8 +33,6 @@ public sealed class SchoolEntity : AuditableEntity
 
     public string Country { get; set; } = "India";
 
-    public string? Timezone { get; set; }
-
     public string? GoogleMapsLink { get; set; }
 
     public decimal? Latitude { get; set; }
@@ -44,8 +42,6 @@ public sealed class SchoolEntity : AuditableEntity
     public string? PrimaryPhone { get; set; }
 
     public string? AlternatePhone { get; set; }
-
-    public string? Fax { get; set; }
 
     public string? PrimaryEmail { get; set; }
 

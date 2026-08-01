@@ -63,13 +63,13 @@ WHERE isactive = true
   AND lower(trim(name)) = lower(trim(@RoleName))
 LIMIT 1;
 """,
-                new { RoleName = RoleNames.Admin },
+                new { RoleName = RoleNames.SchoolAdmin },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         if (roleId is null || roleId == Guid.Empty)
         {
             _logger.LogWarning(
-                "Skipped default admin for school {SchoolId}: Admin role was not found.",
+                "Skipped default admin for school {SchoolId}: School Admin role was not found.",
                 school.Id);
             return;
         }
@@ -80,36 +80,40 @@ LIMIT 1;
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid userId;
 
-        if (userExists)
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            userId = await connection.ExecuteScalarAsync<Guid>(
-                new CommandDefinition(
-                    $"""
+            if (userExists)
+            {
+                userId = await connection.ExecuteScalarAsync<Guid>(
+                    new CommandDefinition(
+                        $"""
 SELECT id FROM {man}.{DatabaseConfig.TableUsers}
 WHERE lower(trim(email)) = lower(trim(@Email))
    OR lower(trim(username)) = lower(trim(@Username))
 LIMIT 1;
 """,
-                    new { Email = DefaultEmail, Username = DefaultUsername },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+                        new { Email = DefaultEmail, Username = DefaultUsername },
+                        transaction: transaction,
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-            _logger.LogInformation(
-                "Default admin user already exists for school {SchoolId}; ensuring role mapping.",
-                school.Id);
-        }
-        else
-        {
-            var tempUser = new ApplicationUser
+                _logger.LogInformation(
+                    "Default admin user already exists for school {SchoolId}; ensuring role mapping.",
+                    school.Id);
+            }
+            else
             {
-                Email = DefaultEmail,
-                Username = DefaultUsername
-            };
-            string passwordHash = _passwordHasher.HashPassword(tempUser, DefaultPassword);
-            userId = Guid.NewGuid();
+                var tempUser = new ApplicationUser
+                {
+                    Email = DefaultEmail,
+                    Username = DefaultUsername
+                };
+                string passwordHash = _passwordHasher.HashPassword(tempUser, DefaultPassword);
+                userId = Guid.NewGuid();
 
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        $"""
 INSERT INTO {man}.{DatabaseConfig.TableUsers}
 (
     id, firstname, lastname, mobile, usertypeid, username, email, passwordhash, securitystamp,
@@ -123,28 +127,38 @@ VALUES
     true, 1, @Actor, @Now, @Actor, @Now
 );
 """,
-                    new
-                    {
-                        Id = userId,
-                        FirstName = "School",
-                        LastName = "Admin",
-                        UserTypeId = userTypeId,
-                        Username = DefaultUsername,
-                        Email = DefaultEmail,
-                        PasswordHash = passwordHash,
-                        SecurityStamp = Guid.NewGuid().ToString("N"),
-                        Actor = SystemActor,
-                        Now = now
-                    },
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+                        new
+                        {
+                            Id = userId,
+                            FirstName = "School",
+                            LastName = "Admin",
+                            UserTypeId = userTypeId,
+                            Username = DefaultUsername,
+                            Email = DefaultEmail,
+                            PasswordHash = passwordHash,
+                            SecurityStamp = Guid.NewGuid().ToString("N"),
+                            Actor = SystemActor,
+                            Now = now
+                        },
+                        transaction: transaction,
+                        cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-            _logger.LogInformation(
-                "Created default admin user for school {SchoolId} ({Subdomain}).",
-                school.Id,
-                school.Subdomain);
+                _logger.LogInformation(
+                    "Created default admin user for school {SchoolId} ({Subdomain}).",
+                    school.Id,
+                    school.Subdomain);
+            }
+
+            await EnsureUserRoleAsync(connection, transaction, man, userId, roleId.Value, now, cancellationToken)
+                .ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        await EnsureUserRoleAsync(connection, man, userId, roleId.Value, now, cancellationToken).ConfigureAwait(false);
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private async Task<NpgsqlConnection> OpenSchoolIdentityConnectionAsync(
@@ -165,6 +179,7 @@ VALUES
 
     private static async Task EnsureUserRoleAsync(
         IDbConnection connection,
+        IDbTransaction transaction,
         string schema,
         Guid userId,
         Guid roleId,
@@ -183,6 +198,7 @@ WHERE NOT EXISTS (
 );
 """,
                 new { UserId = userId, RoleId = roleId, Actor = SystemActor, Now = now },
+                transaction: transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 }

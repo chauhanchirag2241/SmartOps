@@ -14,13 +14,13 @@ public sealed class G028_SeedExamMenus : Migration
     private static readonly (Guid Id, string Name, string Code, Guid? ParentId, string? Route, string Icon, int Order)[] Menus =
     [
         (ExamManagementParentId, "Exam Management", MenuCodes.ExamManagement, null, null, "history_edu", 25),
-        (Guid.Parse("10000000-0000-0000-0000-000000000061"), "Exam Groups", MenuCodes.ExamGroups, ExamManagementParentId, "/exams/groups", "folder_special", 61),
-        (Guid.Parse("10000000-0000-0000-0000-000000000062"), "Exams", MenuCodes.Exams, ExamManagementParentId, "/exams/list", "event_note", 62),
-        (Guid.Parse("10000000-0000-0000-0000-000000000063"), "Exam Schedule", MenuCodes.ExamSchedule, ExamManagementParentId, "/exams/schedule", "calendar_month", 63),
-        (Guid.Parse("10000000-0000-0000-0000-000000000064"), "Marks Entry", MenuCodes.ExamMarksEntry, ExamManagementParentId, "/exams/marks-entry", "edit_note", 64),
-        (Guid.Parse("10000000-0000-0000-0000-000000000065"), "Results", MenuCodes.ExamResults, ExamManagementParentId, "/exams/results", "bar_chart", 65),
-        (Guid.Parse("10000000-0000-0000-0000-000000000066"), "Hall Tickets", MenuCodes.ExamHallTickets, ExamManagementParentId, "/exams/hall-tickets", "confirmation_number", 66),
-        (Guid.Parse("10000000-0000-0000-0000-000000000067"), "Grade Setup", MenuCodes.ExamGradeSetup, ExamManagementParentId, "/exams/grade-setup", "grade", 67),
+        (Guid.Parse("10000000-0000-0000-0000-000000000067"), "Grade Setup", MenuCodes.ExamGradeSetup, ExamManagementParentId, "/exams/grade-setup", "grade", 61),
+        (Guid.Parse("10000000-0000-0000-0000-000000000061"), "Exam Groups", MenuCodes.ExamGroups, ExamManagementParentId, "/exams/groups", "folder_special", 62),
+        (Guid.Parse("10000000-0000-0000-0000-000000000062"), "Exams", MenuCodes.Exams, ExamManagementParentId, "/exams/list", "event_note", 63),
+        (Guid.Parse("10000000-0000-0000-0000-000000000063"), "Exam Schedule", MenuCodes.ExamSchedule, ExamManagementParentId, "/exams/schedule", "calendar_month", 64),
+        (Guid.Parse("10000000-0000-0000-0000-000000000066"), "Hall Tickets", MenuCodes.ExamHallTickets, ExamManagementParentId, "/exams/hall-tickets", "confirmation_number", 65),
+        (Guid.Parse("10000000-0000-0000-0000-000000000064"), "Marks Entry", MenuCodes.ExamMarksEntry, ExamManagementParentId, "/exams/marks-entry", "edit_note", 66),
+        (Guid.Parse("10000000-0000-0000-0000-000000000065"), "Results", MenuCodes.ExamResults, ExamManagementParentId, "/exams/results", "bar_chart", 67),
     ];
 
     public override void Up()
@@ -49,7 +49,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{DateTimeOffset.UtcNow:O}', '{SeedActor}', '{DateTimeOffset.UtcNow:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.code IN ('{menuCodes}')
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.SmartOpsAdmin}')) AND m.code IN ('{menuCodes}')
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id

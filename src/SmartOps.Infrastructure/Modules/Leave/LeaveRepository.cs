@@ -321,11 +321,11 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT t.userid FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid AND t.isactive = true
-            WHERE m.classid = @ClassId AND m.isclassteacher = true AND m.isactive = true
+            SELECT t.userid FROM {Schema}.{DatabaseConfig.TableClassSettings} s
+            INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = s.teacherid AND t.isactive = true
+            WHERE s.sectionid = @ClassId AND s.isactive = true AND s.teacherid IS NOT NULL
               AND t.userid IS NOT NULL
-            ORDER BY m.createdon DESC LIMIT 1;
+            LIMIT 1;
             """;
         return await connection.ExecuteScalarAsync<Guid?>(new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: ct))
             .ConfigureAwait(false);

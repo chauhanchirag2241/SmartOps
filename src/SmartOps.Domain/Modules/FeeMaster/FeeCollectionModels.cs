@@ -51,8 +51,19 @@ public sealed class FeeCollectionHistoryLineModel
     public string FeeHeadName { get; set; } = string.Empty;
     public decimal DueAmount { get; set; }
     public decimal PaidAmount { get; set; }
+    /// <summary>Remaining on this fee head after this payment (chronological).</summary>
+    public decimal BalanceAfter { get; set; }
     public bool IsMandatory { get; set; }
     public bool IsEditable { get; set; }
+}
+
+public sealed class FeeCollectionStudentSummaryModel
+{
+    public Guid StudentId { get; set; }
+    public decimal TotalDue { get; set; }
+    public decimal TotalPaid { get; set; }
+    public decimal TotalPending { get; set; }
+    public string Status { get; set; } = "Pending";
 }
 
 public sealed class FeeCollectionHistoryPaymentModel
@@ -61,9 +72,25 @@ public sealed class FeeCollectionHistoryPaymentModel
     public DateTimeOffset PaymentDate { get; set; }
     public decimal TotalAmount { get; set; }
     public string PaymentMethod { get; set; } = "Cash";
+    public Guid? AcademicPeriodId { get; set; }
+    public string? PeriodLabel { get; set; }
     public string? CollectedBy { get; set; }
     public string? Remarks { get; set; }
     public IReadOnlyList<FeeCollectionHistoryLineModel> Lines { get; set; } = [];
+}
+
+/// <summary>One fee-head due row within a period for collection.</summary>
+public sealed class FeeCollectionPeriodHeadDue
+{
+    public Guid FeeHeadId { get; set; }
+    public string FeeHeadName { get; set; } = string.Empty;
+    public bool IsMandatory { get; set; }
+    public bool IsEditable { get; set; }
+    public Guid AcademicPeriodId { get; set; }
+    public string PeriodLabel { get; set; } = string.Empty;
+    public int PeriodIndex { get; set; }
+    public decimal DueAmount { get; set; }
+    public bool IsExcluded { get; set; }
 }
 
 public sealed class FeeCollectionHistoryRowModel

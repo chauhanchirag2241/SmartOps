@@ -7,7 +7,10 @@ namespace SmartOps.Domain.Modules.Class.Entities;
 public class ClassGroupEntity : AuditableEntity
 {
     public Guid Id { get; set; }
+
+    [TrackHistoryIgnore]
     public Guid BranchId { get; set; }
+
     public string ClassName { get; set; } = null!;
     public string? Description { get; set; }
 }

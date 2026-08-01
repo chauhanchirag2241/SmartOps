@@ -132,7 +132,7 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
             
             var records = attendanceLookup.GetValueOrDefault(studentId, new List<AttendanceRecordDto>());
 
-            int present = 0, absent = 0, leave = 0, late = 0;
+            int present = 0, absent = 0, late = 0;
             var dailyStatus = new Dictionary<int, string>();
 
             foreach (var record in records)
@@ -141,8 +141,7 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
                 string status = record.Status switch {
                     1 => "P",
                     2 => "A",
-                    3 => "L",
-                    4 => "late",
+                    3 => "late",
                     _ => ""
                 };
                 dailyStatus[date.Day] = status;
@@ -151,8 +150,7 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
                 {
                     case 1: present++; break;
                     case 2: absent++; break;
-                    case 3: leave++; break;
-                    case 4: late++; break;
+                    case 3: late++; break;
                 }
             }
 
@@ -193,7 +191,6 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
                 AvatarInitials: initials,
                 TotalPresent: present,
                 TotalAbsent: absent,
-                TotalLeave: leave,
                 TotalLate: late,
                 AttendancePercentage: percentage,
                 DailyStatus: dailyStatus

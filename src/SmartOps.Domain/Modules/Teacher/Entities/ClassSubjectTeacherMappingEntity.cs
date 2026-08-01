@@ -13,6 +13,4 @@ public sealed class ClassSubjectTeacherMappingEntity : AuditableEntity
     public Guid? EmployeeId { get; set; }
 
     public Guid AcademicYearId { get; set; }
-
-    public bool IsClassTeacher { get; set; }
 }

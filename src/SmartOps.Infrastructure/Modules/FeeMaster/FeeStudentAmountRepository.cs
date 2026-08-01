@@ -125,11 +125,17 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                             ELSE COALESCE(
                                 h.amount,
                                 (
-                                    SELECT SUM(pa.amount)
+                                    SELECT SUM(COALESCE(fsa_p.amount, pa.amount))
                                     FROM {schema}.{DatabaseConfig.TableFeeHeadPeriodAmount} pa
+                                    LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa_p
+                                        ON fsa_p.feeheadid = h.id
+                                       AND fsa_p.studentid = s.id
+                                       AND fsa_p.academicperiodid = pa.academicperiodid
+                                       AND fsa_p.isactive = true
                                     WHERE pa.feeheadid = h.id
                                       AND pa.isactive = true
                                       AND pa.classgroupid = c.classgroupid
+                                      AND COALESCE(fsa_p.isexcluded, false) = false
                                 ),
                                 0
                             )
@@ -139,13 +145,16 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                     LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa
                         ON fsa.feeheadid = h.id
                        AND fsa.studentid = s.id
+                       AND fsa.academicperiodid IS NULL
                        AND fsa.isactive = true
                     WHERE h.feemasterid = @FeeMasterId AND h.isactive = true
                 ) AS AmountSummary,
-                EXISTS (
+                {(isStudentWise
+                    ? "true"
+                    : $@"EXISTS (
                     SELECT 1 FROM {schema}.{DatabaseConfig.TableFeeHead} h2
                     WHERE h2.feemasterid = @FeeMasterId AND h2.isactive = true AND h2.iseditable = true
-                ) AS CanEdit,
+                )")} AS CanEdit,
                 {(isStudentWise
                     ? "true"
                     : $@"EXISTS (
@@ -216,6 +225,97 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
             return null;
         }
 
+        var feeType = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(
+                $"""
+                SELECT feetype FROM {schema}.{DatabaseConfig.TableFeeMaster}
+                WHERE id = @FeeMasterId;
+                """,
+                new { FeeMasterId = feeMasterId },
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        var isPeriodWise = string.Equals(
+            feeType?.Replace(" ", string.Empty),
+            "PeriodWise",
+            StringComparison.OrdinalIgnoreCase);
+
+        var param = new
+        {
+            FeeMasterId = feeMasterId,
+            StudentId = studentId,
+            ScopeAcademicYearId = _scope.ActiveAcademicYearId,
+        };
+
+        if (isPeriodWise)
+        {
+            var periodSql = $"""
+                SELECT
+                    h.id AS FeeHeadId,
+                    h.feeheadname AS FeeHeadName,
+                    h.ismandatory AS IsMandatory,
+                    h.iseditable AS IsEditable,
+                    pa.academicperiodid AS AcademicPeriodId,
+                    ap.name AS PeriodLabel,
+                    ap.periodindex AS PeriodIndex,
+                    pa.amount AS DefaultAmount,
+                    fsa.amount AS Amount,
+                    COALESCE(fsa.isexcluded, false) AS IsExcluded,
+                    (fsa.id IS NOT NULL) AS HasOverride
+                FROM {schema}.{DatabaseConfig.TableFeeHead} h
+                INNER JOIN {schema}.{DatabaseConfig.TableFeeHeadPeriodAmount} pa
+                    ON pa.feeheadid = h.id AND pa.isactive = true
+                INNER JOIN {schema}.{DatabaseConfig.TableClassAcademicPeriods} ap
+                    ON ap.id = pa.academicperiodid AND ap.isactive = true
+                LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa
+                    ON fsa.feeheadid = h.id
+                   AND fsa.studentid = @StudentId
+                   AND fsa.academicperiodid = pa.academicperiodid
+                   AND fsa.isactive = true
+                WHERE h.feemasterid = @FeeMasterId
+                  AND h.isactive = true
+                  AND pa.classgroupid = (
+                        SELECT c.classgroupid
+                        FROM {schema}.{DatabaseConfig.TableStudentAcademics} sa
+                        INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
+                        WHERE sa.studentid = @StudentId
+                          AND {AcademicYearScopeSql.StudentAcademicEnrollmentVisibilityClause("sa")}
+                        ORDER BY sa.isactive DESC, sa.createdon DESC
+                        LIMIT 1
+                  )
+                ORDER BY ap.periodindex ASC, h.feeheadname ASC;
+                """;
+
+            var periodHeads = (await connection.QueryAsync<FeeStudentHeadAmountModel>(
+                new CommandDefinition(periodSql, param, cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
+            ApplyEffectiveAmounts(periodHeads);
+
+            var periods = periodHeads
+                .Where(h => h.AcademicPeriodId.HasValue)
+                .GroupBy(h => new { Id = h.AcademicPeriodId!.Value, Label = h.PeriodLabel ?? "", Index = h.PeriodIndex ?? 0 })
+                .OrderBy(g => g.Key.Index)
+                .ThenBy(g => g.Key.Label)
+                .Select(g => new FeeStudentPeriodGroupModel
+                {
+                    AcademicPeriodId = g.Key.Id,
+                    PeriodLabel = g.Key.Label,
+                    PeriodIndex = g.Key.Index,
+                    Heads = g.ToList(),
+                })
+                .ToList();
+
+            return new FeeStudentDetailModel
+            {
+                StudentId = studentId,
+                StudentName = name,
+                IsPeriodWise = true,
+                Heads = periodHeads,
+                Periods = periods,
+            };
+        }
+
         var headsSql = $"""
             SELECT
                 h.id AS FeeHeadId,
@@ -247,28 +347,34 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
             LEFT JOIN {schema}.{DatabaseConfig.TableFeeStudentAmount} fsa
                 ON fsa.feeheadid = h.id
                AND fsa.studentid = @StudentId
+               AND fsa.academicperiodid IS NULL
                AND fsa.isactive = true
             WHERE h.feemasterid = @FeeMasterId AND h.isactive = true
             ORDER BY h.feeheadname ASC;
             """;
 
         var heads = (await connection.QueryAsync<FeeStudentHeadAmountModel>(
-            new CommandDefinition(
-                headsSql,
-                new
-                {
-                    FeeMasterId = feeMasterId,
-                    StudentId = studentId,
-                    ScopeAcademicYearId = _scope.ActiveAcademicYearId,
-                },
-                cancellationToken: cancellationToken))
+            new CommandDefinition(headsSql, param, cancellationToken: cancellationToken))
             .ConfigureAwait(false)).ToList();
 
+        ApplyEffectiveAmounts(heads);
+
+        return new FeeStudentDetailModel
+        {
+            StudentId = studentId,
+            StudentName = name,
+            IsPeriodWise = false,
+            Heads = heads,
+            Periods = [],
+        };
+    }
+
+    private static void ApplyEffectiveAmounts(List<FeeStudentHeadAmountModel> heads)
+    {
         foreach (var head in heads)
         {
             if (!head.HasOverride || head.IsExcluded)
             {
-                // Effective display amount for UI: excluded → null; else override or default
                 if (head.IsExcluded)
                 {
                     head.Amount = null;
@@ -279,13 +385,6 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                 }
             }
         }
-
-        return new FeeStudentDetailModel
-        {
-            StudentId = studentId,
-            StudentName = name,
-            Heads = heads,
-        };
     }
 
     public async Task UpsertOverridesAsync(
@@ -315,10 +414,21 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                     new CommandDefinition(
                         $"""
                         SELECT id FROM {schema}.{DatabaseConfig.TableFeeStudentAmount}
-                        WHERE feeheadid = @FeeHeadId AND studentid = @StudentId AND isactive = true
+                        WHERE feeheadid = @FeeHeadId
+                          AND studentid = @StudentId
+                          AND isactive = true
+                          AND (
+                                (@AcademicPeriodId IS NULL AND academicperiodid IS NULL)
+                                OR academicperiodid = @AcademicPeriodId
+                              )
                         LIMIT 1;
                         """,
-                        new { row.FeeHeadId, StudentId = studentId },
+                        new
+                        {
+                            row.FeeHeadId,
+                            StudentId = studentId,
+                            AcademicPeriodId = row.AcademicPeriodId,
+                        },
                         transaction: tx,
                         cancellationToken: cancellationToken))
                     .ConfigureAwait(false);

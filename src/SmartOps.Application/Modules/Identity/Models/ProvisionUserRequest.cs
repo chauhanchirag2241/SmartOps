@@ -5,7 +5,7 @@ public sealed class ProvisionUserRequest
 {
     public required Guid SchoolId { get; init; }
 
-    /// <summary>Optional portal role; when omitted, no role is assigned (Admin is the only seeded role).</summary>
+    /// <summary>Optional portal role; when omitted, role is inferred from <see cref="UserTypeCode"/>.</summary>
     public string? RoleName { get; init; }
 
     public required string UserTypeCode { get; init; }

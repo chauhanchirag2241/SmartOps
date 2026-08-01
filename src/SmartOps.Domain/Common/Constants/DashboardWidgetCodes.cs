@@ -8,7 +8,6 @@ public static class DashboardWidgetCodes
     public const string StudentsStat = "STUDENTS_STAT";
     public const string EmployeesStat = "EMPLOYEES_STAT";
     public const string ClassesStat = "CLASSES_STAT";
-    public const string SubjectsStat = "SUBJECTS_STAT";
     public const string SalaryDisbursed = "SALARY_DISBURSED";
     public const string AttendanceRate = "ATTENDANCE_RATE";
     public const string AttendanceDetail = "ATTENDANCE_DETAIL";
@@ -30,7 +29,6 @@ public static class DashboardWidgetCodes
         StudentsStat,
         EmployeesStat,
         ClassesStat,
-        SubjectsStat,
         SalaryDisbursed,
         AttendanceRate,
         AttendanceDetail,

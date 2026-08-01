@@ -11,6 +11,7 @@ public static class UserTypeCodes
     public const string Accountant = "Accountant";
     public const string NonAcademicStaff = "Non-academic staff";
     public const string OfficeStaff = "Office staff";
+    public const string FrontOfficeExecutive = "Front Office Executive";
 
     public static class Ids
     {
@@ -22,9 +23,10 @@ public static class UserTypeCodes
         public static readonly Guid Accountant = Guid.Parse("30000000-0000-0000-0000-000000000006");
         public static readonly Guid NonAcademicStaff = Guid.Parse("30000000-0000-0000-0000-000000000007");
         public static readonly Guid OfficeStaff = Guid.Parse("30000000-0000-0000-0000-000000000008");
+        public static readonly Guid FrontOfficeExecutive = Guid.Parse("30000000-0000-0000-0000-000000000009");
     }
 
-    /// <summary>Seed order: Admin, School Admin, Principal, then portal/staff types.</summary>
+    /// <summary>Seed order for <c>global.usertypes</c>.</summary>
     public static readonly (Guid Id, string Name)[] All =
     [
         (Ids.Admin, Admin),
@@ -35,6 +37,7 @@ public static class UserTypeCodes
         (Ids.Accountant, Accountant),
         (Ids.NonAcademicStaff, NonAcademicStaff),
         (Ids.OfficeStaff, OfficeStaff),
+        (Ids.FrontOfficeExecutive, FrontOfficeExecutive),
     ];
 
     public static readonly IReadOnlySet<string> GlobalScopeTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -43,6 +46,7 @@ public static class UserTypeCodes
         SchoolAdmin,
         Principal,
         OfficeStaff,
+        FrontOfficeExecutive,
     };
 
     public static bool IsStaff(string? name) =>
@@ -50,6 +54,7 @@ public static class UserTypeCodes
         || string.Equals(name, Accountant, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, NonAcademicStaff, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, OfficeStaff, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, FrontOfficeExecutive, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, Principal, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsGlobalScope(string? name) =>

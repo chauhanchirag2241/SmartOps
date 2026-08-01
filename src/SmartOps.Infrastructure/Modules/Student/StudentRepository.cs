@@ -2,6 +2,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Domain.Common.Models;
@@ -23,6 +24,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     private readonly IUserScopeContext _scope;
     private readonly IBranchContext _branchContext;
     private readonly IBranchScopedWriteHelper _branchWrite;
+    private readonly IUserProvisioningService _userProvisioning;
 
     private static readonly string[] RelatedTablesForSoftDelete =
     {
@@ -37,50 +39,52 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         ICurrentUserService currentUser,
         IUserScopeContext scope,
         IBranchContext branchContext,
-        IBranchScopedWriteHelper branchWrite)
+        IBranchScopedWriteHelper branchWrite,
+        IUserProvisioningService userProvisioning)
         : base(context, currentUser)
     {
         _branchWrite = branchWrite;
         _scope = scope;
         _branchContext = branchContext;
+        _userProvisioning = userProvisioning;
     }
 
     /// <inheritdoc />
-    public async Task<Guid> CreateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateStudentAsync(
+        StudentEntity student,
+        Guid schoolId,
+        CancellationToken cancellationToken = default)
     {
-        try
+        var utcNow = DateTime.UtcNow;
+        if (student.Id == Guid.Empty)
         {
-            var utcNow = DateTime.UtcNow;
-            if (student.Id == Guid.Empty)
-            {
-                student.Id = Guid.NewGuid();
-            }
+            student.Id = Guid.NewGuid();
+        }
 
-            EnsureInsertAudit(student, utcNow);
+        EnsureInsertAudit(student, utcNow);
 
-            student.BranchId = await _branchWrite
-                .ResolveWriteBranchIdAsync(student.BranchId, cancellationToken)
+        student.BranchId = await _branchWrite
+            .ResolveWriteBranchIdAsync(student.BranchId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        return await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            Guid userId = await _userProvisioning
+                .ProvisionStudentUserAsync(student, schoolId, tx, cancellationToken)
                 .ConfigureAwait(false);
+            student.UserId = userId;
+            student.PortalAccess = true;
 
-            var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+            var id = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx)
+                .ConfigureAwait(false);
+            student.Id = id;
 
-            Guid studentId = await WithTransactionAsync(connection, async (conn, tx) =>
-            {
-                var id = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx)
-                    .ConfigureAwait(false);
-                student.Id = id;
+            await InsertChildCollectionsAsync(conn, tx, id, student, utcNow).ConfigureAwait(false);
 
-                await InsertChildCollectionsAsync(conn, tx, id, student, utcNow).ConfigureAwait(false);
-
-                return id;
-            }).ConfigureAwait(false);
-
-            return studentId;
-        }
-        catch (Exception ex)
-        {
-            throw;
-        }
+            return id;
+        }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -168,14 +172,17 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             var querySql = $@"
             SELECT
                 s.id AS Id,
+                a.classgroupid AS ClassGroupId,
                 a.classid AS ClassId,
                 TRIM(COALESCE(u.firstname, '') || ' ' || COALESCE(u.lastname, '')) AS Name,
                 COALESCE(u.email, 'N/A') AS Email,
                 s.admissionno AS AdmNo,
                 a.rollnumber AS RollNumber,
                 CASE
-                    WHEN cg.classname IS NOT NULL THEN
+                    WHEN cg.classname IS NOT NULL AND c.section IS NOT NULL THEN
                         cg.classname || ' — ' || c.section
+                    WHEN cg.classname IS NOT NULL THEN
+                        cg.classname
                     ELSE 'N/A'
                 END AS Class,
                 COALESCE(att_stats.attendance_pct, 0) AS Attendance,
@@ -186,6 +193,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             INNER JOIN {global}.{DatabaseConfig.TableUsers} u ON u.id = s.userid
             {enrollmentJoin} (
                 SELECT sa.studentid,
+                       sa.classgroupid,
                        sa.classid,
                        sa.rollnumber,
                        sa.academicyearid,
@@ -199,7 +207,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             LEFT JOIN {schema}.{DatabaseConfig.TableClasses} c
                 ON c.id = a.classid
             LEFT JOIN {schema}.{DatabaseConfig.TableClassGroups} cg
-                ON cg.id = c.classgroupid
+                ON cg.id = COALESCE(a.classgroupid, c.classgroupid)
             LEFT JOIN LATERAL (
                 SELECT CAST(ROUND(
                     100.0 * COUNT(*) FILTER (WHERE att.status IN (1, 4))
@@ -252,6 +260,35 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
+            // Client update payloads often omit BranchId / UserId (defaults to Empty) — keep stored FKs.
+            // UserId is never reassigned via this endpoint (see SetStudentUserIdAsync).
+            var existing = await conn.QuerySingleOrDefaultAsync<(Guid BranchId, Guid UserId)>(
+                new CommandDefinition(
+                    $@"SELECT branchid AS BranchId, userid AS UserId
+                       FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
+                       WHERE id = @Id AND isactive = true",
+                    new { student.Id },
+                    transaction: tx,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (existing.BranchId == Guid.Empty || existing.UserId == Guid.Empty)
+            {
+                throw new InvalidOperationException("Student not found.");
+            }
+
+            student.UserId = existing.UserId;
+
+            if (student.BranchId == Guid.Empty)
+            {
+                student.BranchId = existing.BranchId;
+            }
+            else
+            {
+                student.BranchId = await _branchWrite
+                    .ResolveWriteBranchIdAsync(student.BranchId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx, "Id")
                 .ConfigureAwait(false);
 
@@ -323,9 +360,9 @@ WHERE id = @StudentId AND isactive = true
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var sqlCheckClass = $"""
-            SELECT c.isactive 
+            SELECT COALESCE(c.isactive, true)
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudentAcademics} sa
-            INNER JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c ON sa.classid = c.id
+            LEFT JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c ON sa.classid = c.id
             WHERE sa.studentid = @Id
             ORDER BY sa.createdon DESC
             LIMIT 1;
@@ -505,6 +542,49 @@ WHERE id = @StudentId AND isactive = true
             {
                 academic.Id = Guid.NewGuid();
                 academic.StudentId = studentId;
+
+                if (academic.ClassGroupId == Guid.Empty)
+                {
+                    throw new InvalidOperationException("Class group is required.");
+                }
+
+                bool groupValid = await connection.QuerySingleAsync<bool>(
+                    $"""
+                    SELECT EXISTS(
+                        SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassGroups} cg
+                        WHERE cg.id = @ClassGroupId AND cg.isactive = true);
+                    """,
+                    new { academic.ClassGroupId },
+                    transaction).ConfigureAwait(false);
+                if (!groupValid)
+                {
+                    throw new InvalidOperationException("Selected class group is not active.");
+                }
+
+                if (academic.ClassId is { } classId && classId != Guid.Empty)
+                {
+                    bool classValid = await connection.QuerySingleAsync<bool>(
+                        $"""
+                        SELECT EXISTS(
+                            SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
+                            WHERE c.id = @ClassId
+                              AND c.isactive = true
+                              AND c.classgroupid = @ClassGroupId);
+                        """,
+                        new { ClassId = classId, academic.ClassGroupId },
+                        transaction).ConfigureAwait(false);
+                    if (!classValid)
+                    {
+                        throw new InvalidOperationException(
+                            "Selected section is not active for the class group.");
+                    }
+                }
+                else
+                {
+                    academic.ClassId = null;
+                    academic.RollNumber = null;
+                }
+
                 EnsureInsertAudit(academic, utcNow);
                 await InsertWithoutReturnAsync(
                         connection,
@@ -583,21 +663,47 @@ WHERE id = @StudentId AND isactive = true
                     }
                 }
 
-                if (academic.ClassId != Guid.Empty && academic.AcademicYearId != Guid.Empty)
+                if (academic.ClassGroupId == Guid.Empty)
+                {
+                    throw new InvalidOperationException("Class group is required.");
+                }
+
+                bool groupValid = await connection.QuerySingleAsync<bool>(
+                    $"""
+                    SELECT EXISTS(
+                        SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClassGroups} cg
+                        WHERE cg.id = @ClassGroupId AND cg.isactive = true);
+                    """,
+                    new { academic.ClassGroupId },
+                    transaction).ConfigureAwait(false);
+                if (!groupValid)
+                {
+                    throw new InvalidOperationException(
+                        "Selected class group is not active.");
+                }
+
+                if (academic.ClassId is { } classId && classId != Guid.Empty && academic.AcademicYearId != Guid.Empty)
                 {
                     bool classValid = await connection.QuerySingleAsync<bool>(
                         $"""
                         SELECT EXISTS(
                             SELECT 1 FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
-                            WHERE c.id = @ClassId AND c.isactive = true);
+                            WHERE c.id = @ClassId
+                              AND c.isactive = true
+                              AND c.classgroupid = @ClassGroupId);
                         """,
-                        new { academic.ClassId },
+                        new { ClassId = classId, academic.ClassGroupId },
                         transaction).ConfigureAwait(false);
                     if (!classValid)
                     {
                         throw new InvalidOperationException(
-                            "Selected class is not active.");
+                            "Selected section is not active for the class group.");
                     }
+                }
+                else
+                {
+                    academic.ClassId = null;
+                    academic.RollNumber = null;
                 }
 
                 ApplyUpdateAudit(academic, actorId, utcNow);
@@ -701,7 +807,7 @@ WHERE id = @StudentId AND isactive = true
         string activeFilter = activeOnly ? " AND isactive = true" : string.Empty;
         string sql = $"""
             SELECT id AS Id, studentid AS StudentId, admissiondate AS AdmissionDate,
-                   academicyearid AS AcademicYearId, classid AS ClassId,
+                   academicyearid AS AcademicYearId, classgroupid AS ClassGroupId, classid AS ClassId,
                    rollnumber AS RollNumber,
                    isactive AS IsActive, versionno AS VersionNo,
                    createdby AS CreatedBy, createdon AS CreatedOn,
@@ -824,6 +930,15 @@ WHERE id = @StudentId AND isactive = true
                     continue;
                 }
 
+                Guid targetClassGroupId = await conn.QuerySingleAsync<Guid>(
+                    $"""
+                    SELECT c.classgroupid
+                    FROM {schema}.{DatabaseConfig.TableClasses} c
+                    WHERE c.id = @ClassId;
+                    """,
+                    new { ClassId = entry.TargetClassId },
+                    tx).ConfigureAwait(false);
+
                 StudentAcademicEntity? sourceRecord = await GetAcademicRecordAsync(
                     conn, schema, entry.StudentId, sourceAcademicYearId, tx).ConfigureAwait(false);
 
@@ -890,7 +1005,8 @@ WHERE id = @StudentId AND isactive = true
                     await conn.ExecuteAsync(
                         $"""
                         UPDATE {schema}.{DatabaseConfig.TableStudentAcademics}
-                        SET classid = @ClassId,
+                        SET classgroupid = @ClassGroupId,
+                            classid = @ClassId,
                             rollnumber = @RollNumber,
                             admissiondate = @AdmissionDate,
                             isactive = true,
@@ -902,6 +1018,7 @@ WHERE id = @StudentId AND isactive = true
                         new
                         {
                             existingTarget.Id,
+                            ClassGroupId = targetClassGroupId,
                             ClassId = entry.TargetClassId,
                             RollNumber = rollNumber,
                             AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
@@ -917,6 +1034,7 @@ WHERE id = @StudentId AND isactive = true
                         Id = Guid.NewGuid(),
                         StudentId = entry.StudentId,
                         AcademicYearId = targetAcademicYearId,
+                        ClassGroupId = targetClassGroupId,
                         ClassId = entry.TargetClassId,
                         AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
                         RollNumber = rollNumber
@@ -931,6 +1049,106 @@ WHERE id = @StudentId AND isactive = true
         }).ConfigureAwait(false);
 
         return new PromoteStudentsResult(promoted, errors, StudentsWithFeesTransferred: 0, TotalPendingTransferred: 0);
+    }
+
+    /// <inheritdoc />
+    public async Task<UpdateRollNumbersResult> UpdateRollNumbersAsync(
+        Guid academicYearId,
+        Guid classId,
+        IReadOnlyList<UpdateRollNumberEntry> students,
+        CancellationToken cancellationToken = default)
+    {
+        if (academicYearId == Guid.Empty || classId == Guid.Empty)
+        {
+            return new UpdateRollNumbersResult(0, ["Academic year and class are required."]);
+        }
+
+        if (students.Count == 0)
+        {
+            return new UpdateRollNumbersResult(0, ["At least one student is required."]);
+        }
+
+        var errors = new List<string>();
+        var seenRolls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in students)
+        {
+            string? roll = entry.RollNumber?.Trim();
+            if (string.IsNullOrWhiteSpace(roll))
+            {
+                continue;
+            }
+
+            if (!seenRolls.Add(roll))
+            {
+                errors.Add($"Duplicate roll number '{roll}' in the request.");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return new UpdateRollNumbersResult(0, errors);
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var schema = Context.OperationalSchema;
+        var utcNow = DateTime.UtcNow;
+        var actorId = ResolveUpdateActor();
+        int updated = 0;
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            bool classValid = await conn.QuerySingleAsync<bool>(
+                $"""
+                SELECT EXISTS(
+                    SELECT 1 FROM {schema}.{DatabaseConfig.TableClasses} c
+                    WHERE c.id = @ClassId AND c.isactive = true);
+                """,
+                new { ClassId = classId },
+                tx).ConfigureAwait(false);
+
+            if (!classValid)
+            {
+                errors.Add("Target class was not found or is inactive.");
+                return;
+            }
+
+            foreach (var entry in students)
+            {
+                int affected = await conn.ExecuteAsync(
+                    $"""
+                    UPDATE {schema}.{DatabaseConfig.TableStudentAcademics}
+                    SET rollnumber = @RollNumber,
+                        updatedby = @UpdatedBy,
+                        updatedon = @UpdatedOn,
+                        versionno = versionno + 1
+                    WHERE studentid = @StudentId
+                      AND academicyearid = @AcademicYearId
+                      AND classid = @ClassId
+                      AND isactive = true;
+                    """,
+                    new
+                    {
+                        StudentId = entry.StudentId,
+                        AcademicYearId = academicYearId,
+                        ClassId = classId,
+                        RollNumber = string.IsNullOrWhiteSpace(entry.RollNumber) ? null : entry.RollNumber.Trim(),
+                        UpdatedBy = actorId,
+                        UpdatedOn = utcNow
+                    },
+                    tx).ConfigureAwait(false);
+
+                if (affected == 0)
+                {
+                    errors.Add($"Student {entry.StudentId}: no active enrollment in this class/year.");
+                }
+                else
+                {
+                    updated++;
+                }
+            }
+        }).ConfigureAwait(false);
+
+        return new UpdateRollNumbersResult(updated, errors);
     }
 
     #endregion

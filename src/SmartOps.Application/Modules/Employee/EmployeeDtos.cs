@@ -30,8 +30,6 @@ public class CreateEmployeeDto
             EmployeeCode = string.IsNullOrWhiteSpace(Professional.EmployeeCode) ? null : Professional.EmployeeCode.Trim(),
             Designation = string.IsNullOrWhiteSpace(Professional.Designation) ? null : Professional.Designation.Trim(),
             Experience = Professional.Experience,
-            SalaryGrade = Professional.SalaryGrade,
-            EmploymentType = Professional.EmploymentType,
             Qualifications = Professional.Qualifications != null ? string.Join("; ", Professional.Qualifications) : null,
             BankAccountNumber = Professional.BankDetails?.AccountNumber,
             BankIfscCode = Professional.BankDetails?.IfscCode,
@@ -81,8 +79,6 @@ public class EmployeeProfessionalInfo
     public DateOnly JoiningDate { get; set; }
     public string? Designation { get; set; }
     public int Experience { get; set; }
-    public string? SalaryGrade { get; set; }
-    public string EmploymentType { get; set; } = "Full-time";
     public List<string>? Qualifications { get; set; }
     public EmployeeBankDetails? BankDetails { get; set; }
 }

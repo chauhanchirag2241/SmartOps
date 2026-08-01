@@ -4,8 +4,7 @@ public enum AttendanceStatus
 {
     Present = 1,
     Absent = 2,
-    Leave = 3,
-    Late = 4
+    Late = 3
 }
 
 public static class AttendanceStatusExtensions
@@ -15,7 +14,6 @@ public static class AttendanceStatusExtensions
         {
             AttendanceStatus.Present => "Present",
             AttendanceStatus.Absent => "Absent",
-            AttendanceStatus.Leave => "Leave",
             AttendanceStatus.Late => "Late",
             _ => throw new ArgumentOutOfRangeException(nameof(status))
         };

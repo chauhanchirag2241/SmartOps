@@ -4,6 +4,7 @@ using Npgsql;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Class.Interfaces;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
 using SmartOps.Domain.Modules.Teacher.Entities;
@@ -17,6 +18,7 @@ namespace SmartOps.Infrastructure.Modules.Teacher.Services;
 public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMappingService
 {
     private readonly IClassSubjectTeacherMappingRepository _repository;
+    private readonly IClassSettingRepository _classSettings;
     private readonly IScopeMappingRepository _scopeMapping;
     private readonly IUserScopeService _userScopeService;
     private readonly IUserScopeContext _scope;
@@ -27,6 +29,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
 
     public ClassSubjectTeacherMappingService(
         IClassSubjectTeacherMappingRepository repository,
+        IClassSettingRepository classSettings,
         IScopeMappingRepository scopeMapping,
         IUserScopeService userScopeService,
         IUserScopeContext scope,
@@ -36,6 +39,7 @@ public sealed class ClassSubjectTeacherMappingService : IClassSubjectTeacherMapp
         DapperContext context)
     {
         _repository = repository;
+        _classSettings = classSettings;
         _scopeMapping = scopeMapping;
         _userScopeService = userScopeService;
         _scope = scope;
@@ -142,6 +146,28 @@ ORDER BY u.firstname, u.lastname
         };
     }
 
+    public Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassAsync(
+        Guid classId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken = default)
+        => GetByClassIdAsync(classId, academicYearId, cancellationToken);
+
+    public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeAsync(
+        Guid employeeId,
+        Guid? academicYearId,
+        CancellationToken cancellationToken = default)
+    {
+        Guid? yearId = academicYearId;
+        if (!yearId.HasValue)
+        {
+            yearId = await ResolveAcademicYearIdAsync(null, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await _repository
+            .GetByEmployeeIdAsync(employeeId, yearId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassIdAsync(
         Guid classId,
         Guid? academicYearId,
@@ -180,8 +206,17 @@ ORDER BY u.firstname, u.lastname
 
         try
         {
-            Guid academicYearId = await ResolveAcademicYearForClassAsync(request.ClassId, cancellationToken)
+            Guid academicYearId = request.AcademicYearId != Guid.Empty
+                ? await ResolveAcademicYearIdAsync(request.AcademicYearId, cancellationToken).ConfigureAwait(false)
+                : await ResolveAcademicYearForClassAsync(request.ClassId, cancellationToken).ConfigureAwait(false);
+
+            bool classExists = await _repository
+                .ExistsActiveClassAsync(request.ClassId, cancellationToken)
                 .ConfigureAwait(false);
+            if (!classExists)
+            {
+                throw new InvalidOperationException("Class not found or is inactive.");
+            }
 
             Guid? employeeId = NormalizeEmployeeId(request.EmployeeId);
 
@@ -191,20 +226,22 @@ ORDER BY u.firstname, u.lastname
 
             if (existing is { IsActive: true })
             {
-                throw new InvalidOperationException("This subject is already mapped to the selected class.");
-            }
+                if (employeeId.HasValue)
+                {
+                    // Upsert teacher onto existing active mapping for class+subject+year.
+                    existing.EmployeeId = employeeId;
+                    await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
+                    await BumpEmployeeScopeIfLinkedAsync(employeeId.Value, cancellationToken).ConfigureAwait(false);
+                    return await RequireDtoByIdAsync(existing.Id, cancellationToken).ConfigureAwait(false);
+                }
 
-            if (request.IsClassTeacher)
-            {
-                await _repository.ClearClassTeacherFlagAsync(request.ClassId, academicYearId, cancellationToken)
-                    .ConfigureAwait(false);
+                throw new InvalidOperationException("This subject is already mapped to the selected class.");
             }
 
             Guid mappingId;
             if (existing is not null)
             {
                 existing.EmployeeId = employeeId;
-                existing.IsClassTeacher = request.IsClassTeacher;
                 existing.IsActive = true;
                 await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
                 mappingId = existing.Id;
@@ -217,8 +254,7 @@ ORDER BY u.firstname, u.lastname
                         ClassId = request.ClassId,
                         SubjectId = request.SubjectId,
                         EmployeeId = employeeId,
-                        AcademicYearId = academicYearId,
-                        IsClassTeacher = request.IsClassTeacher
+                        AcademicYearId = academicYearId
                     },
                     cancellationToken).ConfigureAwait(false);
             }
@@ -239,26 +275,98 @@ ORDER BY u.firstname, u.lastname
         }
     }
 
+    public async Task<BulkCreateClassSubjectTeacherMappingsResultDto> BulkAddMappingsAsync(
+        BulkCreateClassSubjectTeacherMappingsRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.EmployeeId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Employee is required.");
+        }
+
+        if (request.Mappings is null || request.Mappings.Count == 0)
+        {
+            throw new InvalidOperationException("Add at least one class and subject permission.");
+        }
+
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        var created = new List<ClassSubjectTeacherMappingDto>(request.Mappings.Count);
+
+        foreach (CreateClassSubjectTeacherMappingDto item in request.Mappings)
+        {
+            if (item.ClassId == Guid.Empty || item.SubjectId == Guid.Empty)
+            {
+                throw new InvalidOperationException("Class and subject are required for every permission.");
+            }
+
+            string key = $"{item.ClassId:D}:{item.SubjectId:D}";
+            if (!seenKeys.Add(key))
+            {
+                throw new InvalidOperationException("Duplicate subject for the same class in this assignment.");
+            }
+
+            created.Add(
+                await AddMappingAsync(
+                        new CreateClassSubjectTeacherMappingDto
+                        {
+                            ClassId = item.ClassId,
+                            SubjectId = item.SubjectId,
+                            EmployeeId = request.EmployeeId,
+                            AcademicYearId = request.AcademicYearId != Guid.Empty
+                                ? request.AcademicYearId
+                                : item.AcademicYearId
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
+        foreach (Guid sectionId in (request.ClassTeacherClassIds ?? []).Distinct())
+        {
+            if (sectionId == Guid.Empty) continue;
+            Guid? classGroupId = await ResolveClassGroupIdAsync(sectionId, cancellationToken).ConfigureAwait(false);
+            await _classSettings
+                .UpsertClassTeacherAsync(sectionId, classGroupId, request.EmployeeId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return new BulkCreateClassSubjectTeacherMappingsResultDto
+        {
+            CreatedCount = created.Count,
+            Created = created
+        };
+    }
+
     public async Task<ClassSubjectTeacherMappingDto> SetClassTeacherAsync(
         Guid id,
         bool isClassTeacher,
         CancellationToken cancellationToken = default)
     {
         ClassSubjectTeacherMappingEntity entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
+        if (entity.EmployeeId is null || entity.EmployeeId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Assign a teacher to this subject before setting class teacher.");
+        }
 
-        bool saved = await _repository
-            .SetClassTeacherFlagAsync(
-                id,
+        Guid? classGroupId = await ResolveClassGroupIdAsync(entity.ClassId, cancellationToken).ConfigureAwait(false);
+
+        if (!isClassTeacher)
+        {
+            Guid? current = await _classSettings
+                .GetClassTeacherEmployeeIdAsync(entity.ClassId, cancellationToken)
+                .ConfigureAwait(false);
+            if (current != entity.EmployeeId)
+            {
+                return await RequireDtoByIdAsync(id, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await _classSettings
+            .UpsertClassTeacherAsync(
                 entity.ClassId,
-                entity.AcademicYearId,
-                isClassTeacher,
+                classGroupId,
+                isClassTeacher ? entity.EmployeeId : null,
                 cancellationToken)
             .ConfigureAwait(false);
-
-        if (!saved)
-        {
-            throw new InvalidOperationException("Could not update class teacher flag.");
-        }
 
         return await RequireDtoByIdAsync(id, cancellationToken).ConfigureAwait(false);
     }
@@ -268,16 +376,6 @@ ORDER BY u.firstname, u.lastname
         UpdateClassSubjectTeacherMappingDto request,
         CancellationToken cancellationToken = default)
     {
-        bool classTeacherOnly = request.IsClassTeacher.HasValue
-            && !request.EmployeeId.HasValue
-            && !request.AssignLater;
-
-        if (classTeacherOnly)
-        {
-            return await SetClassTeacherAsync(id, request.IsClassTeacher!.Value, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         ClassSubjectTeacherMappingEntity entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
 
         Guid? previousEmployeeId = entity.EmployeeId;
@@ -292,24 +390,27 @@ ORDER BY u.firstname, u.lastname
             throw new InvalidOperationException("A valid teacher is required unless assign later is selected.");
         }
 
+        if (request.SubjectId.HasValue && request.SubjectId.Value != Guid.Empty && request.SubjectId.Value != entity.SubjectId)
+        {
+            bool duplicate = await _repository
+                .ExistsActiveClassSubjectAsync(
+                    entity.ClassId,
+                    request.SubjectId.Value,
+                    entity.AcademicYearId,
+                    entity.Id,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (duplicate)
+            {
+                throw new InvalidOperationException("This subject is already mapped to the selected class.");
+            }
+
+            entity.SubjectId = request.SubjectId.Value;
+        }
+
         if (request.EmployeeId.HasValue || request.AssignLater)
         {
             entity.EmployeeId = employeeId;
-        }
-
-        if (request.IsClassTeacher.HasValue)
-        {
-            if (request.IsClassTeacher.Value)
-            {
-                await _repository
-                    .ClearClassTeacherFlagAsync(entity.ClassId, entity.AcademicYearId, cancellationToken)
-                    .ConfigureAwait(false);
-
-                // ClearClassTeacherFlagAsync bumps versionno on all class rows — reload before update.
-                entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
-            }
-
-            entity.IsClassTeacher = request.IsClassTeacher.Value;
         }
 
         try
@@ -319,11 +420,6 @@ ORDER BY u.firstname, u.lastname
             if (rowsUpdated == 0)
             {
                 entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
-                if (request.IsClassTeacher.HasValue)
-                {
-                    entity.IsClassTeacher = request.IsClassTeacher.Value;
-                }
-
                 rowsUpdated = await _repository.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
             }
 
@@ -355,6 +451,9 @@ ORDER BY u.firstname, u.lastname
             },
             cancellationToken).ConfigureAwait(false);
     }
+
+    public Task DeleteMappingAsync(Guid id, CancellationToken cancellationToken = default)
+        => RemoveMappingAsync(id, cancellationToken);
 
     public async Task RemoveMappingAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -431,6 +530,18 @@ ORDER BY u.firstname, u.lastname
         }
 
         return null;
+    }
+
+    private async Task<Guid?> ResolveClassGroupIdAsync(Guid classId, CancellationToken cancellationToken)
+    {
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+SELECT classgroupid FROM {_context.OperationalSchema}.{DatabaseConfig.TableClasses}
+WHERE id = @ClassId AND isactive = true LIMIT 1
+""";
+        return await connection.ExecuteScalarAsync<Guid?>(
+            new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private async Task<ClassSubjectTeacherMappingEntity> GetRequiredEntityAsync(

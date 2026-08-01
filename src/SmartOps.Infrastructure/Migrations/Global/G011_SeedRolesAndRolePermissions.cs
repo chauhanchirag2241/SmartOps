@@ -18,10 +18,10 @@ public sealed class G011_SeedRolesAndRolePermissions : Migration
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
     (id, name, description, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT '{AdminRoleId}', '{RoleNames.Admin}', 'Default administrator role', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+SELECT '{AdminRoleId}', '{RoleNames.SmartOpsAdmin}', 'SmartOps platform / developer management role', true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
-    WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'))
+    WHERE lower(trim(name)) = lower(trim('{RoleNames.SmartOpsAdmin}'))
 );
 """);
 
@@ -31,7 +31,7 @@ INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissi
 SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
-WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.isactive = true
+WHERE lower(trim(r.name)) = lower(trim('{RoleNames.SmartOpsAdmin}')) AND m.isactive = true
   AND NOT EXISTS (
     SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions} rp
     WHERE rp.roleid = r.id AND rp.menuid = m.id
@@ -45,10 +45,10 @@ WHERE lower(trim(r.name)) = lower(trim('{RoleNames.Admin}')) AND m.isactive = tr
 DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
 WHERE roleid IN (
     SELECT id FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
-    WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'))
+    WHERE lower(trim(name)) = lower(trim('{RoleNames.SmartOpsAdmin}'))
 );
 DELETE FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}
-WHERE lower(trim(name)) = lower(trim('{RoleNames.Admin}'));
+WHERE lower(trim(name)) = lower(trim('{RoleNames.SmartOpsAdmin}'));
 """);
     }
 }

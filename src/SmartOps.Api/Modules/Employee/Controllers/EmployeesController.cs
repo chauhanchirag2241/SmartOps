@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
-using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Employee;
 using SmartOps.Domain.Common.Configuration;
@@ -19,7 +18,6 @@ namespace SmartOps.Api.Modules.Employee.Controllers;
 [Authorize]
 public sealed class EmployeesController(
     IEmployeeRepository employeeRepository,
-    IUserProvisioningService userProvisioning,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider,
@@ -45,22 +43,19 @@ public sealed class EmployeesController(
             return BadRequest("Reporting manager cannot be the same employee.");
         }
 
-        Guid provisionedUserId = await userProvisioning
-            .ProvisionEmployeeUserAsync(entity, schoolId, cancellationToken)
+        var employeeId = await employeeRepository
+            .CreateEmployeeAsync(entity, schoolId, cancellationToken)
             .ConfigureAwait(false);
-        entity.UserId = provisionedUserId;
-
-        var employeeId = await employeeRepository.CreateEmployeeAsync(entity, cancellationToken).ConfigureAwait(false);
 
         await userScopeService
-            .BumpScopeVersionAsync(provisionedUserId, schoolId, cancellationToken)
+            .BumpScopeVersionAsync(entity.UserId, schoolId, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(new CreateEmployeeResponse("Employee created successfully", employeeId));
     }
 
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.Employees.View)]
+    [Authorize(Policy = MenuPolicies.Employees.ListOrTeachersView)]
     public async Task<IActionResult> GetAllEmployees(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
@@ -68,10 +63,19 @@ public sealed class EmployeesController(
         [FromQuery] string? sortColumn = null,
         [FromQuery] string? sortDirection = null,
         [FromQuery] StaffFilter filter = StaffFilter.All,
+        [FromQuery] bool teachersOnly = false,
         CancellationToken cancellationToken = default)
     {
         var result = await employeeRepository
-            .GetAllEmployeesAsync(pageIndex, pageSize, searchQuery, sortColumn, sortDirection, filter, cancellationToken)
+            .GetAllEmployeesAsync(
+                pageIndex,
+                pageSize,
+                searchQuery,
+                sortColumn,
+                sortDirection,
+                filter,
+                teachersOnly,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(result);
@@ -94,7 +98,7 @@ public sealed class EmployeesController(
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.Employees.View)]
+    [Authorize(Policy = MenuPolicies.Employees.ListOrTeachersView)]
     public async Task<ActionResult<EmployeeEntity>> GetEmployeeById(Guid id, CancellationToken cancellationToken)
     {
         if (!await resourceAuthorization.CanAccessEmployeeAsync(id, AccessLevel.View, cancellationToken).ConfigureAwait(false))

@@ -3,6 +3,7 @@ namespace SmartOps.Application.Modules.FeeMaster;
 public sealed class FeeStudentHeadAmountDto
 {
     public Guid FeeHeadId { get; set; }
+    public Guid? AcademicPeriodId { get; set; }
     public decimal? Amount { get; set; }
     public bool? IsExcluded { get; set; }
 }

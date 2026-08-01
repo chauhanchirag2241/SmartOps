@@ -41,10 +41,8 @@ public sealed class SalaryStructureService : ISalaryStructureService
             version.Status,
             SalaryLabelHelper.VersionStatusLabel(version.Status),
             version.EffectiveDate,
-            version.PublishedOn,
-            version.ActivatedOn,
             hasEmployees,
-            IsVersionLocked(version.Status),
+            IsVersionLocked(version),
             components.Select(MapComponent).ToList()));
     }
 
@@ -75,6 +73,29 @@ public sealed class SalaryStructureService : ISalaryStructureService
         return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
     }
 
+    public async Task<Result<SalaryStructureVersionListItemDto>> UpdateVersionBasicAsync(
+        Guid versionId,
+        UpdateSalaryStructureVersionBasicRequestDto request,
+        CancellationToken ct = default)
+    {
+        Result<SalaryStructureVersionEntity> versionResult = await RequireEditableVersionAsync(versionId, ct).ConfigureAwait(false);
+        if (!versionResult.IsSuccess)
+        {
+            return Result<SalaryStructureVersionListItemDto>.Failure(versionResult.Error!);
+        }
+
+        SalaryStructureVersionEntity version = versionResult.Value!;
+        string? dateError = ValidateEffectiveDate(request.EffectiveDate, version.EffectiveDate);
+        if (dateError is not null)
+        {
+            return Result<SalaryStructureVersionListItemDto>.Failure(dateError);
+        }
+
+        version.EffectiveDate = request.EffectiveDate;
+        await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
+        return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
+    }
+
     public async Task<Result<SalaryStructureVersionListItemDto>> PublishVersionAsync(Guid versionId, CancellationToken ct = default)
     {
         SalaryStructureVersionEntity? version = await _repo.GetVersionByIdAsync(versionId, ct).ConfigureAwait(false);
@@ -96,7 +117,6 @@ public sealed class SalaryStructureService : ISalaryStructureService
 
         await _repo.ArchivePublishedVersionsAsync(versionId, ct).ConfigureAwait(false);
         version.Status = SalaryStructureVersionStatus.Published;
-        version.PublishedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
         return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
     }
@@ -116,7 +136,6 @@ public sealed class SalaryStructureService : ISalaryStructureService
 
         await _repo.ArchiveActiveVersionsAsync(versionId, ct).ConfigureAwait(false);
         version.Status = SalaryStructureVersionStatus.Active;
-        version.ActivatedOn = DateTime.UtcNow;
         await _repo.UpdateVersionAsync(version, ct).ConfigureAwait(false);
         return await GetVersionListItemByIdAsync(versionId, ct).ConfigureAwait(false);
     }
@@ -281,8 +300,6 @@ public sealed class SalaryStructureService : ISalaryStructureService
                 VersionNumber = version.VersionNumber,
                 Status = version.Status,
                 EffectiveDate = version.EffectiveDate,
-                PublishedOn = version.PublishedOn,
-                ActivatedOn = version.ActivatedOn,
                 ComponentCount = componentCount,
                 HasAssignedEmployees = hasEmployees
             };
@@ -299,12 +316,34 @@ public sealed class SalaryStructureService : ISalaryStructureService
             return Result<SalaryStructureVersionEntity>.Failure("Salary structure version not found.");
         }
 
-        if (version.Status != SalaryStructureVersionStatus.Draft)
+        if (IsEffectiveDateStarted(version.EffectiveDate))
         {
-            return Result<SalaryStructureVersionEntity>.Failure("Only draft salary structures can be edited.");
+            return Result<SalaryStructureVersionEntity>.Failure(
+                "Salary structure cannot be changed after the effective date has started.");
+        }
+
+        if (version.Status == SalaryStructureVersionStatus.Archived)
+        {
+            return Result<SalaryStructureVersionEntity>.Failure("Archived salary structures cannot be edited.");
         }
 
         return Result<SalaryStructureVersionEntity>.Success(version);
+    }
+
+    private static string? ValidateEffectiveDate(DateOnly? effectiveDate, DateOnly? existingEffectiveDate)
+    {
+        if (!effectiveDate.HasValue)
+        {
+            return null;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (effectiveDate.Value < today && effectiveDate != existingEffectiveDate)
+        {
+            return "Effective date cannot be in the past.";
+        }
+
+        return null;
     }
 
     private static SalaryStructureVersionStatus? ParseStatusFilter(string? statusFilter)
@@ -324,8 +363,22 @@ public sealed class SalaryStructureService : ISalaryStructureService
         };
     }
 
-    private static bool IsVersionLocked(SalaryStructureVersionStatus status) =>
-        status is SalaryStructureVersionStatus.Published or SalaryStructureVersionStatus.Active or SalaryStructureVersionStatus.Archived;
+    /// <summary>Locked once effective date has started (same idea as fee published-on lock).</summary>
+    private static bool IsVersionLocked(SalaryStructureVersionEntity version) =>
+        IsEffectiveDateStarted(version.EffectiveDate) || version.Status == SalaryStructureVersionStatus.Archived;
+
+    private static bool IsVersionLocked(SalaryStructureVersionListRow row) =>
+        IsEffectiveDateStarted(row.EffectiveDate) || row.Status == SalaryStructureVersionStatus.Archived;
+
+    private static bool IsEffectiveDateStarted(DateOnly? effectiveDate)
+    {
+        if (!effectiveDate.HasValue)
+        {
+            return false;
+        }
+
+        return effectiveDate.Value <= DateOnly.FromDateTime(DateTime.UtcNow);
+    }
 
     private static SalaryStructureVersionListItemDto MapVersionListItem(SalaryStructureVersionListRow row) => new(
         row.Id,
@@ -333,11 +386,9 @@ public sealed class SalaryStructureService : ISalaryStructureService
         row.Status,
         SalaryLabelHelper.VersionStatusLabel(row.Status),
         row.EffectiveDate,
-        row.PublishedOn,
-        row.ActivatedOn,
         row.ComponentCount,
         row.HasAssignedEmployees,
-        IsVersionLocked(row.Status));
+        IsVersionLocked(row));
 
     private static SalaryVersionComponentDto MapComponent(SalaryVersionComponentListRow row) => new(
         row.Id,

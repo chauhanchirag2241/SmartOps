@@ -10,7 +10,13 @@ namespace SmartOps.Domain.Modules.Student;
 /// </summary>
 public interface IStudentRepository
 {
-    Task<Guid> CreateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Creates portal user + role + student aggregate in a single DB transaction (full rollback on any error).
+    /// </summary>
+    Task<Guid> CreateStudentAsync(
+        StudentEntity student,
+        Guid schoolId,
+        CancellationToken cancellationToken = default);
 
     Task<StudentEntity?> GetStudentByIdAsync(Guid id, CancellationToken cancellationToken = default, bool includeInactive = false);
 
@@ -48,6 +54,15 @@ public interface IStudentRepository
         Guid sourceAcademicYearId,
         Guid targetAcademicYearId,
         IReadOnlyList<PromoteStudentEntry> students,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates roll numbers for active enrollments in the given academic year and class.
+    /// </summary>
+    Task<UpdateRollNumbersResult> UpdateRollNumbersAsync(
+        Guid academicYearId,
+        Guid classId,
+        IReadOnlyList<UpdateRollNumberEntry> students,
         CancellationToken cancellationToken = default);
 
     /// <summary>

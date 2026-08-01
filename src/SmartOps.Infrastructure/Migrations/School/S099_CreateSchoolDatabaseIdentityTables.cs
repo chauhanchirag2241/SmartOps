@@ -1,6 +1,7 @@
 using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Infrastructure.Migrations.Extensions;
+using SmartOps.Infrastructure.MultiTenancy;
 
 namespace SmartOps.Infrastructure.Migrations.School;
 
@@ -31,6 +32,9 @@ public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
         EnsureSchoolSettingsTable();
         EnsureSchoolBranchesTable();
         EnsureUserBranchMappingsTable();
+
+        // Default roles + menu grants must exist before later S1xx "grant to School Admin" migrations.
+        Execute.Sql(SchoolDefaultRoleSeeder.BuildMigrationSql(DateTimeOffset.UtcNow));
     }
 
     public override void Down()

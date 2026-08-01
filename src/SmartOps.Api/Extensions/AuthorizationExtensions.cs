@@ -27,7 +27,21 @@ public static class AuthorizationExtensions
                 MenuPolicies.Students.ListForAttendanceOrModule,
                 (MenuCodes.Students, MenuPermissionAction.View),
                 (MenuCodes.Attendance, MenuPermissionAction.View),
-                (MenuCodes.Homework, MenuPermissionAction.View));
+                (MenuCodes.Homework, MenuPermissionAction.View),
+                (MenuCodes.PromoteStudents, MenuPermissionAction.View),
+                (MenuCodes.RollNumbers, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.Students.Promote,
+                (MenuCodes.Students, MenuPermissionAction.Edit),
+                (MenuCodes.PromoteStudents, MenuPermissionAction.Edit));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.Students.UpdateRollNumbers,
+                (MenuCodes.Students, MenuPermissionAction.Edit),
+                (MenuCodes.RollNumbers, MenuPermissionAction.Edit));
 
             RegisterAnyPolicy(
                 options,
@@ -36,7 +50,10 @@ public static class AuthorizationExtensions
                 (MenuCodes.Attendance, MenuPermissionAction.View),
                 (MenuCodes.Homework, MenuPermissionAction.View),
                 (MenuCodes.ClassTimetable, MenuPermissionAction.View),
-                (MenuCodes.Exams, MenuPermissionAction.View));
+                (MenuCodes.Exams, MenuPermissionAction.View),
+                (MenuCodes.PromoteStudents, MenuPermissionAction.View),
+                (MenuCodes.RollNumbers, MenuPermissionAction.View),
+                (MenuCodes.Teachers, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,
@@ -46,15 +63,22 @@ public static class AuthorizationExtensions
 
             RegisterAnyPolicy(
                 options,
-                MenuPolicies.Subjects.ListForTimetableDropdown,
-                (MenuCodes.Subjects, MenuPermissionAction.View),
-                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+                MenuPolicies.Classes.ListForTimetableDropdown,
+                (MenuCodes.Classes, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View),
+                (MenuCodes.Teachers, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,
                 MenuPolicies.Employees.ListForTimetableDropdown,
                 (MenuCodes.Employees, MenuPermissionAction.View),
                 (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.Employees.ListOrTeachersView,
+                (MenuCodes.Employees, MenuPermissionAction.View),
+                (MenuCodes.Teachers, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,

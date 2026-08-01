@@ -621,7 +621,8 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         var sql = $@"
             SELECT
                 c.id AS Id,
-                {DashboardClassLabel.DisplayNameSql} AS Name
+                {DashboardClassLabel.DisplayNameSql} AS Name,
+                c.classgroupid AS ClassGroupId
             FROM {schema}.{DatabaseConfig.TableClasses} c
             INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             {whereClause}

@@ -586,6 +586,86 @@ public sealed class ExamService : IExamService
         return await FindScheduleDtoAsync(id, request.ExamId, ct).ConfigureAwait(false);
     }
 
+    public async Task<Result<BulkCreateExamSchedulesResultDto>> BulkCreateSchedulesAsync(
+        BulkCreateExamSchedulesRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (request.ExamId == Guid.Empty)
+        {
+            return Result<BulkCreateExamSchedulesResultDto>.Failure("Exam is required.");
+        }
+
+        if (request.Slots is null || request.Slots.Count == 0)
+        {
+            return Result<BulkCreateExamSchedulesResultDto>.Failure("Add at least one schedule slot.");
+        }
+
+        ExamEntity? exam = await _repo.GetExamByIdAsync(request.ExamId, ct).ConfigureAwait(false);
+        if (exam is null)
+        {
+            return Result<BulkCreateExamSchedulesResultDto>.Failure("Exam not found.");
+        }
+
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        var entities = new List<ExamScheduleEntity>(request.Slots.Count);
+
+        foreach (BulkExamScheduleSlotDto slot in request.Slots)
+        {
+            var single = new SaveExamScheduleRequestDto(
+                request.ExamId,
+                slot.ClassId,
+                slot.SubjectId,
+                slot.ExamDate,
+                slot.StartTime,
+                slot.EndTime,
+                slot.RoomNo,
+                slot.InvigilatorId);
+
+            string? validationError = ValidateSchedule(single);
+            if (validationError is not null)
+            {
+                return Result<BulkCreateExamSchedulesResultDto>.Failure(validationError);
+            }
+
+            string key = $"{slot.ClassId:D}:{slot.SubjectId:D}";
+            if (!seenKeys.Add(key))
+            {
+                return Result<BulkCreateExamSchedulesResultDto>.Failure(
+                    "Duplicate subject for the same class in this schedule.");
+            }
+
+            if (await _repo.ScheduleExistsAsync(request.ExamId, slot.ClassId, slot.SubjectId, null, ct).ConfigureAwait(false))
+            {
+                return Result<BulkCreateExamSchedulesResultDto>.Failure(
+                    "This subject is already scheduled for the selected exam and class.");
+            }
+
+            entities.Add(new ExamScheduleEntity
+            {
+                ExamId = request.ExamId,
+                ClassId = slot.ClassId,
+                SubjectId = slot.SubjectId,
+                ExamDate = slot.ExamDate,
+                StartTime = NormalizeTime(slot.StartTime),
+                EndTime = NormalizeTime(slot.EndTime),
+                RoomNo = slot.RoomNo?.Trim(),
+                InvigilatorId = slot.InvigilatorId
+            });
+        }
+
+        await _repo.CreateSchedulesAsync(entities, ct).ConfigureAwait(false);
+
+        IList<ExamScheduleRow> rows = await _repo.GetSchedulesAsync(request.ExamId, null, ct).ConfigureAwait(false);
+        HashSet<Guid> createdIds = entities.Select(e => e.Id).ToHashSet();
+        IList<ExamScheduleItemDto> created = rows
+            .Where(r => createdIds.Contains(r.Id))
+            .Select(MapSchedule)
+            .ToList();
+
+        return Result<BulkCreateExamSchedulesResultDto>.Success(
+            new BulkCreateExamSchedulesResultDto(created.Count, created));
+    }
+
     public async Task<Result<ExamScheduleItemDto>> UpdateScheduleAsync(
         Guid id,
         SaveExamScheduleRequestDto request,

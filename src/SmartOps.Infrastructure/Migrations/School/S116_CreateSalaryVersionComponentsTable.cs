@@ -9,7 +9,7 @@ namespace SmartOps.Infrastructure.Migrations.School;
 public sealed class S116_CreateSalaryVersionComponentsTable : Migration
 {
     private static string S => DatabaseConfig.Schema_School;
-    private const string VersionComponentIndex = "ix_salaryversioncomponents_versionid";
+    private const string StructureComponentIndex = "ix_salaryversioncomponents_salarystructureid";
 
     public override void Up()
     {
@@ -20,8 +20,8 @@ public sealed class S116_CreateSalaryVersionComponentsTable : Migration
 
         Create.Table(DatabaseConfig.TableSalaryVersionComponents).InSchema(S)
             .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-            .WithColumn("salarystructureversionid").AsGuid().NotNullable()
-                .ForeignKey("fk_salaryversioncomponents_versionid", S, DatabaseConfig.TableSalaryStructureVersions, "id")
+            .WithColumn("salarystructureid").AsGuid().NotNullable()
+                .ForeignKey("fk_salaryversioncomponents_salarystructureid", S, DatabaseConfig.TableSalaryStructure, "id")
             .WithColumn("name").AsString(200).NotNullable()
             .WithColumn("shortcode").AsString(20).Nullable()
             .WithColumn("componenttype").AsInt16().NotNullable().WithDefaultValue(0)
@@ -30,9 +30,9 @@ public sealed class S116_CreateSalaryVersionComponentsTable : Migration
             .WithColumn("istaxable").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithAuditColumns();
 
-        Create.Index(VersionComponentIndex)
+        Create.Index(StructureComponentIndex)
             .OnTable(DatabaseConfig.TableSalaryVersionComponents).InSchema(S)
-            .OnColumn("salarystructureversionid").Ascending();
+            .OnColumn("salarystructureid").Ascending();
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TableSalaryVersionComponents).InSchema(S);

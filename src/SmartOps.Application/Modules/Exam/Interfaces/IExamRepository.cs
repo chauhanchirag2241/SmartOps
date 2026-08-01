@@ -36,6 +36,7 @@ public interface IExamRepository
     Task<IList<ExamScheduleRow>> GetSchedulesAsync(Guid? examId, Guid? classId, CancellationToken ct = default);
     Task<ExamScheduleEntity?> GetScheduleByIdAsync(Guid id, CancellationToken ct = default);
     Task<Guid> CreateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default);
+    Task CreateSchedulesAsync(IList<ExamScheduleEntity> schedules, CancellationToken ct = default);
     Task UpdateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default);
     Task SoftDeleteScheduleAsync(Guid id, CancellationToken ct = default);
     Task<bool> ScheduleExistsAsync(Guid examId, Guid classId, Guid subjectId, Guid? excludeId, CancellationToken ct = default);

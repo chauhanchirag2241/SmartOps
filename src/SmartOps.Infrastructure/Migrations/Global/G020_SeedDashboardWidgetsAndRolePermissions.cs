@@ -19,7 +19,6 @@ public sealed class G020_SeedDashboardWidgetsAndRolePermissions : Migration
         (Guid.Parse("30000000-0000-0000-0000-000000000001"), DashboardWidgetCodes.StudentsStat, "Total students", "Academics", MenuCodes.Students, 1, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000002"), DashboardWidgetCodes.EmployeesStat, "Total employees", "Academics", MenuCodes.Employees, 2, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000003"), DashboardWidgetCodes.ClassesStat, "Classes / sections", "Academics", MenuCodes.Classes, 3, "stat"),
-        (Guid.Parse("30000000-0000-0000-0000-000000000004"), DashboardWidgetCodes.SubjectsStat, "Subjects offered", "Academics", MenuCodes.Subjects, 4, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000007"), DashboardWidgetCodes.SalaryDisbursed, "Salary disbursed", "Finance", MenuCodes.SalaryPayroll, 7, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000008"), DashboardWidgetCodes.AttendanceRate, "Today's attendance", "Academics", MenuCodes.Attendance, 8, "stat"),
         (Guid.Parse("30000000-0000-0000-0000-000000000009"), DashboardWidgetCodes.AttendanceDetail, "Attendance today", "Academics", MenuCodes.Attendance, 9, "chart"),

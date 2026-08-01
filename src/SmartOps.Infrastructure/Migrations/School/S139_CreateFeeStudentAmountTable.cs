@@ -21,6 +21,7 @@ public sealed class S139_CreateFeeStudentAmountTable : Migration
                 .WithColumn("feemasterid").AsGuid().NotNullable()
                 .WithColumn("feeheadid").AsGuid().NotNullable()
                 .WithColumn("studentid").AsGuid().NotNullable()
+                .WithColumn("academicperiodid").AsGuid().Nullable()
                 .WithColumn("amount").AsDecimal(18, 2).Nullable()
                 .WithColumn("isexcluded").AsBoolean().NotNullable().WithDefaultValue(false)
                 .WithAuditColumns();
@@ -42,9 +43,17 @@ ALTER TABLE {S}.{DatabaseConfig.TableFeeStudentAmount}
     ADD CONSTRAINT fk_feestudentamount_studentid FOREIGN KEY (studentid)
     REFERENCES {S}.{DatabaseConfig.TableStudents}(id);
 
-CREATE UNIQUE INDEX uq_feestudentamount_head_student
+ALTER TABLE {S}.{DatabaseConfig.TableFeeStudentAmount}
+    ADD CONSTRAINT fk_feestudentamount_academicperiodid FOREIGN KEY (academicperiodid)
+    REFERENCES {S}.{DatabaseConfig.TableClassAcademicPeriods}(id);
+
+CREATE UNIQUE INDEX uq_feestudentamount_head_student_flat
     ON {S}.{DatabaseConfig.TableFeeStudentAmount} (feeheadid, studentid)
-    WHERE isactive = true;
+    WHERE isactive = true AND academicperiodid IS NULL;
+
+CREATE UNIQUE INDEX uq_feestudentamount_head_student_period
+    ON {S}.{DatabaseConfig.TableFeeStudentAmount} (feeheadid, studentid, academicperiodid)
+    WHERE isactive = true AND academicperiodid IS NOT NULL;
 
 CREATE INDEX ix_feestudentamount_feemasterid
     ON {S}.{DatabaseConfig.TableFeeStudentAmount} (feemasterid);

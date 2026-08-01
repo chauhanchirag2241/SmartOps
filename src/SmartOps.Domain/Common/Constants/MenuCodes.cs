@@ -31,19 +31,17 @@ public static class MenuCodes
 
     public const string Employees = "EMPLOYEES";
 
-    [Obsolete("Use Employees instead.")]
-    public const string Teachers = Employees;
+    public const string Teachers = "TEACHERS";
 
     public const string Classes = "CLASSES";
 
-    public const string ClassMappings = "CLASS_MAPPINGS";
-
-    public const string Subjects = "SUBJECTS";
-
     public const string Shifts = "SHIFTS";
 
+    public const string PromoteStudents = "PROMOTE_STUDENTS";
+
+    public const string RollNumbers = "ROLL_NUMBERS";
+
     public const string AcademicYears = "ACADEMIC_YEARS";
-    public const string AcademicPeriods = "ACADEMIC_PERIODS";
 
     public const string Attendance = "ATTENDANCE";
 
@@ -131,12 +129,12 @@ public static class MenuCodes
         Reports,
         Students,
         Employees,
+        Teachers,
         Classes,
-        ClassMappings,
-        Subjects,
         Shifts,
+        PromoteStudents,
+        RollNumbers,
         AcademicYears,
-        AcademicPeriods,
         Attendance,
         AttendanceReport,
         StaffAttendance,
@@ -156,13 +154,13 @@ public static class MenuCodes
         AdmissionInquiries,
         FrontOfficeSetup,
         ExamManagement,
+        ExamGradeSetup,
         ExamGroups,
         Exams,
         ExamSchedule,
+        ExamHallTickets,
         ExamMarksEntry,
         ExamResults,
-        ExamHallTickets,
-        ExamGradeSetup,
         Timetable,
         PeriodMaster,
         ClassTimetable,

@@ -5,7 +5,6 @@ using System.Text.RegularExpressions;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Domain.Modules.Student.Entities;
-using SmartOps.Application.Modules.Identity.Interfaces;
 using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.Student;
 using SmartOps.Domain.Common.Configuration;
@@ -25,7 +24,6 @@ namespace SmartOps.Api.Modules.Student.Controllers;
 [Authorize]
 public sealed class StudentsController(
     IStudentRepository studentRepository,
-    IUserProvisioningService userProvisioning,
     IUserScopeService userScopeService,
     IResourceAuthorizationService resourceAuthorization,
     ITenantProvider tenantProvider,
@@ -72,6 +70,35 @@ public sealed class StudentsController(
         }
 
         request.AdmissionNo = request.AdmissionNo!.Trim();
+
+        if (request.Academics is null || request.Academics.Count == 0)
+        {
+            return BadRequest(new { message = "Academic details are required." });
+        }
+
+        foreach (CreateStudentAcademicDto academic in request.Academics)
+        {
+            if (academic.ClassGroupId == Guid.Empty)
+            {
+                return BadRequest(new { message = "Class group is required." });
+            }
+
+            if (academic.AcademicYearId == Guid.Empty)
+            {
+                return BadRequest(new { message = "Academic year is required." });
+            }
+
+            if (academic.ClassId is Guid classId && classId == Guid.Empty)
+            {
+                academic.ClassId = null;
+            }
+
+            if (academic.ClassId is null)
+            {
+                academic.RollNumber = null;
+            }
+        }
+
         var entity = request.ToEntity();
 
         if (!TryGetSchoolId(out Guid schoolId))
@@ -79,16 +106,12 @@ public sealed class StudentsController(
             return BadRequest("School context is required.");
         }
 
-        Guid userId = await userProvisioning
-            .ProvisionStudentUserAsync(entity, schoolId, cancellationToken)
+        var studentId = await studentRepository
+            .CreateStudentAsync(entity, schoolId, cancellationToken)
             .ConfigureAwait(false);
-        entity.UserId = userId;
-        entity.PortalAccess = true;
-
-        var studentId = await studentRepository.CreateStudentAsync(entity, cancellationToken).ConfigureAwait(false);
 
         await userScopeService
-            .BumpScopeVersionAsync(userId, schoolId, cancellationToken)
+            .BumpScopeVersionAsync(entity.UserId, schoolId, cancellationToken)
             .ConfigureAwait(false);
 
         return Ok(new CreateStudentResponse("Student created successfully", studentId));
@@ -259,7 +282,7 @@ public sealed class StudentsController(
 
     /// <summary>Checks whether target year/class is ready for promotion (class active).</summary>
     [HttpGet("promote-readiness")]
-    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [Authorize(Policy = MenuPolicies.Students.Promote)]
     [ProducesResponseType(typeof(PromoteReadinessResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PromoteReadinessResponse>> GetPromoteReadiness(
         [FromQuery] Guid targetAcademicYearId,
@@ -279,7 +302,7 @@ public sealed class StudentsController(
 
     /// <summary>Stub: fees module removed — always returns an empty pending-fees list.</summary>
     [HttpGet("promote-pending-fees")]
-    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [Authorize(Policy = MenuPolicies.Students.Promote)]
     [ProducesResponseType(typeof(IReadOnlyList<PromotePendingFeeDto>), StatusCodes.Status200OK)]
     public ActionResult<IReadOnlyList<PromotePendingFeeDto>> GetPromotePendingFees(
         [FromQuery] Guid sourceAcademicYearId,
@@ -291,7 +314,7 @@ public sealed class StudentsController(
 
     /// <summary>Promote students from one academic year enrollment to the next.</summary>
     [HttpPost("promote")]
-    [Authorize(Policy = MenuPolicies.Students.Edit)]
+    [Authorize(Policy = MenuPolicies.Students.Promote)]
     [ProducesResponseType(typeof(PromoteStudentsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PromoteStudentsResponse>> PromoteStudents(
@@ -322,6 +345,38 @@ public sealed class StudentsController(
             result.Errors,
             result.StudentsWithFeesTransferred,
             result.TotalPendingTransferred));
+    }
+
+    /// <summary>Bulk-update roll numbers for students in a class/academic year.</summary>
+    [HttpPut("roll-numbers")]
+    [Authorize(Policy = MenuPolicies.Students.UpdateRollNumbers)]
+    [ProducesResponseType(typeof(UpdateRollNumbersResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<UpdateRollNumbersResponse>> UpdateRollNumbers(
+        [FromBody] UpdateRollNumbersRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Students is null || request.Students.Count == 0)
+        {
+            return BadRequest("At least one student is required.");
+        }
+
+        if (request.AcademicYearId == Guid.Empty || request.ClassId == Guid.Empty)
+        {
+            return BadRequest("Academic year and class are required.");
+        }
+
+        var entries = request.Students
+            .Select(s => new UpdateRollNumberEntry(s.StudentId, s.RollNumber))
+            .ToList();
+
+        UpdateRollNumbersResult result = await studentRepository.UpdateRollNumbersAsync(
+            request.AcademicYearId,
+            request.ClassId,
+            entries,
+            cancellationToken).ConfigureAwait(false);
+
+        return Ok(new UpdateRollNumbersResponse(result.UpdatedCount, result.Errors));
     }
 
     /// <summary>Upload student photo.</summary>

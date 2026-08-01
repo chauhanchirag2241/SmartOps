@@ -37,7 +37,7 @@ WHERE NOT EXISTS (
 """);
         }
 
-        SeedRole(RoleNames.Admin, view: true, add: true, edit: true, delete: true);
+        SeedRole(RoleNames.SmartOpsAdmin, view: true, add: true, edit: true, delete: true);
     }
 
     private void SeedRole(string roleName, bool view, bool add, bool edit, bool delete)

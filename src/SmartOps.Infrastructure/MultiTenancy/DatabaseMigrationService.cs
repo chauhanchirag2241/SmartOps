@@ -152,24 +152,24 @@ SELECT EXISTS (
         await schoolDb.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         string man = DatabaseConfig.Schema_Man;
-        bool hasAdminRole = await schoolDb.ExecuteScalarAsync<bool>(
+        bool hasFullAccessRole = await schoolDb.ExecuteScalarAsync<bool>(
             new CommandDefinition(
                 $"""
 SELECT EXISTS (
     SELECT 1 FROM {man}.{DatabaseConfig.TableRoles}
-    WHERE lower(trim(name)) = lower(trim(@Name)) AND isactive = true
+    WHERE lower(trim(name)) IN (@SmartOpsAdmin, @SchoolAdmin) AND isactive = true
 )
 """,
-                new { Name = RoleNames.Admin },
+                new { SmartOpsAdmin = RoleNames.SmartOpsAdmin, SchoolAdmin = RoleNames.SchoolAdmin },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-        if (hasAdminRole)
+        if (hasFullAccessRole)
         {
             return;
         }
 
         _logger.LogWarning(
-            "School {SchoolId} dedicated database is missing Admin role; running slim identity seed.",
+            "School {SchoolId} dedicated database is missing SmartOpsAdmin/School Admin role; running slim identity seed.",
             schoolId);
 
         await using NpgsqlConnection platform = (NpgsqlConnection)await _connectionFactory

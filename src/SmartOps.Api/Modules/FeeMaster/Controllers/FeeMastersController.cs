@@ -531,12 +531,14 @@ public sealed class FeeMastersController(
             return BadRequest("Student fee amounts cannot be edited after fee has been collected.");
         }
 
-        var headMap = detail.Heads.ToDictionary(h => h.FeeHeadId);
+        var headMap = detail.Heads.ToDictionary(
+            h => (h.FeeHeadId, PeriodId: h.AcademicPeriodId ?? Guid.Empty));
         var rows = new List<FeeStudentAmountEntity>();
 
         foreach (var item in request.Amounts ?? [])
         {
-            if (!headMap.TryGetValue(item.FeeHeadId, out var head))
+            var periodKey = item.AcademicPeriodId ?? Guid.Empty;
+            if (!headMap.TryGetValue((item.FeeHeadId, periodKey), out var head))
             {
                 return BadRequest("Invalid fee head.");
             }
@@ -550,8 +552,10 @@ public sealed class FeeMastersController(
             var excludeChanged = item.IsExcluded.HasValue && item.IsExcluded.Value != head.IsExcluded;
             var effectiveDefault = head.DefaultAmount;
             var currentEffective = head.IsExcluded ? (decimal?)null : (head.HasOverride ? head.Amount : head.DefaultAmount);
+            var isStudentWise = string.Equals(parent.ApplicableTo, "StudentWise", StringComparison.OrdinalIgnoreCase);
+            var canEditAmount = head.IsEditable || isStudentWise || head.HasOverride;
 
-            if (head.IsEditable && item.Amount.HasValue)
+            if (canEditAmount && item.Amount.HasValue)
             {
                 var newAmount = item.Amount;
                 var differsFromDefault = newAmount != effectiveDefault || head.IsExcluded;
@@ -561,6 +565,7 @@ public sealed class FeeMastersController(
                     rows.Add(new FeeStudentAmountEntity
                     {
                         FeeHeadId = item.FeeHeadId,
+                        AcademicPeriodId = item.AcademicPeriodId,
                         Amount = exclude ? null : newAmount,
                         IsExcluded = exclude,
                     });
@@ -571,6 +576,7 @@ public sealed class FeeMastersController(
                 rows.Add(new FeeStudentAmountEntity
                 {
                     FeeHeadId = item.FeeHeadId,
+                    AcademicPeriodId = item.AcademicPeriodId,
                     Amount = exclude ? null : (head.HasOverride ? head.Amount : head.DefaultAmount),
                     IsExcluded = exclude,
                 });

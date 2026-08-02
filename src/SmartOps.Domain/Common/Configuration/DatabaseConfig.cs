@@ -100,6 +100,7 @@ public static class DatabaseConfig
     public const string TableExamGradeScales = "examgradescales";
     public const string TableExamGradeScaleDetails = "examgradescaledetails";
     public const string TableExamGroups = "examgroups";
+    public const string TableClassGroupExamMappings = "classgroupexammappings";
     public const string TableExams = "exams";
     public const string TableExamClasses = "examclasses";
     public const string TableExamMarkComponents = "exammarkcomponents";

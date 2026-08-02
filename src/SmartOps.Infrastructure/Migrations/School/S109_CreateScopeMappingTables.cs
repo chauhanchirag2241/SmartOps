@@ -17,11 +17,11 @@ public sealed class S109_CreateScopeMappingTables : Migration
         {
             Create.Table(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
-                .WithColumn("classid").AsGuid().NotNullable()
-                    .ForeignKey("fk_cst_mappings_classid", S, DatabaseConfig.TableClasses, "id")
+                .WithColumn("classgroupid").AsGuid().NotNullable()
+                    .ForeignKey("fk_cst_mappings_classgroupid", S, DatabaseConfig.TableClassGroups, "id")
                 .WithColumn("subjectid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_subjectid", S, DatabaseConfig.TableSubjects, "id")
-                .WithColumn("employeeid").AsGuid().Nullable()
+                .WithColumn("employeeid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_employeeid", S, DatabaseConfig.TableEmployees, "id")
                 .WithColumn("academicyearid").AsGuid().NotNullable()
                     .ForeignKey("fk_cst_mappings_academicyearid", S, DatabaseConfig.TableAcademicYears, "id")
@@ -31,14 +31,13 @@ public sealed class S109_CreateScopeMappingTables : Migration
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
                 .OnColumn("employeeid").Ascending();
 
-            Create.Index("ix_cst_mappings_classid")
+            Create.Index("ix_cst_mappings_classgroupid")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
-                .OnColumn("classid").Ascending();
+                .OnColumn("classgroupid").Ascending();
 
-            Create.Index("ix_cst_mappings_class_year")
+            Create.Index("ix_cst_mappings_subjectid")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
-                .OnColumn("classid").Ascending()
-                .OnColumn("academicyearid").Ascending();
+                .OnColumn("subjectid").Ascending();
 
             Create.Index("ix_cst_mappings_employee_year")
                 .OnTable(DatabaseConfig.TableClassSubjectTeacherMappings).InSchema(S)
@@ -46,8 +45,8 @@ public sealed class S109_CreateScopeMappingTables : Migration
                 .OnColumn("academicyearid").Ascending();
 
             Execute.Sql($"""
-CREATE UNIQUE INDEX uq_cst_mappings_class_subject_year
-ON {S}.{DatabaseConfig.TableClassSubjectTeacherMappings} (classid, subjectid, academicyearid)
+CREATE UNIQUE INDEX uq_cst_mappings_classgroup_subject_employee_year
+ON {S}.{DatabaseConfig.TableClassSubjectTeacherMappings} (classgroupid, subjectid, employeeid, academicyearid)
 WHERE isactive = true;
 """);
         }

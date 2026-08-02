@@ -289,6 +289,30 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
+        var parameters = new DynamicParameters();
+        parameters.Add("ActiveBranchId", activeBranchId);
+
+        var scopeFilter = new StringBuilder();
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count == 0)
+            {
+                return [];
+            }
+
+            scopeFilter.Append($"""
+                 AND EXISTS (
+                    SELECT 1
+                    FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings} m
+                    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+                        ON c.classgroupid = m.classgroupid AND c.isactive = true
+                    WHERE m.examgroupid = g.id
+                      AND m.isactive = true
+                      AND c.id = ANY(@ScopeClassIds))
+                """);
+            parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        }
+
         string sql = $"""
             SELECT g.id AS Id,
                    g.name AS Name,
@@ -296,20 +320,24 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
                    g.gradescaleid AS GradeScaleId,
                    gs.name AS GradeScaleName,
                    g.evaluationtype::int AS EvaluationType,
-                   COALESCE(COUNT(e.id), 0)::int AS ExamCount
+                   COALESCE(COUNT(DISTINCT e.id), 0)::int AS ExamCount,
+                   COALESCE((
+                       SELECT string_agg(cg.classname, ', ' ORDER BY cg.classname)
+                       FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings} m2
+                       INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg
+                           ON cg.id = m2.classgroupid AND cg.isactive = true
+                       WHERE m2.examgroupid = g.id AND m2.isactive = true
+                   ), '') AS ClassGroupNames
             FROM {Schema}.{DatabaseConfig.TableExamGroups} g
             LEFT JOIN {Schema}.{DatabaseConfig.TableExamGradeScales} gs ON gs.id = g.gradescaleid AND gs.isactive = true
             LEFT JOIN {Schema}.{DatabaseConfig.TableExams} e ON e.examgroupid = g.id AND e.isactive = true
-            WHERE g.isactive = true{branchFilter}
+            WHERE g.isactive = true{branchFilter}{scopeFilter}
             GROUP BY g.id, g.name, g.description, g.gradescaleid, gs.name, g.evaluationtype, g.createdon
             ORDER BY g.createdon DESC;
             """;
 
         IEnumerable<ExamGroupRow> rows = await connection.QueryAsync<ExamGroupRow>(
-                new CommandDefinition(
-                    sql,
-                    new { ActiveBranchId = activeBranchId },
-                    cancellationToken: ct))
+                new CommandDefinition(sql, parameters, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
@@ -379,15 +407,171 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         DateTime utcNow = DateTime.UtcNow;
         Guid actorId = ResolveUpdateActor();
 
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            await SoftDeleteRelatedAsync(
+                    conn,
+                    Schema,
+                    DatabaseConfig.TableClassGroupExamMappings,
+                    "examgroupid",
+                    id,
+                    tx)
+                .ConfigureAwait(false);
+
+            string sql = $"""
+                UPDATE {Schema}.{DatabaseConfig.TableExamGroups}
+                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                WHERE id = @Id;
+                """;
+
+            await conn.ExecuteAsync(
+                    new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, tx, cancellationToken: ct))
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetClassGroupIdsForExamGroupAsync(
+        Guid examGroupId,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            UPDATE {Schema}.{DatabaseConfig.TableExamGroups}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
-            WHERE id = @Id;
+            SELECT classgroupid
+            FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings}
+            WHERE examgroupid = @ExamGroupId AND isactive = true
+            ORDER BY createdon ASC;
+            """;
+        IEnumerable<Guid> ids = await connection.QueryAsync<Guid>(
+                new CommandDefinition(sql, new { ExamGroupId = examGroupId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return ids.ToList();
+    }
+
+    public async Task<bool> AllClassesBelongToExamGroupAsync(
+        Guid examGroupId,
+        IReadOnlyList<Guid> classIds,
+        CancellationToken ct = default)
+    {
+        Guid[] ids = (classIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (ids.Length == 0)
+        {
+            return true;
+        }
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+SELECT COUNT(1) = @ExpectedCount
+FROM {Schema}.{DatabaseConfig.TableClasses} c
+WHERE c.id = ANY(@ClassIds)
+  AND c.isactive = true
+  AND c.classgroupid IS NOT NULL
+  AND EXISTS (
+      SELECT 1
+      FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings} m
+      WHERE m.examgroupid = @ExamGroupId
+        AND m.classgroupid = c.classgroupid
+        AND m.isactive = true
+  );
+""";
+        return await connection.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    sql,
+                    new { ExamGroupId = examGroupId, ClassIds = ids, ExpectedCount = ids.Length },
+                    cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetClassGroupIdsByExamGroupAsync(
+        IReadOnlyCollection<Guid> examGroupIds,
+        CancellationToken ct = default)
+    {
+        if (examGroupIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<Guid>>();
+        }
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT examgroupid AS ExamGroupId, classgroupid AS ClassGroupId
+            FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings}
+            WHERE examgroupid = ANY(@ExamGroupIds) AND isactive = true
+            ORDER BY createdon ASC;
             """;
 
-        await connection.ExecuteAsync(
-                new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, cancellationToken: ct))
+        IEnumerable<(Guid ExamGroupId, Guid ClassGroupId)> rows = await connection
+            .QueryAsync<(Guid ExamGroupId, Guid ClassGroupId)>(
+                new CommandDefinition(sql, new { ExamGroupIds = examGroupIds.ToArray() }, cancellationToken: ct))
             .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.ExamGroupId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<Guid>)g.Select(x => x.ClassGroupId).ToList());
+    }
+
+    public async Task SaveExamGroupClassGroupIdsAsync(
+        Guid examGroupId,
+        Guid branchId,
+        IReadOnlyList<Guid> classGroupIds,
+        bool allowRemove,
+        CancellationToken ct = default)
+    {
+        DateTime utcNow = DateTime.UtcNow;
+        List<Guid> desired = (classGroupIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string table = DatabaseConfig.TableClassGroupExamMappings;
+        Guid resolvedBranch = await _branchWrite.ResolveWriteBranchIdAsync(branchId, ct).ConfigureAwait(false);
+
+        await WithTransactionAsync(connection, async (conn, tx) =>
+        {
+            List<(Guid Id, Guid ClassGroupId)> existing = (await conn.QueryAsync<(Guid Id, Guid ClassGroupId)>(
+                    new CommandDefinition(
+                        $"""
+                        SELECT id AS Id, classgroupid AS ClassGroupId
+                        FROM {Schema}.{table}
+                        WHERE examgroupid = @ExamGroupId AND isactive = true;
+                        """,
+                        new { ExamGroupId = examGroupId },
+                        transaction: tx,
+                        cancellationToken: ct))
+                .ConfigureAwait(false)).ToList();
+
+            Dictionary<Guid, Guid> existingByGroup = existing.ToDictionary(x => x.ClassGroupId, x => x.Id);
+            List<Guid> toAdd = desired.Where(id => !existingByGroup.ContainsKey(id)).ToList();
+
+            if (allowRemove)
+            {
+                List<Guid> toRemove = existing
+                    .Where(x => !desired.Contains(x.ClassGroupId))
+                    .Select(x => x.Id)
+                    .ToList();
+                foreach (Guid rowId in toRemove)
+                {
+                    await SoftDeleteAsync(conn, Schema, table, rowId, tx).ConfigureAwait(false);
+                }
+            }
+
+            foreach (Guid classGroupId in toAdd)
+            {
+                var row = new ClassGroupExamMappingEntity
+                {
+                    Id = Guid.NewGuid(),
+                    BranchId = resolvedBranch,
+                    ExamGroupId = examGroupId,
+                    ClassGroupId = classGroupId,
+                };
+                EnsureInsertAudit(row, utcNow);
+                await InsertAsync(conn, Schema, table, row, tx).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
     }
 
     public async Task<bool> GroupHasExamsAsync(Guid id, CancellationToken ct = default)
@@ -448,6 +632,41 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             parameters.Add("Search", $"%{search.Trim()}%");
         }
 
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count == 0)
+            {
+                return [];
+            }
+
+            // Teacher sees an exam when they have a section on the exam, or (for exams
+            // still without classes) when their sections fall under the exam group's mapped class groups.
+            where.Append($"""
+                 AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM {Schema}.{DatabaseConfig.TableExamClasses} xc
+                        WHERE xc.examid = e.id
+                          AND xc.isactive = true
+                          AND xc.classid = ANY(@ScopeClassIds))
+                    OR (
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM {Schema}.{DatabaseConfig.TableExamClasses} xc2
+                            WHERE xc2.examid = e.id AND xc2.isactive = true)
+                        AND EXISTS (
+                            SELECT 1
+                            FROM {Schema}.{DatabaseConfig.TableClassGroupExamMappings} m
+                            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+                                ON c.classgroupid = m.classgroupid AND c.isactive = true
+                            WHERE m.examgroupid = e.examgroupid
+                              AND m.isactive = true
+                              AND c.id = ANY(@ScopeClassIds)))
+                 )
+                """);
+            parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        }
+
         string sql = $"""
             SELECT e.id AS Id,
                    e.name AS Name,
@@ -455,8 +674,6 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
                    e.examgroupid AS ExamGroupId,
                    COALESCE(g.name, '') AS ExamGroupName,
                    e.academicperiodid AS AcademicPeriodId,
-                   e.startdate AS StartDate,
-                   e.enddate AS EndDate,
                    e.minpasspercent AS MinPassPercent,
                    e.gradescaleid AS GradeScaleId,
                    e.status::int AS Status,
@@ -469,7 +686,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             FROM {Schema}.{DatabaseConfig.TableExams} e
             LEFT JOIN {Schema}.{DatabaseConfig.TableExamGroups} g ON g.id = e.examgroupid
             WHERE {where}
-            ORDER BY e.startdate DESC, e.createdon DESC;
+            ORDER BY e.createdon DESC;
             """;
 
         IEnumerable<ExamRow> rows = await connection.QueryAsync<ExamRow>(
@@ -484,7 +701,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
         string sql = $"""
             SELECT id, examgroupid, branchid, academicyearid, name, examtype, academicperiodid,
-                   startdate, enddate, minpasspercent, gradescaleid, status, resultdeclared,
+                   minpasspercent, gradescaleid, status, resultdeclared,
                    resultdeclaredon, resultdeclaredby, description,
                    isactive, versionno, createdby, createdon, updatedby, updatedon
             FROM {Schema}.{DatabaseConfig.TableExams}
@@ -505,21 +722,38 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             return [];
         }
 
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+
+        var parameters = new DynamicParameters();
+        parameters.Add("ExamIds", examIds.ToArray());
+        string scopeFilter = string.Empty;
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count == 0)
+            {
+                return [];
+            }
+
+            scopeFilter = " AND xc.classid = ANY(@ScopeClassIds)";
+            parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        }
 
         string sql = $"""
             SELECT xc.examid AS ExamId,
                    xc.classid AS ClassId,
-                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName
+                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName,
+                   c.classgroupid AS ClassGroupId,
+                   COALESCE(cg.classname, '') AS ClassGroupName
             FROM {Schema}.{DatabaseConfig.TableExamClasses} xc
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = xc.classid
             INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
-            WHERE xc.examid = ANY(@ExamIds) AND xc.isactive = true
+            WHERE xc.examid = ANY(@ExamIds) AND xc.isactive = true{scopeFilter}
             ORDER BY cg.classname, c.section;
             """;
 
         IEnumerable<ExamClassRow> rows = await connection.QueryAsync<ExamClassRow>(
-                new CommandDefinition(sql, new { ExamIds = examIds.ToArray() }, cancellationToken: ct))
+                new CommandDefinition(sql, parameters, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
@@ -568,11 +802,11 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             string sql = $"""
                 INSERT INTO {Schema}.{DatabaseConfig.TableExams}
                     (id, examgroupid, branchid, academicyearid, name, examtype, academicperiodid,
-                     startdate, enddate, minpasspercent, gradescaleid, status, resultdeclared, description,
+                     minpasspercent, gradescaleid, status, resultdeclared, description,
                      isactive, versionno, createdby, createdon, updatedby, updatedon)
                 VALUES
                     (@Id, @ExamGroupId, @BranchId, @AcademicYearId, @Name, @ExamType, @AcademicPeriodId,
-                     @StartDate, @EndDate, @MinPassPercent, @GradeScaleId, @Status, @ResultDeclared, @Description,
+                     @MinPassPercent, @GradeScaleId, @Status, @ResultDeclared, @Description,
                      @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
                 """;
             await conn.ExecuteAsync(new CommandDefinition(sql, exam, tx, cancellationToken: ct)).ConfigureAwait(false);
@@ -603,8 +837,6 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
                     name = @Name,
                     examtype = @ExamType,
                     academicperiodid = @AcademicPeriodId,
-                    startdate = @StartDate,
-                    enddate = @EndDate,
                     minpasspercent = @MinPassPercent,
                     gradescaleid = @GradeScaleId,
                     description = @Description,
@@ -797,6 +1029,19 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             parameters.Add("ClassId", classId.Value);
         }
 
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count == 0)
+            {
+                return [];
+            }
+
+            // Section-level access is enough; do not also require exam-group mapping
+            // (stale/missing mappings were hiding Class 1 schedules for teachers who had rights).
+            where.Append(" AND sc.classid = ANY(@ScopeClassIds)");
+            parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        }
+
         string sql = $"""
             SELECT sc.id AS Id,
                    sc.examid AS ExamId,
@@ -819,7 +1064,10 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
             INNER JOIN {Schema}.{DatabaseConfig.TableExams} e ON e.id = sc.examid
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sc.classid
             INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
-            LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = sc.subjectid
+            INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s
+                ON s.id = sc.subjectid
+               AND s.isactive = true
+               AND s.classgroupid = c.classgroupid
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} emp ON emp.id = sc.invigilatorid
             LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} empu ON empu.id = emp.userid
             WHERE {where}

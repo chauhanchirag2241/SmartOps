@@ -28,6 +28,7 @@ public sealed class ClassSubjectTeacherMappingsController(
     }
 
     [HttpGet("by-class/{classId:guid}")]
+    [HttpGet("by-class-group/{classId:guid}")]
     [Authorize(Policy = MenuPolicies.Teachers.View)]
     [ProducesResponseType(typeof(IReadOnlyList<ClassSubjectTeacherMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ClassSubjectTeacherMappingDto>>> GetByClass(
@@ -35,6 +36,7 @@ public sealed class ClassSubjectTeacherMappingsController(
         [FromQuery] Guid? academicYearId,
         CancellationToken cancellationToken)
     {
+        // Parameter is class group id (route names retained for compatibility).
         IReadOnlyList<ClassSubjectTeacherMappingDto> rows = await mappingService
             .GetByClassAsync(classId, academicYearId, cancellationToken)
             .ConfigureAwait(false);
@@ -108,28 +110,6 @@ public sealed class ClassSubjectTeacherMappingsController(
         {
             ClassSubjectTeacherMappingDto updated = await mappingService
                 .UpdateMappingAsync(id, request, cancellationToken)
-                .ConfigureAwait(false);
-            return Ok(updated);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    [HttpPut("{id:guid}/class-teacher")]
-    [Authorize(Policy = MenuPolicies.Teachers.Edit)]
-    [ProducesResponseType(typeof(ClassSubjectTeacherMappingDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ClassSubjectTeacherMappingDto>> SetClassTeacher(
-        Guid id,
-        [FromBody] SetClassTeacherRequestDto? request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            bool isClassTeacher = request?.IsClassTeacher ?? true;
-            ClassSubjectTeacherMappingDto updated = await mappingService
-                .SetClassTeacherAsync(id, isClassTeacher, cancellationToken)
                 .ConfigureAwait(false);
             return Ok(updated);
         }

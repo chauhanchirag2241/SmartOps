@@ -45,7 +45,7 @@ public sealed class ClassesController(
     }
 
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.Classes.View)]
+    [Authorize(Policy = MenuPolicies.Classes.ListForAttendanceDropdown)]
     [ProducesResponseType(typeof(PagedResult<ClassListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllClasses(
         [FromQuery] int pageIndex = 1,
@@ -167,6 +167,20 @@ public sealed class ClassesController(
         }
 
         var result = await classRepository.GetClassDropdownAsync(academicYearId, cancellationToken).ConfigureAwait(false);
+        return Ok(result);
+    }
+
+    [HttpGet("/api/class/{classId:guid}/teaching-subjects")]
+    [Authorize(Policy = MenuPolicies.Classes.ListForAttendanceDropdown)]
+    [ProducesResponseType(typeof(IReadOnlyList<DropdownDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTeachingSubjectsForClass(
+        Guid classId,
+        [FromQuery] Guid? academicYearId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await classRepository
+            .GetTeachingSubjectsForClassAsync(classId, academicYearId, cancellationToken)
+            .ConfigureAwait(false);
         return Ok(result);
     }
 

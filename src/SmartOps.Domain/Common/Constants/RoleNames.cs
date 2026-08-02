@@ -11,7 +11,6 @@ public static class RoleNames
 
     public const string Principal = "Principal";
     public const string Teacher = "Teacher";
-    public const string Student = "Student";
     public const string Accountant = "Accountant";
     public const string FrontOfficeExecutive = "Front Office Executive";
 
@@ -20,7 +19,7 @@ public static class RoleNames
         public static readonly Guid SmartOpsAdmin = Guid.Parse("20000000-0000-0000-0000-000000000001");
         public static readonly Guid Principal = Guid.Parse("20000000-0000-0000-0000-000000000002");
         public static readonly Guid Teacher = Guid.Parse("20000000-0000-0000-0000-000000000003");
-        public static readonly Guid Student = Guid.Parse("20000000-0000-0000-0000-000000000004");
+        // 20000000-…0004 reserved — former Student portal role (mobile app role TBD)
         public static readonly Guid Accountant = Guid.Parse("20000000-0000-0000-0000-000000000005");
         public static readonly Guid FrontOfficeExecutive = Guid.Parse("20000000-0000-0000-0000-000000000006");
         public static readonly Guid SchoolAdmin = Guid.Parse("20000000-0000-0000-0000-000000000007");
@@ -32,7 +31,6 @@ public static class RoleNames
         (Ids.SchoolAdmin, SchoolAdmin, "School administrator — full school portal access"),
         (Ids.Principal, Principal, "School principal — academic and operational oversight"),
         (Ids.Teacher, Teacher, "Teaching staff — class, attendance, homework, exams"),
-        (Ids.Student, Student, "Student portal — own academics, leave, results"),
         (Ids.Accountant, Accountant, "Fees and salary operations"),
         (Ids.FrontOfficeExecutive, FrontOfficeExecutive, "Front office executive — visitors, inquiries, complaints"),
     ];
@@ -53,9 +51,11 @@ public static class RoleNames
         }
 
         string t = userTypeName.Trim();
+
+        // Student user type: no SmartOpsUI portal role (mobile app role later).
         if (string.Equals(t, UserTypeCodes.Student, StringComparison.OrdinalIgnoreCase))
         {
-            return Student;
+            return null;
         }
 
         if (string.Equals(t, UserTypeCodes.Teacher, StringComparison.OrdinalIgnoreCase))

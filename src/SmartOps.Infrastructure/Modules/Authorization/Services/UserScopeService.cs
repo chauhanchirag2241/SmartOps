@@ -59,7 +59,8 @@ public sealed class UserScopeService : IUserScopeService
             return GlobalScope(1, academicYearId);
         }
 
-        string cacheKey = $"scope:{userId}:{schoolId}:{schema}:{academicYearId}";
+        string generation = GetScopeGeneration(userId, schoolId, schema);
+        string cacheKey = BuildScopeCacheKey(userId, schoolId, schema, academicYearId, generation);
 
         if (_cache.TryGetValue(cacheKey, out UserScopeDto? cached) && cached is not null)
         {
@@ -111,19 +112,44 @@ public sealed class UserScopeService : IUserScopeService
 
     public Task<int> GetScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
     {
-        _ = userId;
-        _ = schoolId;
         _ = cancellationToken;
-        return Task.FromResult(1);
+        string schema = _context.OperationalSchema;
+        string generation = GetScopeGeneration(userId, schoolId, schema);
+        return Task.FromResult(generation.GetHashCode(StringComparison.Ordinal));
     }
 
     public Task BumpScopeVersionAsync(Guid userId, Guid schoolId, CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
         string schema = _context.OperationalSchema;
-        // Cache keys include academic year; TTL also expires entries (ScopeCacheMinutes).
-        _cache.Remove($"scope:{userId}:{schoolId}:{schema}");
+        // Advance generation so every AY-specific scope:{...}:{ay}:{gen} key misses and reloads.
+        _cache.Set(
+            BuildScopeGenerationKey(userId, schoolId, schema),
+            Guid.NewGuid().ToString("N"),
+            TimeSpan.FromDays(30));
         return Task.CompletedTask;
+    }
+
+    private static string BuildScopeGenerationKey(Guid userId, Guid? schoolId, string schema) =>
+        $"scope-gen:{userId}:{schoolId}:{schema}";
+
+    private static string BuildScopeCacheKey(
+        Guid userId,
+        Guid? schoolId,
+        string schema,
+        Guid? academicYearId,
+        string generation) =>
+        $"scope:{userId}:{schoolId}:{schema}:{academicYearId}:{generation}";
+
+    private string GetScopeGeneration(Guid userId, Guid? schoolId, string schema)
+    {
+        string key = BuildScopeGenerationKey(userId, schoolId, schema);
+        if (_cache.TryGetValue(key, out string? generation) && !string.IsNullOrWhiteSpace(generation))
+        {
+            return generation;
+        }
+
+        return "0";
     }
 
     private async Task<UserScopeDto> ResolveHodScopeAsync(

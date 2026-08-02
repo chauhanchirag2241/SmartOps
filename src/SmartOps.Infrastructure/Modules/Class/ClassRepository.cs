@@ -633,6 +633,104 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<DropdownDto>> GetTeachingSubjectsForClassAsync(
+        Guid classId,
+        Guid? academicYearId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (classId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+
+        var schema = Context.OperationalSchema;
+
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
+        {
+            if (_scope.AllowedClassIds.Count == 0 || !_scope.AllowedClassIds.Contains(classId))
+            {
+                return [];
+            }
+
+            // Teachers: only subjects mapped to them on this section (CST).
+            if (_scope.ScopeType == DataScopeType.Class)
+            {
+                var teacherSql = $@"
+                    SELECT DISTINCT
+                        s.id AS Id,
+                        s.subjectname AS Name,
+                        s.classgroupid AS ClassGroupId
+                    FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+                    INNER JOIN {schema}.{DatabaseConfig.TableEmployees} e ON e.id = m.employeeid
+                    INNER JOIN {schema}.{DatabaseConfig.TableClasses} c
+                        ON c.classgroupid = m.classgroupid AND c.id = @ClassId AND c.isactive = true
+                    INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+                    INNER JOIN {schema}.{DatabaseConfig.TableSubjects} s ON s.id = m.subjectid
+                    WHERE m.isactive = true
+                      AND e.isactive = true
+                      AND s.isactive = true
+                      AND cg.isactive = true
+                      AND e.userid = @UserId
+                      AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
+                    ORDER BY s.subjectname ASC;";
+
+                var teacherItems = await connection.QueryAsync<DropdownDto>(
+                    teacherSql,
+                    new
+                    {
+                        ClassId = classId,
+                        UserId = CurrentUser.UserId,
+                        AcademicYearId = academicYearId ?? _scope.ActiveAcademicYearId,
+                    }).ConfigureAwait(false);
+                return teacherItems.ToList();
+            }
+        }
+
+        string whereClause = """
+            WHERE c.id = @ClassId
+              AND c.isactive = true
+              AND cg.isactive = true
+              AND s.isactive = true
+            """;
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "cg", ref whereClause);
+        whereClause = BranchSqlBuilder.AppendActiveBranchFilter(_branchContext, "s", ref whereClause);
+
+        object parameters = new { ClassId = classId, ActiveBranchId = _branchContext.ActiveBranchId };
+
+        if (_scope.ScopesEnabled
+            && !_scope.IsGlobalScope
+            && _scope.AllowedSubjectIds.Count > 0)
+        {
+            whereClause += " AND s.id = ANY(@ScopeSubjectIds)";
+            parameters = new
+            {
+                ClassId = classId,
+                ActiveBranchId = _branchContext.ActiveBranchId,
+                ScopeSubjectIds = _scope.AllowedSubjectIds.ToArray(),
+            };
+        }
+
+        var globalSql = $@"
+            SELECT DISTINCT
+                s.id AS Id,
+                s.subjectname AS Name,
+                s.classgroupid AS ClassGroupId
+            FROM {schema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            INNER JOIN {schema}.{DatabaseConfig.TableSubjects} s ON s.classgroupid = c.classgroupid
+            {whereClause}
+            ORDER BY s.subjectname ASC;";
+
+        var globalItems = await connection.QueryAsync<DropdownDto>(globalSql, parameters).ConfigureAwait(false);
+        return globalItems.ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DropdownDto>> GetClassGroupDropdownAsync(
         Guid? academicYearId = null,
         CancellationToken cancellationToken = default)
@@ -761,7 +859,12 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         }
 
         var teacherMappingCount = await connection.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(1) FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} WHERE classid = @Id;",
+            $"""
+SELECT COUNT(1)
+FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+INNER JOIN {schema}.{DatabaseConfig.TableClasses} c ON c.classgroupid = m.classgroupid
+WHERE c.id = @Id AND m.isactive = true;
+""",
             new { Id = id }).ConfigureAwait(false);
 
         if (teacherMappingCount > 0)

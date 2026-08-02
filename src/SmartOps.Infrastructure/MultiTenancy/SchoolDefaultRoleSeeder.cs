@@ -7,8 +7,9 @@ using SmartOps.Domain.Common.Constants;
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 /// <summary>
-/// Seeds default school portal roles (School Admin, Principal, Teacher, Student, Accountant, Front Office Executive, SmartOpsAdmin)
+/// Seeds default school portal roles (School Admin, Principal, Teacher, Accountant, Front Office Executive, SmartOpsAdmin)
 /// and their menu permissions into <c>man.roles</c> / <c>man.rolemenupermissions</c>.
+/// Student is not a portal role — mobile app role will be added separately.
 /// </summary>
 public static class SchoolDefaultRoleSeeder
 {

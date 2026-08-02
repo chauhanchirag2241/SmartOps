@@ -193,11 +193,12 @@ public sealed class UserProvisioningService : BaseRepository, IUserProvisioningS
             throw new InvalidOperationException("Student email is required to create a portal user.");
         }
 
+        // Identity user only — no SmartOpsUI portal role (mobile app role later).
         var request = new ProvisionUserRequest
         {
             SchoolId = schoolId,
             UserTypeCode = UserTypeCodes.Student,
-            RoleName = RoleNames.Student,
+            RoleName = null,
             FirstName = student.FirstName,
             LastName = student.LastName,
             Email = student.Email,

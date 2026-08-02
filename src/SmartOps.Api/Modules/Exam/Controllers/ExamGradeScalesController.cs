@@ -19,7 +19,7 @@ public sealed class ExamGradeScalesController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.ExamGradeSetup.View)]
+    [Authorize(Policy = MenuPolicies.ExamGradeSetup.ListForExamModule)]
     [ProducesResponseType(typeof(IList<ExamGradeScaleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList(CancellationToken ct)
     {
@@ -28,7 +28,7 @@ public sealed class ExamGradeScalesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = MenuPolicies.ExamGradeSetup.View)]
+    [Authorize(Policy = MenuPolicies.ExamGradeSetup.ListForExamModule)]
     [ProducesResponseType(typeof(ExamGradeScaleDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {

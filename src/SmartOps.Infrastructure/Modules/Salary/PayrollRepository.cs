@@ -190,6 +190,14 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pe.grosssalary AS GrossSalary,
                    pe.totaldeductions AS TotalDeductions,
                    pe.netsalary AS NetSalary,
+                   pe.workingdays AS WorkingDays,
+                   pe.presentdays AS PresentDays,
+                   COALESCE((
+                       SELECT SUM(l.amount)
+                       FROM {Schema}.{DatabaseConfig.TablePayrollEntryLines} l
+                       WHERE l.payrollentryid = pe.id AND l.isactive = true AND l.isearning = false
+                         AND l.componentname = 'Attendance cut'
+                   ), 0) AS AttendanceCutAmount,
                    pe.status AS Status
             FROM {Schema}.{DatabaseConfig.TablePayrollEntries} pe
             INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = pe.employeeid
@@ -360,6 +368,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                    pe.netsalary AS NetSalary,
                    pe.workingdays AS WorkingDays,
                    pe.presentdays AS PresentDays,
+                   pr.useattendancewisesalary AS UseAttendanceWiseSalary,
                    t.bankname AS BankName,
                    t.bankaccountnumber AS BankAccountNumber,
                    t.bankifsccode AS BankIfscCode

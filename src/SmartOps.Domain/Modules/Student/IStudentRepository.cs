@@ -11,7 +11,7 @@ namespace SmartOps.Domain.Modules.Student;
 public interface IStudentRepository
 {
     /// <summary>
-    /// Creates portal user + role + student aggregate in a single DB transaction (full rollback on any error).
+    /// Creates identity user (no portal role) + student aggregate in a single DB transaction (full rollback on any error).
     /// </summary>
     Task<Guid> CreateStudentAsync(
         StudentEntity student,

@@ -39,13 +39,26 @@ LIMIT 1
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT DISTINCT m.classid
-FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
-WHERE t.userid = @UserId
-  AND m.isactive = true
-  AND t.isactive = true
-  AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
+SELECT DISTINCT classid FROM (
+    SELECT c.id AS classid
+    FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+    INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+    INNER JOIN {schema}.{DatabaseConfig.TableClasses} c
+        ON c.classgroupid = m.classgroupid AND c.isactive = true
+    WHERE t.userid = @UserId
+      AND m.isactive = true
+      AND t.isactive = true
+      AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
+    UNION
+    SELECT cs.sectionid AS classid
+    FROM {schema}.{DatabaseConfig.TableClassSettings} cs
+    INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = cs.teacherid
+    WHERE t.userid = @UserId
+      AND cs.isactive = true
+      AND t.isactive = true
+      AND cs.teacherid IS NOT NULL
+      AND cs.sectionid IS NOT NULL
+) scoped_classes
 """;
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken).ConfigureAwait(false);
     }
@@ -91,9 +104,11 @@ WHERE userid = @UserId AND isactive = true
         }
 
         string sql = $"""
-SELECT DISTINCT m.classid
+SELECT DISTINCT c.id
 FROM {schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+INNER JOIN {schema}.{DatabaseConfig.TableClasses} c
+    ON c.classgroupid = m.classgroupid AND c.isactive = true
 WHERE t.departmentid = ANY(@DepartmentIds)
   AND m.isactive = true
   AND t.isactive = true

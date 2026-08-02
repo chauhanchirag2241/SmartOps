@@ -39,14 +39,17 @@ public record ExamGroupDto(
     string? GradeScaleName,
     ExamEvaluationType EvaluationType,
     string EvaluationTypeLabel,
-    int ExamCount
+    int ExamCount,
+    IReadOnlyList<Guid> ClassGroupIds,
+    string? ClassGroupNames = null
 );
 
 public record SaveExamGroupRequestDto(
     string Name,
     string? Description,
     Guid? GradeScaleId,
-    ExamEvaluationType EvaluationType
+    ExamEvaluationType EvaluationType,
+    IReadOnlyList<Guid>? ClassGroupIds = null
 );
 
 // ── Exams ────────────────────────────────────────────────────
@@ -61,7 +64,9 @@ public record ExamMarkComponentDto(
 
 public record ExamClassInfoDto(
     Guid ClassId,
-    string ClassName
+    string ClassName,
+    Guid ClassGroupId,
+    string ClassGroupName
 );
 
 public record ExamListItemDto(
@@ -70,8 +75,6 @@ public record ExamListItemDto(
     string ExamType,
     Guid ExamGroupId,
     string ExamGroupName,
-    DateOnly StartDate,
-    DateOnly EndDate,
     ExamStatus Status,
     string StatusLabel,
     bool ResultDeclared,
@@ -87,8 +90,6 @@ public record ExamDetailDto(
     string Name,
     string ExamType,
     Guid? AcademicPeriodId,
-    DateOnly StartDate,
-    DateOnly EndDate,
     decimal MinPassPercent,
     Guid? GradeScaleId,
     ExamStatus Status,
@@ -105,8 +106,6 @@ public record SaveExamRequestDto(
     string Name,
     string ExamType,
     Guid? AcademicPeriodId,
-    DateOnly StartDate,
-    DateOnly EndDate,
     decimal MinPassPercent,
     Guid? GradeScaleId,
     string? Description,
@@ -325,8 +324,8 @@ public record HallTicketDto(
     string? SeatNo,
     Guid ExamId,
     string ExamName,
-    DateOnly StartDate,
-    DateOnly EndDate,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
     IList<HallTicketScheduleDto> Schedule
 );
 

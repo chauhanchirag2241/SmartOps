@@ -4,18 +4,16 @@ using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
+using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
-using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
-using SmartOps.Domain.Common.Configuration;
+using SmartOps.Infrastructure.Persistence.Context;
 
 namespace SmartOps.Infrastructure.Modules.Teacher;
 
 public sealed class ClassSubjectTeacherMappingRepository : BaseRepository, IClassSubjectTeacherMappingRepository
 {
-    private const string SectionLabelSql = "c.section";
-
     private readonly DapperContext _context;
     private readonly IBranchContext _branchContext;
 
@@ -32,17 +30,19 @@ public sealed class ClassSubjectTeacherMappingRepository : BaseRepository, IClas
     private string Schema => _context.OperationalSchema;
 
     public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeIdAsync(
-        Guid employeeid,
+        Guid employeeId,
         Guid? academicYearId,
+        bool includeInactive = true,
         CancellationToken cancellationToken = default)
     {
-        string sql = BuildSelectSql("""
+        string activeFilter = includeInactive ? string.Empty : "AND m.isactive = true";
+        string sql = BuildSelectSql($"""
             m.employeeid = @EmployeeId
-            AND m.isactive = true
+            {activeFilter}
             AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
             """);
 
-        return await QueryMappingsAsync(sql, new { employeeid = employeeid, AcademicYearId = academicYearId }, cancellationToken)
+        return await QueryMappingsAsync(sql, new { EmployeeId = employeeId, AcademicYearId = academicYearId }, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -51,20 +51,24 @@ public sealed class ClassSubjectTeacherMappingRepository : BaseRepository, IClas
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
+        // Callers may pass class group id; filter by classgroupid. Scope/list for class uses active only.
         string sql = BuildSelectSql("""
-            m.classid = @ClassId
+            m.classgroupid = @ClassGroupId
             AND m.isactive = true
             AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
             """);
 
-        return await QueryMappingsAsync(sql, new { ClassId = classId, AcademicYearId = academicYearId }, cancellationToken)
+        return await QueryMappingsAsync(
+                sql,
+                new { ClassGroupId = classId, AcademicYearId = academicYearId },
+                cancellationToken)
             .ConfigureAwait(false);
     }
 
     public async Task<ClassSubjectTeacherMappingEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
+SELECT id AS Id, classgroupid AS ClassGroupId, subjectid AS SubjectId, employeeid AS EmployeeId,
        academicyearid AS AcademicYearId,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -78,19 +82,23 @@ LIMIT 1
             new CommandDefinition(sql, new { Id = id }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    public async Task<ClassSubjectTeacherMappingEntity?> FindByClassSubjectYearAsync(
-        Guid classId,
+    public async Task<ClassSubjectTeacherMappingEntity?> FindByClassGroupSubjectEmployeeYearAsync(
+        Guid classGroupId,
         Guid subjectId,
+        Guid employeeId,
         Guid academicYearId,
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT id AS Id, classid AS ClassId, subjectid AS SubjectId, employeeid AS employeeid,
+SELECT id AS Id, classgroupid AS ClassGroupId, subjectid AS SubjectId, employeeid AS EmployeeId,
        academicyearid AS AcademicYearId,
        isactive AS IsActive, versionno AS VersionNo,
        createdby AS CreatedBy, createdon AS CreatedOn, updatedby AS UpdatedBy, updatedon AS UpdatedOn
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-WHERE classid = @ClassId AND subjectid = @SubjectId AND academicyearid = @AcademicYearId
+WHERE classgroupid = @ClassGroupId
+  AND subjectid = @SubjectId
+  AND employeeid = @EmployeeId
+  AND academicyearid = @AcademicYearId
 ORDER BY isactive DESC, updatedon DESC
 LIMIT 1
 """;
@@ -99,13 +107,19 @@ LIMIT 1
         return await connection.QuerySingleOrDefaultAsync<ClassSubjectTeacherMappingEntity>(
             new CommandDefinition(
                 sql,
-                new { ClassId = classId, SubjectId = subjectId, AcademicYearId = academicYearId },
+                new
+                {
+                    ClassGroupId = classGroupId,
+                    SubjectId = subjectId,
+                    EmployeeId = employeeId,
+                    AcademicYearId = academicYearId
+                },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task<ClassSubjectTeacherMappingDto?> GetDtoByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        string sql = BuildSelectSql("m.id = @Id AND m.isactive = true");
+        string sql = BuildSelectSql("m.id = @Id");
         IReadOnlyList<ClassSubjectTeacherMappingDto> rows = await QueryMappingsAsync(
             sql,
             new { Id = id },
@@ -114,42 +128,48 @@ LIMIT 1
         return rows.FirstOrDefault();
     }
 
-    public async Task<bool> ExistsActiveClassAsync(Guid classId, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsActiveClassGroupAsync(Guid classGroupId, CancellationToken cancellationToken = default)
     {
         string sql = $"""
 SELECT EXISTS (
-    SELECT 1 FROM {Schema}.{DatabaseConfig.TableClasses} c
-    WHERE c.id = @ClassId AND c.isactive = true)
+    SELECT 1 FROM {Schema}.{DatabaseConfig.TableClassGroups} cg
+    WHERE cg.id = @ClassGroupId AND cg.isactive = true)
 """;
 
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.ExecuteScalarAsync<bool>(
-            new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(sql, new { ClassGroupId = classGroupId }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    public async Task<bool> ExistsActiveClassSubjectAsync(
-        Guid classId,
-        Guid subjectId,
-        Guid academicYearId,
-        Guid? excludeMappingId = null,
+    public async Task<bool> AllSubjectsBelongToClassGroupAsync(
+        Guid classGroupId,
+        IReadOnlyList<Guid> subjectIds,
         CancellationToken cancellationToken = default)
     {
+        if (subjectIds.Count == 0)
+        {
+            return false;
+        }
+
+        Guid[] ids = subjectIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            return false;
+        }
+
         string sql = $"""
-SELECT EXISTS (
-    SELECT 1 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-    WHERE classid = @ClassId
-      AND subjectid = @SubjectId
-      AND academicyearid = @AcademicYearId
-      AND isactive = true
-      AND (@ExcludeMappingId IS NULL OR id <> @ExcludeMappingId)
-)
+SELECT COUNT(DISTINCT id) = @ExpectedCount
+FROM {Schema}.{DatabaseConfig.TableSubjects}
+WHERE classgroupid = @ClassGroupId
+  AND id = ANY(@SubjectIds)
+  AND isactive = true
 """;
 
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await connection.ExecuteScalarAsync<bool>(
             new CommandDefinition(
                 sql,
-                new { ClassId = classId, SubjectId = subjectId, AcademicYearId = academicYearId, ExcludeMappingId = excludeMappingId },
+                new { ClassGroupId = classGroupId, SubjectIds = ids, ExpectedCount = ids.Length },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
@@ -165,10 +185,10 @@ SELECT EXISTS (
 
         string sql = $"""
 INSERT INTO {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
-    (id, classid, subjectid, employeeid, academicyearid,
+    (id, classgroupid, subjectid, employeeid, academicyearid,
      isactive, versionno, createdby, createdon, updatedby, updatedon)
 VALUES
-    (@Id, @ClassId, @SubjectId, @EmployeeId, @AcademicYearId,
+    (@Id, @ClassGroupId, @SubjectId, @EmployeeId, @AcademicYearId,
      true, 1, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn)
 RETURNING id
 """;
@@ -221,20 +241,46 @@ WHERE id = @Id
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    public async Task ReactivateAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                $"""
+UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
+SET isactive = true, updatedon = NOW(), versionno = versionno + 1
+WHERE id = @Id
+""",
+                new { Id = id },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Guid>> GetClassIdsForTeacherUserAsync(
         Guid userId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT DISTINCT m.classid
-FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
-WHERE {BuildEmployeeUserMatchSql()}
-  AND m.employeeid IS NOT NULL
-  AND m.isactive = true
-  AND t.isactive = true
-  AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
+SELECT DISTINCT classid FROM (
+    SELECT c.id AS classid
+    FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
+    INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+    INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+        ON c.classgroupid = m.classgroupid AND c.isactive = true
+    WHERE {BuildEmployeeUserMatchSql()}
+      AND m.isactive = true
+      AND t.isactive = true
+      AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
+    UNION
+    SELECT cs.sectionid AS classid
+    FROM {Schema}.{DatabaseConfig.TableClassSettings} cs
+    INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = cs.teacherid
+    WHERE {BuildEmployeeUserMatchSql()}
+      AND cs.isactive = true
+      AND t.isactive = true
+      AND cs.teacherid IS NOT NULL
+      AND cs.sectionid IS NOT NULL
+) scoped_classes
 """;
 
         return await QueryGuidListAsync(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken)
@@ -251,7 +297,6 @@ SELECT DISTINCT m.subjectid
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 WHERE {BuildEmployeeUserMatchSql()}
-  AND m.employeeid IS NOT NULL
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -267,11 +312,12 @@ WHERE {BuildEmployeeUserMatchSql()}
         CancellationToken cancellationToken = default)
     {
         string sql = $"""
-SELECT m.classid AS ClassId, m.subjectid AS SubjectId
+SELECT c.id AS ClassId, m.subjectid AS SubjectId
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
 INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
+INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+    ON c.classgroupid = m.classgroupid AND c.isactive = true
 WHERE {BuildEmployeeUserMatchSql()}
-  AND m.employeeid IS NOT NULL
   AND m.isactive = true
   AND t.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
@@ -282,7 +328,7 @@ WHERE {BuildEmployeeUserMatchSql()}
             new CommandDefinition(sql, new { UserId = userId, AcademicYearId = academicYearId }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
-        return rows.Select(r => (r.ClassId, r.SubjectId)).ToList();
+        return rows.Select(r => (r.ClassId, r.SubjectId)).Distinct().ToList();
     }
 
     public async Task<IReadOnlyList<Guid>> GetSubjectIdsForClassIdsAsync(
@@ -298,7 +344,9 @@ WHERE {BuildEmployeeUserMatchSql()}
         string sql = $"""
 SELECT DISTINCT m.subjectid
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-WHERE m.classid = ANY(@ClassIds)
+INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.classgroupid = m.classgroupid
+WHERE c.id = ANY(@ClassIds)
+  AND c.isactive = true
   AND m.isactive = true
   AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 """;
@@ -321,9 +369,15 @@ WHERE m.classid = ANY(@ClassIds)
 SELECT
     c.id AS ClassId,
     cg.classname AS ClassName,
-    {SectionLabelSql} AS Section,
-    COUNT(m.id) FILTER (WHERE m.isactive = true) AS SubjectCount,
-    COUNT(m.id) FILTER (WHERE m.isactive = true AND m.employeeid IS NOT NULL) AS EmployeesAssignedCount,
+    c.section AS Section,
+    COALESCE((
+        SELECT COUNT(DISTINCT m2.subjectid)
+        FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m2
+        WHERE m2.classgroupid = c.classgroupid
+          AND m2.isactive = true
+          AND (@AcademicYearId IS NULL OR m2.academicyearid = @AcademicYearId)
+    ), 0) AS SubjectCount,
+    COUNT(DISTINCT m.employeeid) FILTER (WHERE m.isactive = true) AS EmployeesAssignedCount,
     CASE WHEN EXISTS (
         SELECT 1 FROM {Schema}.{DatabaseConfig.TableClassSettings} cs
         WHERE cs.sectionid = c.id AND cs.isactive = true AND cs.teacherid IS NOT NULL
@@ -331,11 +385,11 @@ SELECT
 FROM {Schema}.{DatabaseConfig.TableClasses} c
 INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
 LEFT JOIN {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-    ON m.classid = c.id
+    ON m.classgroupid = c.classgroupid
     AND m.isactive = true
     AND (@AcademicYearId IS NULL OR m.academicyearid = @AcademicYearId)
 WHERE c.isactive = true{branchFilter}
-GROUP BY c.id, cg.classname, c.section
+GROUP BY c.id, cg.classname, c.section, c.classgroupid
 ORDER BY cg.classname, c.section
 """;
 
@@ -356,26 +410,22 @@ ORDER BY cg.classname, c.section
     private string BuildSelectSql(string whereClause) => $"""
 SELECT
     m.id AS Id,
-    m.classid AS ClassId,
-    trim(cg.classname || COALESCE(' - ' || NULLIF(trim(c.section), ''), '')) AS ClassName,
+    m.classgroupid AS ClassGroupId,
+    cg.classname AS ClassGroupName,
     m.subjectid AS SubjectId,
     s.subjectname AS SubjectName,
     s.subjectcode AS SubjectCode,
     m.employeeid AS EmployeeId,
     CASE WHEN m.employeeid IS NULL THEN NULL ELSE trim(tu.firstname || ' ' || tu.lastname) END AS EmployeeName,
     m.academicyearid AS AcademicYearId,
-    CASE WHEN cs.teacherid IS NOT NULL AND cs.teacherid = m.employeeid THEN true ELSE false END AS IsClassTeacher,
     m.isactive AS IsActive
 FROM {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings} m
-INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = m.classid
-INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = m.classgroupid
 INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = m.subjectid
 LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = m.employeeid
 LEFT JOIN {_context.IdentitySchema}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
-LEFT JOIN {Schema}.{DatabaseConfig.TableClassSettings} cs
-    ON cs.sectionid = m.classid AND cs.isactive = true
 WHERE {whereClause}
-ORDER BY s.subjectname
+ORDER BY cg.classname, s.subjectname, tu.firstname, tu.lastname
 """;
 
     private async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> QueryMappingsAsync(
@@ -386,6 +436,7 @@ ORDER BY s.subjectname
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<ClassSubjectTeacherMappingDto> rows = await connection.QueryAsync<ClassSubjectTeacherMappingDto>(
             new CommandDefinition(sql, parameters, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
         return rows.ToList();
     }
 

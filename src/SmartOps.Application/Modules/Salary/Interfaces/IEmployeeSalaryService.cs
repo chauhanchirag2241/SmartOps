@@ -6,8 +6,7 @@ public interface IEmployeeSalaryService
 {
     Task<Result<IList<EmployeeSalaryListItemDto>>> GetEmployeesAsync(
         string? search,
-        Guid? departmentId,
-        string? designation,
+        IReadOnlyList<Guid>? userTypeIds,
         CancellationToken ct = default);
 
     Task<Result<EmployeeSalaryDetailDto>> GetEmployeeDetailAsync(Guid employeeid, CancellationToken ct = default);

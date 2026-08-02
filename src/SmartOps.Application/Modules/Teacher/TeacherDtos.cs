@@ -4,9 +4,9 @@ public sealed class ClassSubjectTeacherMappingDto
 {
     public Guid Id { get; set; }
 
-    public Guid ClassId { get; set; }
+    public Guid ClassGroupId { get; set; }
 
-    public string ClassName { get; set; } = string.Empty;
+    public string ClassGroupName { get; set; } = string.Empty;
 
     public Guid SubjectId { get; set; }
 
@@ -14,49 +14,45 @@ public sealed class ClassSubjectTeacherMappingDto
 
     public string? SubjectCode { get; set; }
 
-    public Guid? EmployeeId { get; set; }
+    public Guid EmployeeId { get; set; }
 
     public string? EmployeeName { get; set; }
 
     public Guid AcademicYearId { get; set; }
-
-    /// <summary>Derived from classsettings for the mapping's class — not stored on the mapping row.</summary>
-    public bool IsClassTeacher { get; set; }
 
     public bool IsActive { get; set; } = true;
 }
 
 public sealed class CreateClassSubjectTeacherMappingDto
 {
-    public Guid ClassId { get; set; }
+    public Guid ClassGroupId { get; set; }
 
-    public Guid SubjectId { get; set; }
+    /// <summary>Preferred: single subject for one mapping row.</summary>
+    public Guid? SubjectId { get; set; }
 
-    public Guid? EmployeeId { get; set; }
+    /// <summary>Optional convenience: expands to one row per subject (same as bulk item).</summary>
+    public List<Guid> SubjectIds { get; set; } = [];
+
+    public Guid EmployeeId { get; set; }
 
     public Guid AcademicYearId { get; set; }
 }
 
 public sealed class UpdateClassSubjectTeacherMappingDto
 {
+    /// <summary>Optional: change the subject on this mapping row.</summary>
     public Guid? SubjectId { get; set; }
 
-    public Guid? EmployeeId { get; set; }
-
-    /// <summary>When true, clears the teacher assignment (assign later).</summary>
-    public bool AssignLater { get; set; }
+    /// <summary>Optional: reactivate (true) or soft-deactivate (false). Prefer SoftDelete endpoint for remove.</summary>
+    public bool? IsActive { get; set; }
 }
 
-public sealed class AssignTeacherLaterRequestDto
+public sealed class BulkClassSubjectTeacherMappingItemDto
 {
-    public bool AssignLater { get; set; } = true;
+    public Guid ClassGroupId { get; set; }
 
-    public Guid? EmployeeId { get; set; }
-}
-
-public sealed class SetClassTeacherRequestDto
-{
-    public bool IsClassTeacher { get; set; } = true;
+    /// <summary>API expands each subject into its own mapping row.</summary>
+    public List<Guid> SubjectIds { get; set; } = [];
 }
 
 public sealed class BulkCreateClassSubjectTeacherMappingsRequestDto
@@ -65,10 +61,10 @@ public sealed class BulkCreateClassSubjectTeacherMappingsRequestDto
 
     public Guid AcademicYearId { get; set; }
 
-    public IReadOnlyList<CreateClassSubjectTeacherMappingDto> Mappings { get; set; } = [];
+    public IReadOnlyList<BulkClassSubjectTeacherMappingItemDto> Mappings { get; set; } = [];
 
-    /// <summary>Section (class) ids where this employee should be the class teacher.</summary>
-    public IReadOnlyList<Guid> ClassTeacherClassIds { get; set; } = [];
+    /// <summary>Optional section (class) ids to mark this employee as class teacher via classsettings.</summary>
+    public IReadOnlyList<Guid>? ClassTeacherClassIds { get; set; }
 }
 
 public sealed class BulkCreateClassSubjectTeacherMappingsResultDto

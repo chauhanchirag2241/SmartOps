@@ -3,6 +3,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Salary;
 using SmartOps.Infrastructure.Persistence;
 using SmartOps.Infrastructure.Persistence.Context;
@@ -31,10 +32,20 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
 
     public async Task<IList<EmployeeSalaryListRow>> GetEmployeeSalariesAsync(
         string? search,
-        Guid? departmentId,
-        string? designation,
+        IReadOnlyList<Guid>? userTypeIds,
         CancellationToken ct = default)
     {
+        if (userTypeIds is null || userTypeIds.Count == 0)
+        {
+            return [];
+        }
+
+        Guid[] typeIds = userTypeIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (typeIds.Length == 0)
+        {
+            return [];
+        }
+
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT t.id AS EmployeeRecordId,
@@ -42,6 +53,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
                    t.employeecode AS EmployeeCode,
                    {DepartmentExpr} AS Department,
                    t.designation AS Designation,
+                   u.usertypeid AS UserTypeId,
                    es.id AS EmployeeSalaryId,
                    es.salarystructureid AS SalaryStructureVersionId
             FROM {Schema}.{DatabaseConfig.TableEmployees} t
@@ -49,9 +61,8 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployeeSalaries} es
                 ON es.employeeid = t.id AND es.isactive = true
             WHERE t.isactive = true
+              AND u.usertypeid = ANY(@UserTypeIds)
             {(string.IsNullOrWhiteSpace(search) ? string.Empty : "AND (TRIM(u.firstname || ' ' || u.lastname) ILIKE @Search OR COALESCE(t.employeecode, '') ILIKE @Search)")}
-            {(departmentId.HasValue ? "AND t.departmentid = @DepartmentId" : string.Empty)}
-            {(string.IsNullOrWhiteSpace(designation) ? string.Empty : "AND t.designation ILIKE @Designation")}
             ORDER BY EmployeeName;
             """;
 
@@ -60,11 +71,17 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
             new
             {
                 Search = string.IsNullOrWhiteSpace(search) ? null : $"%{search.Trim()}%",
-                DepartmentId = departmentId,
-                Designation = string.IsNullOrWhiteSpace(designation) ? null : $"%{designation.Trim()}%"
+                UserTypeIds = typeIds
             },
             cancellationToken: ct)).ConfigureAwait(false);
-        return rows.ToList();
+
+        IList<EmployeeSalaryListRow> list = rows.ToList();
+        foreach (EmployeeSalaryListRow row in list)
+        {
+            row.UserTypeName = UserTypeCodes.GetName(row.UserTypeId);
+        }
+
+        return list;
     }
 
     public async Task<EmployeeSalaryEntity?> GetActiveAssignmentByEmployeeIdAsync(Guid employeeId, CancellationToken ct = default)

@@ -20,6 +20,21 @@ public interface IExamRepository
     Task UpdateGroupAsync(ExamGroupEntity group, CancellationToken ct = default);
     Task SoftDeleteGroupAsync(Guid id, CancellationToken ct = default);
     Task<bool> GroupHasExamsAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<Guid>> GetClassGroupIdsForExamGroupAsync(Guid examGroupId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetClassGroupIdsByExamGroupAsync(
+        IReadOnlyCollection<Guid> examGroupIds,
+        CancellationToken ct = default);
+    /// <summary>True when every section class belongs to a class group mapped to the exam group.</summary>
+    Task<bool> AllClassesBelongToExamGroupAsync(
+        Guid examGroupId,
+        IReadOnlyList<Guid> classIds,
+        CancellationToken ct = default);
+    Task SaveExamGroupClassGroupIdsAsync(
+        Guid examGroupId,
+        Guid branchId,
+        IReadOnlyList<Guid> classGroupIds,
+        bool allowRemove,
+        CancellationToken ct = default);
 
     // Exams
     Task<IList<ExamRow>> GetExamsAsync(Guid? groupId, Guid? classId, int? status, string? search, CancellationToken ct = default);
@@ -51,6 +66,7 @@ public sealed class ExamGroupRow
     public string? GradeScaleName { get; init; }
     public int EvaluationType { get; init; }
     public int ExamCount { get; init; }
+    public string? ClassGroupNames { get; init; }
 }
 
 public sealed class ExamRow
@@ -61,8 +77,6 @@ public sealed class ExamRow
     public Guid ExamGroupId { get; init; }
     public string ExamGroupName { get; init; } = string.Empty;
     public Guid? AcademicPeriodId { get; init; }
-    public DateOnly StartDate { get; init; }
-    public DateOnly EndDate { get; init; }
     public decimal MinPassPercent { get; init; }
     public Guid? GradeScaleId { get; init; }
     public int Status { get; init; }
@@ -77,6 +91,8 @@ public sealed class ExamClassRow
     public Guid ExamId { get; init; }
     public Guid ClassId { get; init; }
     public string ClassName { get; init; } = string.Empty;
+    public Guid ClassGroupId { get; init; }
+    public string ClassGroupName { get; init; } = string.Empty;
 }
 
 public sealed class ExamScheduleRow

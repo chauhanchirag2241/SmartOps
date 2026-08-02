@@ -82,71 +82,11 @@ public sealed class ExamResultService : IExamResultService
             .ConfigureAwait(false);
 
         IList<ExamGradeScaleDetailEntity> gradeRows = await ResolveGradeScaleAsync(exam, ct).ConfigureAwait(false);
-        Dictionary<Guid, ExamMarkComponentEntity> componentById = components.ToDictionary(c => c.Id);
         decimal subjectMax = components.Sum(c => c.MaxMarks);
         decimal examMax = subjectMax * schedules.Count;
 
-        ILookup<Guid, ExamMarkWithSubjectRow> marksByStudent = marks.ToLookup(m => m.StudentId);
-        var computed = new List<(ExamStudentRosterRow Student, decimal Total, List<SubjectResultSnapshot> Subjects, ExamResultStatus Status)>();
-
-        foreach (ExamStudentRosterRow student in roster)
-        {
-            ILookup<Guid, ExamMarkWithSubjectRow> bySchedule = marksByStudent[student.StudentId]
-                .ToLookup(m => m.ExamScheduleId);
-
-            var subjects = new List<SubjectResultSnapshot>();
-            decimal total = 0;
-            bool anyFail = false;
-            bool allAbsent = true;
-            bool anyAbsent = false;
-
-            foreach (ExamScheduleRow schedule in schedules)
-            {
-                List<ExamMarkWithSubjectRow> subjectMarks = bySchedule[schedule.Id].ToList();
-                bool isAbsent = subjectMarks.Count > 0 && subjectMarks.All(m => m.IsAbsent);
-
-                if (isAbsent)
-                {
-                    anyAbsent = true;
-                    subjects.Add(new SubjectResultSnapshot(schedule.SubjectId, null, subjectMax, true, false));
-                    continue;
-                }
-
-                allAbsent = false;
-                decimal obtained = 0;
-                bool componentFail = false;
-
-                foreach (ExamMarkComponentEntity component in components)
-                {
-                    decimal value = subjectMarks
-                        .FirstOrDefault(m => m.ComponentId == component.Id)?.MarksObtained ?? 0;
-                    obtained += value;
-
-                    if (component.PassingMarks.HasValue && value < component.PassingMarks.Value)
-                    {
-                        componentFail = true;
-                    }
-                }
-
-                decimal subjectPercent = subjectMax > 0 ? Math.Round(obtained / subjectMax * 100, 2) : 0;
-                bool pass = !componentFail && subjectPercent >= exam.MinPassPercent;
-                if (!pass)
-                {
-                    anyFail = true;
-                }
-
-                total += obtained;
-                subjects.Add(new SubjectResultSnapshot(schedule.SubjectId, obtained, subjectMax, false, pass));
-            }
-
-            ExamResultStatus status = allAbsent
-                ? ExamResultStatus.Absent
-                : anyFail || anyAbsent
-                    ? ExamResultStatus.Fail
-                    : ExamResultStatus.Pass;
-
-            computed.Add((student, total, subjects, status));
-        }
+        List<ComputedStudentResult> computed = ComputeStudentResults(
+            exam, schedules, components, marks, roster, subjectMax);
 
         // Rank by total (absent students ranked last).
         var ranked = computed
@@ -157,21 +97,21 @@ public sealed class ExamResultService : IExamResultService
         var entities = new List<ExamResultEntity>();
         for (int i = 0; i < ranked.Count; i++)
         {
-            (ExamStudentRosterRow student, decimal total, List<SubjectResultSnapshot> subjects, ExamResultStatus status) = ranked[i];
-            decimal percentage = examMax > 0 ? Math.Round(total / examMax * 100, 2) : 0;
+            ComputedStudentResult row = ranked[i];
+            decimal percentage = examMax > 0 ? Math.Round(row.Total / examMax * 100, 2) : 0;
 
             entities.Add(new ExamResultEntity
             {
                 ExamId = exam.Id,
                 ClassId = request.ClassId,
-                StudentId = student.StudentId,
-                TotalMarks = total,
+                StudentId = row.Student.StudentId,
+                TotalMarks = row.Total,
                 MaxMarks = examMax,
                 Percentage = percentage,
-                Grade = status == ExamResultStatus.Absent ? null : ResolveGrade(gradeRows, percentage),
+                Grade = row.Status == ExamResultStatus.Absent ? null : ResolveGrade(gradeRows, percentage),
                 Rank = i + 1,
-                Result = status,
-                SubjectResults = JsonSerializer.Serialize(subjects, JsonOptions)
+                Result = row.Status,
+                SubjectResults = JsonSerializer.Serialize(row.Subjects, JsonOptions)
             });
         }
 
@@ -195,12 +135,27 @@ public sealed class ExamResultService : IExamResultService
             return Result<ExamResultSheetDto>.Failure("Exam not found.");
         }
 
+        if (exam.ResultDeclared)
+        {
+            return Result<ExamResultSheetDto>.Failure("Result already declared.");
+        }
+
         IList<ExamResultEntity> results = await _resultRepo
             .GetResultsAsync(request.ExamId, request.ClassId, ct)
             .ConfigureAwait(false);
         if (results.Count == 0)
         {
             return Result<ExamResultSheetDto>.Failure("Calculate the result before declaring it.");
+        }
+
+        // Persist latest marks into the snapshot before locking (covers marks entered after last Calculate).
+        Result<ExamResultSheetDto> refreshed = await CalculateAsync(
+                new CalculateExamResultRequestDto(request.ExamId, request.ClassId),
+                ct)
+            .ConfigureAwait(false);
+        if (!refreshed.IsSuccess)
+        {
+            return refreshed;
         }
 
         Guid actorId = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
@@ -228,6 +183,7 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamScheduleRow> schedules = await _examRepo.GetSchedulesAsync(examId, classId, ct).ConfigureAwait(false);
         IList<ExamMarkComponentEntity> components = await _examRepo.GetComponentsAsync([examId], ct).ConfigureAwait(false);
         decimal subjectMax = components.Sum(c => c.MaxMarks);
+        HashSet<Guid> allowedSubjectIds = schedules.Select(s => s.SubjectId).ToHashSet();
 
         IList<ExamResultSubjectColumnDto> subjectColumns = schedules
             .Select(s => new ExamResultSubjectColumnDto(s.SubjectId, s.SubjectName, subjectMax))
@@ -240,23 +196,70 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct).ConfigureAwait(false);
         string className = classes.FirstOrDefault(c => c.ClassId == classId)?.ClassName ?? string.Empty;
 
+        decimal sheetMaxMarks = subjectMax * schedules.Count;
+        bool declared = results.Count > 0 && results.All(r => r.DeclaredOn.HasValue);
+
+        // Undeclared sheets always reflect latest marks so newly entered subjects (e.g. science)
+        // do not stay stuck at 0 until the user recalculates.
+        Dictionary<Guid, ComputedStudentResult>? liveByStudent = null;
+        IList<ExamGradeScaleDetailEntity>? gradeRows = null;
+        if (!declared && results.Count > 0 && schedules.Count > 0 && components.Count > 0)
+        {
+            IList<ExamMarkWithSubjectRow> marks = await _marksRepo
+                .GetMarksByExamClassAsync(examId, classId, ct)
+                .ConfigureAwait(false);
+            liveByStudent = ComputeStudentResults(exam, schedules, components, marks, roster, subjectMax)
+                .ToDictionary(c => c.Student.StudentId);
+            gradeRows = await ResolveGradeScaleAsync(exam, ct).ConfigureAwait(false);
+        }
+
         var rows = new List<ExamResultRowDto>();
         foreach (ExamResultEntity result in results.OrderBy(r => r.Rank))
         {
             rosterById.TryGetValue(result.StudentId, out ExamStudentRosterRow? student);
-            List<SubjectResultSnapshot> subjects = DeserializeSubjects(result.SubjectResults);
+
+            List<SubjectResultSnapshot> subjects;
+            decimal totalMarks;
+            decimal percentage;
+            string? grade = result.Grade;
+            ExamResultStatus status = result.Result;
+
+            if (!declared
+                && liveByStudent is not null
+                && liveByStudent.TryGetValue(result.StudentId, out ComputedStudentResult? live))
+            {
+                subjects = live.Subjects;
+                totalMarks = live.Total;
+                percentage = sheetMaxMarks > 0
+                    ? Math.Round(totalMarks / sheetMaxMarks * 100, 2)
+                    : 0;
+                status = live.Status;
+                grade = status == ExamResultStatus.Absent
+                    ? null
+                    : ResolveGrade(gradeRows ?? [], percentage);
+            }
+            else
+            {
+                subjects = DeserializeSubjects(result.SubjectResults)
+                    .Where(s => allowedSubjectIds.Contains(s.SubjectId))
+                    .ToList();
+                totalMarks = subjects.Where(s => !s.IsAbsent).Sum(s => s.Marks ?? 0);
+                percentage = sheetMaxMarks > 0
+                    ? Math.Round(totalMarks / sheetMaxMarks * 100, 2)
+                    : 0;
+            }
 
             rows.Add(new ExamResultRowDto(
                 result.StudentId,
                 student?.StudentName ?? string.Empty,
                 student?.RollNo ?? string.Empty,
                 result.Rank,
-                result.TotalMarks,
-                result.MaxMarks,
-                result.Percentage,
-                result.Grade,
-                result.Result,
-                result.Result.ToDisplayString(),
+                totalMarks,
+                sheetMaxMarks,
+                percentage,
+                grade,
+                status,
+                status.ToDisplayString(),
                 subjects
                     .Select(s => new ExamResultSubjectMarkDto(s.SubjectId, s.Marks, s.IsAbsent, s.Pass))
                     .ToList()));
@@ -267,8 +270,6 @@ public sealed class ExamResultService : IExamResultService
         int absentCount = rows.Count(r => r.Result == ExamResultStatus.Absent);
         decimal avgPercent = rows.Count > 0 ? Math.Round(rows.Average(r => r.Percentage), 2) : 0;
         decimal topScore = rows.Count > 0 ? rows.Max(r => r.TotalMarks) : 0;
-        decimal maxMarks = rows.Count > 0 ? rows[0].MaxMarks : subjectMax * schedules.Count;
-        bool declared = results.Count > 0 && results.All(r => r.DeclaredOn.HasValue);
 
         return Result<ExamResultSheetDto>.Success(new ExamResultSheetDto(
             exam.Id,
@@ -282,7 +283,7 @@ public sealed class ExamResultService : IExamResultService
             absentCount,
             avgPercent,
             topScore,
-            maxMarks,
+            sheetMaxMarks,
             subjectColumns,
             rows));
     }
@@ -303,12 +304,18 @@ public sealed class ExamResultService : IExamResultService
             return Result<ReportCardDto>.Failure("Result not calculated for this student yet.");
         }
 
+        // Same class-group schedule filter as marks entry / result sheet.
         IList<ExamScheduleRow> schedules = await _examRepo
             .GetSchedulesAsync(examId, result.ClassId, ct)
             .ConfigureAwait(false);
+        HashSet<Guid> allowedSubjectIds = schedules.Select(s => s.SubjectId).ToHashSet();
         Dictionary<Guid, string> subjectNames = schedules
             .GroupBy(s => s.SubjectId)
             .ToDictionary(g => g.Key, g => g.First().SubjectName);
+
+        IList<ExamMarkComponentEntity> components = await _examRepo.GetComponentsAsync([examId], ct).ConfigureAwait(false);
+        decimal subjectMax = components.Sum(c => c.MaxMarks);
+        decimal sheetMaxMarks = subjectMax * schedules.Count;
 
         IList<ExamStudentRosterRow> roster = await _marksRepo.GetClassStudentsAsync(result.ClassId, ct).ConfigureAwait(false);
         ExamStudentRosterRow? student = roster.FirstOrDefault(r => r.StudentId == studentId);
@@ -319,7 +326,63 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamResultEntity> allResults = await _resultRepo.GetResultsAsync(examId, result.ClassId, ct).ConfigureAwait(false);
         IList<ExamGradeScaleDetailEntity> gradeRows = await ResolveGradeScaleAsync(exam, ct).ConfigureAwait(false);
 
-        List<SubjectResultSnapshot> subjects = DeserializeSubjects(result.SubjectResults);
+        bool declared = result.DeclaredOn.HasValue;
+        List<SubjectResultSnapshot> subjects;
+        decimal totalMarks;
+        decimal percentage;
+        string? grade = result.Grade;
+        ExamResultStatus status = result.Result;
+
+        if (!declared && schedules.Count > 0 && components.Count > 0)
+        {
+            IList<ExamMarkWithSubjectRow> marks = await _marksRepo
+                .GetMarksByExamClassAsync(examId, result.ClassId, ct)
+                .ConfigureAwait(false);
+            ComputedStudentResult? live = ComputeStudentResults(
+                    exam, schedules, components, marks, roster, subjectMax)
+                .FirstOrDefault(c => c.Student.StudentId == studentId);
+
+            if (live is not null)
+            {
+                subjects = live.Subjects;
+                totalMarks = live.Total;
+                percentage = sheetMaxMarks > 0
+                    ? Math.Round(totalMarks / sheetMaxMarks * 100, 2)
+                    : 0;
+                status = live.Status;
+                grade = status == ExamResultStatus.Absent
+                    ? null
+                    : ResolveGrade(gradeRows, percentage);
+            }
+            else
+            {
+                subjects = FilterSubjectsToSchedules(result, schedules, allowedSubjectIds, subjectMax);
+                totalMarks = subjects.Where(s => !s.IsAbsent).Sum(s => s.Marks ?? 0);
+                percentage = sheetMaxMarks > 0
+                    ? Math.Round(totalMarks / sheetMaxMarks * 100, 2)
+                    : 0;
+            }
+        }
+        else
+        {
+            subjects = FilterSubjectsToSchedules(result, schedules, allowedSubjectIds, subjectMax);
+            totalMarks = subjects.Where(s => !s.IsAbsent).Sum(s => s.Marks ?? 0);
+            percentage = sheetMaxMarks > 0
+                ? Math.Round(totalMarks / sheetMaxMarks * 100, 2)
+                : 0;
+            if (schedules.Count > 0)
+            {
+                status = subjects.All(s => s.IsAbsent)
+                    ? ExamResultStatus.Absent
+                    : subjects.Any(s => s.IsAbsent || !s.Pass)
+                        ? ExamResultStatus.Fail
+                        : ExamResultStatus.Pass;
+                grade = status == ExamResultStatus.Absent
+                    ? null
+                    : ResolveGrade(gradeRows, percentage);
+            }
+        }
+
         IList<ReportCardSubjectRowDto> subjectRows = subjects.Select(s =>
         {
             decimal percent = s.MaxMarks > 0 && s.Marks.HasValue
@@ -344,15 +407,40 @@ public sealed class ExamResultService : IExamResultService
             student?.StudentName ?? string.Empty,
             student?.RollNo ?? string.Empty,
             className,
-            result.TotalMarks,
-            result.MaxMarks,
-            result.Percentage,
-            result.Grade,
+            totalMarks,
+            sheetMaxMarks > 0 ? sheetMaxMarks : result.MaxMarks,
+            percentage,
+            grade,
             result.Rank,
             allResults.Count,
-            result.Result,
-            result.Result.ToDisplayString(),
+            status,
+            status.ToDisplayString(),
             subjectRows));
+    }
+
+    private static List<SubjectResultSnapshot> FilterSubjectsToSchedules(
+        ExamResultEntity result,
+        IList<ExamScheduleRow> schedules,
+        HashSet<Guid> allowedSubjectIds,
+        decimal subjectMax)
+    {
+        Dictionary<Guid, SubjectResultSnapshot> bySubject = DeserializeSubjects(result.SubjectResults)
+            .Where(s => allowedSubjectIds.Contains(s.SubjectId))
+            .GroupBy(s => s.SubjectId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Schedule order only — drops other class-group subjects left in old snapshots.
+        return schedules
+            .Select(sc =>
+                bySubject.TryGetValue(sc.SubjectId, out SubjectResultSnapshot? snap)
+                    ? snap
+                    : new SubjectResultSnapshot(
+                        sc.SubjectId,
+                        0,
+                        subjectMax > 0 ? subjectMax : 0,
+                        false,
+                        false))
+            .ToList();
     }
 
     // ── Hall tickets ─────────────────────────────────────────
@@ -445,6 +533,9 @@ public sealed class ExamResultService : IExamResultService
             .Select(s => new HallTicketScheduleDto(s.SubjectName, s.ExamDate, s.StartTime, s.EndTime, s.RoomNo))
             .ToList();
 
+        DateOnly? startDate = schedules.Count > 0 ? schedules.Min(s => s.ExamDate) : null;
+        DateOnly? endDate = schedules.Count > 0 ? schedules.Max(s => s.ExamDate) : null;
+
         IList<HallTicketDto> result = tickets.Select(t =>
         {
             rosterById.TryGetValue(t.StudentId, out ExamStudentRosterRow? student);
@@ -458,8 +549,8 @@ public sealed class ExamResultService : IExamResultService
                 t.SeatNo,
                 examId,
                 exam.Name,
-                exam.StartDate,
-                exam.EndDate,
+                startDate,
+                endDate,
                 scheduleDtos);
         }).ToList();
 
@@ -467,6 +558,104 @@ public sealed class ExamResultService : IExamResultService
     }
 
     // ── Helpers ──────────────────────────────────────────────
+
+    private sealed record ComputedStudentResult(
+        ExamStudentRosterRow Student,
+        decimal Total,
+        List<SubjectResultSnapshot> Subjects,
+        ExamResultStatus Status);
+
+    private static List<ComputedStudentResult> ComputeStudentResults(
+        ExamEntity exam,
+        IList<ExamScheduleRow> schedules,
+        IList<ExamMarkComponentEntity> components,
+        IList<ExamMarkWithSubjectRow> marks,
+        IList<ExamStudentRosterRow> roster,
+        decimal subjectMax)
+    {
+        ILookup<Guid, ExamMarkWithSubjectRow> marksByStudent = marks.ToLookup(m => m.StudentId);
+        var computed = new List<ComputedStudentResult>(roster.Count);
+
+        foreach (ExamStudentRosterRow student in roster)
+        {
+            List<ExamMarkWithSubjectRow> studentMarks = marksByStudent[student.StudentId].ToList();
+            ILookup<Guid, ExamMarkWithSubjectRow> bySchedule = studentMarks.ToLookup(m => m.ExamScheduleId);
+            ILookup<Guid, ExamMarkWithSubjectRow> bySubject = studentMarks.ToLookup(m => m.SubjectId);
+
+            var subjects = new List<SubjectResultSnapshot>(schedules.Count);
+            decimal total = 0;
+            bool anyFail = false;
+            bool allAbsent = true;
+            bool anyAbsent = false;
+
+            foreach (ExamScheduleRow schedule in schedules)
+            {
+                List<ExamMarkWithSubjectRow> subjectMarks = ResolveSubjectMarks(schedule, bySchedule, bySubject);
+                bool isAbsent = subjectMarks.Count > 0 && subjectMarks.All(m => m.IsAbsent);
+
+                if (isAbsent)
+                {
+                    anyAbsent = true;
+                    subjects.Add(new SubjectResultSnapshot(schedule.SubjectId, null, subjectMax, true, false));
+                    continue;
+                }
+
+                allAbsent = false;
+                decimal obtained = 0;
+                bool componentFail = false;
+
+                foreach (ExamMarkComponentEntity component in components)
+                {
+                    decimal value = subjectMarks
+                        .FirstOrDefault(m => m.ComponentId == component.Id)?.MarksObtained ?? 0;
+                    obtained += value;
+
+                    if (component.PassingMarks.HasValue && value < component.PassingMarks.Value)
+                    {
+                        componentFail = true;
+                    }
+                }
+
+                decimal subjectPercent = subjectMax > 0 ? Math.Round(obtained / subjectMax * 100, 2) : 0;
+                bool pass = !componentFail && subjectPercent >= exam.MinPassPercent;
+                if (!pass)
+                {
+                    anyFail = true;
+                }
+
+                total += obtained;
+                subjects.Add(new SubjectResultSnapshot(schedule.SubjectId, obtained, subjectMax, false, pass));
+            }
+
+            ExamResultStatus status = allAbsent
+                ? ExamResultStatus.Absent
+                : anyFail || anyAbsent
+                    ? ExamResultStatus.Fail
+                    : ExamResultStatus.Pass;
+
+            computed.Add(new ComputedStudentResult(student, total, subjects, status));
+        }
+
+        return computed;
+    }
+
+    /// <summary>
+    /// Prefer marks keyed by schedule id; fall back to subject id when schedule rows were
+    /// recreated or progress/result queries briefly diverge.
+    /// </summary>
+    private static List<ExamMarkWithSubjectRow> ResolveSubjectMarks(
+        ExamScheduleRow schedule,
+        ILookup<Guid, ExamMarkWithSubjectRow> bySchedule,
+        ILookup<Guid, ExamMarkWithSubjectRow> bySubject)
+    {
+        List<ExamMarkWithSubjectRow> byId = bySchedule[schedule.Id].ToList();
+        if (byId.Count > 0)
+        {
+            return byId;
+        }
+
+        return bySubject[schedule.SubjectId].ToList();
+    }
 
     private async Task<IList<ExamGradeScaleDetailEntity>> ResolveGradeScaleAsync(ExamEntity exam, CancellationToken ct)
     {
@@ -512,7 +701,7 @@ public sealed class ExamResultService : IExamResultService
             .Select(w => char.ToUpperInvariant(w[0]))
             .Take(4)
             .ToArray());
-        return $"{initials}{exam.StartDate.Year % 100:D2}";
+        return $"{initials}{DateTime.UtcNow.Year % 100:D2}";
     }
 
     private static List<SubjectResultSnapshot> DeserializeSubjects(string? json) =>

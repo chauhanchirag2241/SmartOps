@@ -187,7 +187,15 @@ public sealed class ExamService : IExamService
     public async Task<Result<IList<ExamGroupDto>>> GetGroupsAsync(CancellationToken ct = default)
     {
         IList<ExamGroupRow> rows = await _repo.GetGroupsAsync(ct).ConfigureAwait(false);
-        IList<ExamGroupDto> result = rows.Select(MapGroup).ToList();
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> classGroupIdsByGroup = await _repo
+            .GetClassGroupIdsByExamGroupAsync(rows.Select(r => r.Id).ToList(), ct)
+            .ConfigureAwait(false);
+
+        IList<ExamGroupDto> result = rows
+            .Select(row => MapGroup(
+                row,
+                classGroupIdsByGroup.TryGetValue(row.Id, out IReadOnlyList<Guid>? ids) ? ids : []))
+            .ToList();
         return Result<IList<ExamGroupDto>>.Success(result);
     }
 
@@ -198,6 +206,8 @@ public sealed class ExamService : IExamService
             return Result<ExamGroupDto>.Failure("Group name is required.");
         }
 
+        IReadOnlyList<Guid> classGroupIds = NormalizeClassGroupIds(request.ClassGroupIds);
+
         var group = new ExamGroupEntity
         {
             Name = request.Name.Trim(),
@@ -207,6 +217,16 @@ public sealed class ExamService : IExamService
         };
 
         Guid id = await _repo.CreateGroupAsync(group, ct).ConfigureAwait(false);
+        ExamGroupEntity? created = await _repo.GetGroupByIdAsync(id, ct).ConfigureAwait(false);
+        if (created is null)
+        {
+            return Result<ExamGroupDto>.Failure("Exam group was created but could not be loaded.");
+        }
+
+        await _repo
+            .SaveExamGroupClassGroupIdsAsync(id, created.BranchId, classGroupIds, allowRemove: true, ct)
+            .ConfigureAwait(false);
+
         _logger.LogInformation("Exam group {GroupId} created", id);
         return await FindGroupDtoAsync(id, ct).ConfigureAwait(false);
     }
@@ -227,12 +247,17 @@ public sealed class ExamService : IExamService
             return Result<ExamGroupDto>.Failure("Group name is required.");
         }
 
+        IReadOnlyList<Guid> classGroupIds = NormalizeClassGroupIds(request.ClassGroupIds);
+
         group.Name = request.Name.Trim();
         group.Description = request.Description?.Trim();
         group.GradeScaleId = request.GradeScaleId;
         group.EvaluationType = request.EvaluationType;
 
         await _repo.UpdateGroupAsync(group, ct).ConfigureAwait(false);
+        await _repo
+            .SaveExamGroupClassGroupIdsAsync(id, group.BranchId, classGroupIds, allowRemove: true, ct)
+            .ConfigureAwait(false);
         return await FindGroupDtoAsync(id, ct).ConfigureAwait(false);
     }
 
@@ -257,12 +282,18 @@ public sealed class ExamService : IExamService
     {
         IList<ExamGroupRow> rows = await _repo.GetGroupsAsync(ct).ConfigureAwait(false);
         ExamGroupRow? row = rows.FirstOrDefault(r => r.Id == id);
-        return row is null
-            ? Result<ExamGroupDto>.Failure("Exam group not found.")
-            : Result<ExamGroupDto>.Success(MapGroup(row));
+        if (row is null)
+        {
+            return Result<ExamGroupDto>.Failure("Exam group not found.");
+        }
+
+        IReadOnlyList<Guid> classGroupIds = await _repo
+            .GetClassGroupIdsForExamGroupAsync(id, ct)
+            .ConfigureAwait(false);
+        return Result<ExamGroupDto>.Success(MapGroup(row, classGroupIds));
     }
 
-    private static ExamGroupDto MapGroup(ExamGroupRow row) =>
+    private static ExamGroupDto MapGroup(ExamGroupRow row, IReadOnlyList<Guid> classGroupIds) =>
         new(
             row.Id,
             row.Name,
@@ -271,7 +302,15 @@ public sealed class ExamService : IExamService
             row.GradeScaleName,
             (ExamEvaluationType)row.EvaluationType,
             ((ExamEvaluationType)row.EvaluationType).ToDisplayString(),
-            row.ExamCount);
+            row.ExamCount,
+            classGroupIds,
+            string.IsNullOrWhiteSpace(row.ClassGroupNames) ? null : row.ClassGroupNames);
+
+    private static IReadOnlyList<Guid> NormalizeClassGroupIds(IReadOnlyList<Guid>? classGroupIds) =>
+        (classGroupIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
 
     // ── Exams ────────────────────────────────────────────────
 
@@ -294,15 +333,13 @@ public sealed class ExamService : IExamService
             row.ExamType,
             row.ExamGroupId,
             row.ExamGroupName,
-            row.StartDate,
-            row.EndDate,
             (ExamStatus)row.Status,
             ((ExamStatus)row.Status).ToDisplayString(),
             row.ResultDeclared,
             row.TotalMaxMarks,
             row.SubjectCount,
             classesByExam[row.Id]
-                .Select(c => new ExamClassInfoDto(c.ClassId, c.ClassName))
+                .Select(c => new ExamClassInfoDto(c.ClassId, c.ClassName, c.ClassGroupId, c.ClassGroupName))
                 .ToList())).ToList();
 
         return Result<IList<ExamListItemDto>>.Success(result);
@@ -311,14 +348,10 @@ public sealed class ExamService : IExamService
     public async Task<Result<ExamStatsDto>> GetExamStatsAsync(CancellationToken ct = default)
     {
         IList<ExamRow> rows = await _repo.GetExamsAsync(null, null, null, null, ct).ConfigureAwait(false);
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        int ongoing = rows.Count(r => r.StartDate <= today && today <= r.EndDate
-                                      && (ExamStatus)r.Status is not (ExamStatus.Completed or ExamStatus.ResultDeclared));
-        int completed = rows.Count(r => (ExamStatus)r.Status is ExamStatus.Completed or ExamStatus.ResultDeclared
-                                        || r.EndDate < today);
-        int upcoming = rows.Count(r => r.StartDate > today
-                                       && (ExamStatus)r.Status is not (ExamStatus.Completed or ExamStatus.ResultDeclared));
+        int ongoing = rows.Count(r => (ExamStatus)r.Status == ExamStatus.Ongoing);
+        int completed = rows.Count(r => (ExamStatus)r.Status is ExamStatus.Completed or ExamStatus.ResultDeclared);
+        int upcoming = rows.Count(r => (ExamStatus)r.Status is ExamStatus.Draft or ExamStatus.Scheduled);
 
         return Result<ExamStatsDto>.Success(new ExamStatsDto(rows.Count, ongoing, completed, upcoming));
     }
@@ -348,6 +381,13 @@ public sealed class ExamService : IExamService
             return Result<ExamDetailDto>.Failure("Exam group not found.");
         }
 
+        string? classScopeError = await ValidateExamClassScopeAsync(request.ExamGroupId, request.ClassIds, ct)
+            .ConfigureAwait(false);
+        if (classScopeError is not null)
+        {
+            return Result<ExamDetailDto>.Failure(classScopeError);
+        }
+
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         if (!_scope.ActiveAcademicYearId.HasValue)
         {
@@ -362,8 +402,6 @@ public sealed class ExamService : IExamService
             Name = request.Name.Trim(),
             ExamType = request.ExamType.Trim(),
             AcademicPeriodId = request.AcademicPeriodId,
-            StartDate = request.StartDate,
-            EndDate = request.EndDate,
             MinPassPercent = request.MinPassPercent,
             GradeScaleId = request.GradeScaleId,
             Status = ExamStatus.Scheduled,
@@ -398,12 +436,17 @@ public sealed class ExamService : IExamService
             return Result<ExamDetailDto>.Failure(validationError);
         }
 
+        string? classScopeError = await ValidateExamClassScopeAsync(request.ExamGroupId, request.ClassIds, ct)
+            .ConfigureAwait(false);
+        if (classScopeError is not null)
+        {
+            return Result<ExamDetailDto>.Failure(classScopeError);
+        }
+
         exam.ExamGroupId = request.ExamGroupId;
         exam.Name = request.Name.Trim();
         exam.ExamType = request.ExamType.Trim();
         exam.AcademicPeriodId = request.AcademicPeriodId;
-        exam.StartDate = request.StartDate;
-        exam.EndDate = request.EndDate;
         exam.MinPassPercent = request.MinPassPercent;
         exam.GradeScaleId = request.GradeScaleId;
         exam.Description = request.Description?.Trim();
@@ -446,6 +489,28 @@ public sealed class ExamService : IExamService
         return Result<bool>.Success(true);
     }
 
+    private async Task<string?> ValidateExamClassScopeAsync(
+        Guid examGroupId,
+        IList<Guid> classIds,
+        CancellationToken ct)
+    {
+        IReadOnlyList<Guid> ids = (classIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return null;
+        }
+
+        bool ok = await _repo
+            .AllClassesBelongToExamGroupAsync(examGroupId, ids, ct)
+            .ConfigureAwait(false);
+        return ok
+            ? null
+            : "Selected classes must belong to class groups mapped on this exam group.";
+    }
+
     private static string? ValidateExam(SaveExamRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -456,16 +521,6 @@ public sealed class ExamService : IExamService
         if (string.IsNullOrWhiteSpace(request.ExamType))
         {
             return "Exam type is required.";
-        }
-
-        if (request.EndDate < request.StartDate)
-        {
-            return "End date cannot be before start date.";
-        }
-
-        if (request.ClassIds.Count == 0)
-        {
-            return "Select at least one class.";
         }
 
         if (request.Components.Count == 0)
@@ -522,8 +577,6 @@ public sealed class ExamService : IExamService
             exam.Name,
             exam.ExamType,
             exam.AcademicPeriodId,
-            exam.StartDate,
-            exam.EndDate,
             exam.MinPassPercent,
             exam.GradeScaleId,
             exam.Status,
@@ -531,7 +584,7 @@ public sealed class ExamService : IExamService
             exam.ResultDeclared,
             exam.Description,
             classes.Select(c => c.ClassId).ToList(),
-            classes.Select(c => new ExamClassInfoDto(c.ClassId, c.ClassName)).ToList(),
+            classes.Select(c => new ExamClassInfoDto(c.ClassId, c.ClassName, c.ClassGroupId, c.ClassGroupName)).ToList(),
             components
                 .Select(c => new ExamMarkComponentDto(c.Id, c.Name, c.MaxMarks, c.PassingMarks, c.DisplayOrder))
                 .ToList());

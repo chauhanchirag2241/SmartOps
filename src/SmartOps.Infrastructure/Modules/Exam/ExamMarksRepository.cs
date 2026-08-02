@@ -91,6 +91,12 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
             FROM {Schema}.{DatabaseConfig.TableExamStudentMarks} m
             INNER JOIN {Schema}.{DatabaseConfig.TableExamSchedules} sc
                 ON sc.id = m.examscheduleid AND sc.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+                ON c.id = sc.classid AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s
+                ON s.id = sc.subjectid
+               AND s.isactive = true
+               AND s.classgroupid = c.classgroupid
             WHERE sc.examid = @ExamId AND sc.classid = @ClassId AND m.isactive = true;
             """;
 
@@ -161,8 +167,14 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
                              WHERE m.examscheduleid = sc.id AND m.isactive = true
                                AND (m.marksobtained IS NOT NULL OR m.isabsent = true)), 0)::int AS Entered
             FROM {Schema}.{DatabaseConfig.TableExamSchedules} sc
-            LEFT JOIN {Schema}.{DatabaseConfig.TableSubjects} s ON s.id = sc.subjectid
-            WHERE sc.examid = @ExamId AND sc.classid = @ClassId AND sc.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c
+                ON c.id = sc.classid AND c.isactive = true
+            INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s
+                ON s.id = sc.subjectid AND s.isactive = true
+            WHERE sc.examid = @ExamId
+              AND sc.classid = @ClassId
+              AND sc.isactive = true
+              AND s.classgroupid = c.classgroupid
             ORDER BY sc.examdate, s.subjectname;
             """;
 

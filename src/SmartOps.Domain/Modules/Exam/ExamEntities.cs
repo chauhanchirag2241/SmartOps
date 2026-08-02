@@ -33,6 +33,14 @@ public class ExamGroupEntity : AuditableEntity
     public ExamEvaluationType EvaluationType { get; set; }
 }
 
+public class ClassGroupExamMappingEntity : AuditableEntity
+{
+    public Guid Id { get; set; }
+    public Guid BranchId { get; set; }
+    public Guid ExamGroupId { get; set; }
+    public Guid ClassGroupId { get; set; }
+}
+
 public class ExamEntity : AuditableEntity
 {
     public Guid Id { get; set; }
@@ -42,8 +50,6 @@ public class ExamEntity : AuditableEntity
     public string Name { get; set; } = string.Empty;
     public string ExamType { get; set; } = string.Empty;
     public Guid? AcademicPeriodId { get; set; }
-    public DateOnly StartDate { get; set; }
-    public DateOnly EndDate { get; set; }
     public decimal MinPassPercent { get; set; }
     public Guid? GradeScaleId { get; set; }
     public ExamStatus Status { get; set; }

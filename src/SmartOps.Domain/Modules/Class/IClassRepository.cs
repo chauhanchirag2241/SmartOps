@@ -57,6 +57,15 @@ public interface IClassRepository
         Guid? academicYearId = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Subjects a user may assign for a section: class-group subjects for global scope,
+    /// otherwise only subjects from classteachersubjectmappings for this class.
+    /// </summary>
+    Task<IReadOnlyList<DropdownDto>> GetTeachingSubjectsForClassAsync(
+        Guid classId,
+        Guid? academicYearId = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Class-group dropdown (Class 1) for fees / academic periods / Add Class.</summary>
     Task<IReadOnlyList<DropdownDto>> GetClassGroupDropdownAsync(
         Guid? academicYearId = null,

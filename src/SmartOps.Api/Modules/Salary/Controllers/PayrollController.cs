@@ -27,6 +27,17 @@ public sealed class PayrollController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpPost("preview")]
+    [Authorize(Policy = MenuPolicies.SalaryPayroll.Add)]
+    [ProducesResponseType(typeof(PayrollRunDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PreviewPayroll(
+        [FromBody] PreviewPayrollRequestDto request,
+        CancellationToken ct)
+    {
+        var result = await _service.PreviewPayrollAsync(request, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPost("process")]
     [Authorize(Policy = MenuPolicies.SalaryPayroll.Add)]
     [ProducesResponseType(typeof(PayrollRunDto), StatusCodes.Status200OK)]

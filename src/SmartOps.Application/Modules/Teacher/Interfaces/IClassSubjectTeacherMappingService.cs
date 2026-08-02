@@ -31,15 +31,5 @@ public interface IClassSubjectTeacherMappingService
         UpdateClassSubjectTeacherMappingDto request,
         CancellationToken cancellationToken = default);
 
-    Task<ClassSubjectTeacherMappingDto> SetClassTeacherAsync(
-        Guid id,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default);
-
-    Task<ClassSubjectTeacherMappingDto> AssignTeacherLaterAsync(
-        Guid id,
-        AssignTeacherLaterRequestDto request,
-        CancellationToken cancellationToken = default);
-
     Task DeleteMappingAsync(Guid id, CancellationToken cancellationToken = default);
 }

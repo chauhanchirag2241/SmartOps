@@ -19,7 +19,7 @@ public sealed class ExamGroupsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = MenuPolicies.ExamGroups.View)]
+    [Authorize(Policy = MenuPolicies.ExamGroups.ListForExamModule)]
     [ProducesResponseType(typeof(IList<ExamGroupDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetList(CancellationToken ct)
     {

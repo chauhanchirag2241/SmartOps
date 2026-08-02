@@ -78,37 +78,17 @@ public static class DefaultSchoolRolePermissions
     public static IReadOnlyDictionary<string, Grant[]> ByRoleName { get; } =
         new Dictionary<string, Grant[]>(StringComparer.OrdinalIgnoreCase)
         {
-            [RoleNames.Student] = StudentGrants(),
             [RoleNames.Teacher] = TeacherGrants(),
             [RoleNames.Principal] = PrincipalGrants(),
             [RoleNames.Accountant] = AccountantGrants(),
             [RoleNames.FrontOfficeExecutive] = FrontOfficeExecutiveGrants(),
         };
 
-    private static Grant[] StudentGrants() =>
-    [
-        V(Dashboard, MenuCodes.Dashboard),
-        V(Academics, MenuCodes.Academics),
-        V(Attendance, MenuCodes.Attendance),
-        V(AttendanceReport, MenuCodes.AttendanceReport),
-        V(Homework, MenuCodes.Homework),
-        V(LeaveManagement, MenuCodes.LeaveManagement),
-        VA(LeaveStudent, MenuCodes.LeaveStudent),
-        VAE(MyActions, MenuCodes.MyActions),
-        V(Notices, MenuCodes.Notices),
-        V(ExamManagement, MenuCodes.ExamManagement),
-        V(ExamResults, MenuCodes.ExamResults),
-        V(ExamHallTickets, MenuCodes.ExamHallTickets),
-        V(Timetable, MenuCodes.Timetable),
-        V(MyTimetable, MenuCodes.MyTimetable),
-        V(Reports, MenuCodes.Reports),
-    ];
-
     private static Grant[] TeacherGrants() =>
     [
         V(Dashboard, MenuCodes.Dashboard),
         V(Academics, MenuCodes.Academics),
-        VAE(Students, MenuCodes.Students),
+        ViewExport(Students, MenuCodes.Students),
         Full(Attendance, MenuCodes.Attendance),
         ViewExport(AttendanceReport, MenuCodes.AttendanceReport),
         Full(Homework, MenuCodes.Homework),

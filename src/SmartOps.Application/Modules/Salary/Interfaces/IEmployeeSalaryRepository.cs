@@ -6,8 +6,7 @@ public interface IEmployeeSalaryRepository
 {
     Task<IList<EmployeeSalaryListRow>> GetEmployeeSalariesAsync(
         string? search,
-        Guid? departmentId,
-        string? designation,
+        IReadOnlyList<Guid>? userTypeIds,
         CancellationToken ct = default);
 
     Task<EmployeeSalaryEntity?> GetActiveAssignmentByEmployeeIdAsync(Guid employeeId, CancellationToken ct = default);
@@ -34,6 +33,8 @@ public sealed class EmployeeSalaryListRow
     public string? EmployeeCode { get; init; }
     public string? Department { get; init; }
     public string? Designation { get; init; }
+    public Guid UserTypeId { get; init; }
+    public string? UserTypeName { get; set; }
     public Guid? EmployeeSalaryId { get; init; }
     public Guid? SalaryStructureVersionId { get; init; }
 }

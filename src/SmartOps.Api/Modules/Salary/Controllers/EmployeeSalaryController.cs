@@ -20,11 +20,10 @@ public sealed class EmployeeSalaryController : ControllerBase
     [ProducesResponseType(typeof(IList<EmployeeSalaryListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetEmployees(
         [FromQuery] string? search,
-        [FromQuery] Guid? departmentId,
-        [FromQuery] string? designation,
+        [FromQuery] Guid[]? userTypeIds,
         CancellationToken ct)
     {
-        var result = await _service.GetEmployeesAsync(search, departmentId, designation, ct).ConfigureAwait(false);
+        var result = await _service.GetEmployeesAsync(search, userTypeIds, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

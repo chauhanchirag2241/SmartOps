@@ -1,5 +1,7 @@
 using SmartOps.Application.Modules.Salary;
 using SmartOps.Application.Modules.Salary.Interfaces;
+using SmartOps.Application.Modules.StaffAttendance;
+using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.Salary;
 
@@ -7,18 +9,23 @@ namespace SmartOps.Infrastructure.Modules.Salary.Services;
 
 public sealed class PayrollService : IPayrollService
 {
+    public const string AttendanceCutComponentName = "Attendance cut";
+
     private readonly IPayrollRepository _payrollRepo;
     private readonly IEmployeeSalaryRepository _employeeRepo;
     private readonly ISalaryStructureRepository _structureRepo;
+    private readonly IStaffAttendanceService _attendanceService;
 
     public PayrollService(
         IPayrollRepository payrollRepo,
         IEmployeeSalaryRepository employeeRepo,
-        ISalaryStructureRepository structureRepo)
+        ISalaryStructureRepository structureRepo,
+        IStaffAttendanceService attendanceService)
     {
         _payrollRepo = payrollRepo;
         _employeeRepo = employeeRepo;
         _structureRepo = structureRepo;
+        _attendanceService = attendanceService;
     }
 
     public async Task<Result<PayrollRunDto>> GetPayrollAsync(int payYear, int payMonth, CancellationToken ct = default)
@@ -50,6 +57,31 @@ public sealed class PayrollService : IPayrollService
         return Result<PayrollRunDto>.Success(MapRun(run, entries));
     }
 
+    public async Task<Result<PayrollRunDto>> PreviewPayrollAsync(PreviewPayrollRequestDto request, CancellationToken ct = default)
+    {
+        if (!IsValidPeriod(request.PayYear, request.PayMonth))
+        {
+            return Result<PayrollRunDto>.Failure("Invalid pay year or month.");
+        }
+
+        Result<IList<BuiltPayrollEntry>> built = await BuildEntriesAsync(
+            request.PayYear,
+            request.PayMonth,
+            request.UseAttendanceWiseSalary,
+            request.FullSalaryEmployeeIds,
+            ct).ConfigureAwait(false);
+        if (!built.IsSuccess)
+        {
+            return Result<PayrollRunDto>.Failure(built.Error ?? "Failed to preview payroll.");
+        }
+
+        return Result<PayrollRunDto>.Success(MapPreviewRun(
+            request.PayYear,
+            request.PayMonth,
+            request.UseAttendanceWiseSalary,
+            built.Value!));
+    }
+
     public async Task<Result<PayrollRunDto>> ProcessPayrollAsync(ProcessPayrollRequestDto request, CancellationToken ct = default)
     {
         if (!IsValidPeriod(request.PayYear, request.PayMonth))
@@ -63,11 +95,18 @@ public sealed class PayrollService : IPayrollService
             return Result<PayrollRunDto>.Failure("Payroll for this period has already been processed.");
         }
 
-        IList<EmployeeSalaryEntity> assignments = await _employeeRepo.GetActiveAssignmentsAsync(ct).ConfigureAwait(false);
-        if (assignments.Count == 0)
+        Result<IList<BuiltPayrollEntry>> built = await BuildEntriesAsync(
+            request.PayYear,
+            request.PayMonth,
+            request.UseAttendanceWiseSalary,
+            request.FullSalaryEmployeeIds,
+            ct).ConfigureAwait(false);
+        if (!built.IsSuccess)
         {
-            return Result<PayrollRunDto>.Failure("No active employee salary assignments found.");
+            return Result<PayrollRunDto>.Failure(built.Error ?? "Failed to process payroll.");
         }
+
+        IList<BuiltPayrollEntry> entries = built.Value!;
 
         PayrollRunEntity run = existingRun ?? new PayrollRunEntity
         {
@@ -87,56 +126,27 @@ public sealed class PayrollService : IPayrollService
             await _payrollRepo.DeleteEntriesForRunAsync(run.Id, ct).ConfigureAwait(false);
         }
 
-        int daysInMonth = DateTime.DaysInMonth(request.PayYear, request.PayMonth);
         decimal totalGross = 0;
         decimal totalDeductions = 0;
         decimal totalNet = 0;
-        int employeeCount = 0;
 
-        foreach (EmployeeSalaryEntity assignment in assignments)
+        foreach (BuiltPayrollEntry builtEntry in entries)
         {
-            IList<EmployeeSalaryComponentEntity> values =
-                await _employeeRepo.GetComponentValuesForAssignmentAsync(assignment.Id, ct).ConfigureAwait(false);
-            if (values.Count == 0)
-            {
-                continue;
-            }
-
-            IList<SalaryVersionComponentListRow> versionComponentRows =
-                await _structureRepo.GetComponentsAsync(assignment.SalaryStructureVersionId, ct).ConfigureAwait(false);
-            IList<SalaryVersionComponentEntity> versionComponents = versionComponentRows.Select(r => new SalaryVersionComponentEntity
-            {
-                Id = r.Id,
-                SalaryStructureVersionId = r.SalaryStructureVersionId,
-                Name = r.Name,
-                ShortCode = r.ShortCode,
-                ComponentType = r.ComponentType,
-                CalculationType = r.CalculationType,
-                Value = r.Value,
-                IsTaxable = r.IsTaxable,
-                IsActive = r.IsActive
-            }).ToList();
-
-            IList<SalaryVersionComponentEntity> merged = SalaryCalculationHelper.MergeEmployeeValues(versionComponents, values);
-            SalaryBreakdown breakdown = SalaryCalculationHelper.Calculate(merged);
-
             var entry = new PayrollEntryEntity
             {
                 PayrollRunId = run.Id,
-                EmployeeId = assignment.EmployeeId,
-                BasicSalary = breakdown.BasicSalary,
-                GrossSalary = breakdown.GrossSalary,
-                TotalDeductions = breakdown.TotalDeductions,
-                NetSalary = breakdown.NetSalary,
+                EmployeeId = builtEntry.EmployeeId,
+                BasicSalary = builtEntry.BasicSalary,
+                GrossSalary = builtEntry.GrossSalary,
+                TotalDeductions = builtEntry.TotalDeductions,
+                NetSalary = builtEntry.NetSalary,
                 Status = PayrollEntryStatus.Processed,
-                WorkingDays = daysInMonth,
-                PresentDays = daysInMonth
+                WorkingDays = builtEntry.WorkingDays,
+                PresentDays = builtEntry.PresentDays
             };
             Guid entryId = await _payrollRepo.CreateEntryAsync(entry, ct).ConfigureAwait(false);
-
-            IList<PayrollEntryLineEntity> lines = breakdown.Earnings
-                .Concat(breakdown.Deductions)
-                .Select(line => new PayrollEntryLineEntity
+            await _payrollRepo.CreateEntryLinesAsync(
+                builtEntry.Lines.Select(line => new PayrollEntryLineEntity
                 {
                     PayrollEntryId = entryId,
                     SalaryVersionComponentId = line.ComponentId,
@@ -144,26 +154,19 @@ public sealed class PayrollService : IPayrollService
                     ComponentType = line.ComponentType,
                     Amount = line.Amount,
                     IsEarning = line.IsEarning
-                })
-                .ToList();
-            await _payrollRepo.CreateEntryLinesAsync(lines, ct).ConfigureAwait(false);
+                }).ToList(),
+                ct).ConfigureAwait(false);
 
-            totalGross += breakdown.GrossSalary;
-            totalDeductions += breakdown.TotalDeductions;
-            totalNet += breakdown.NetSalary;
-            employeeCount++;
-        }
-
-        if (employeeCount == 0)
-        {
-            return Result<PayrollRunDto>.Failure("No employees with salary component values found.");
+            totalGross += builtEntry.GrossSalary;
+            totalDeductions += builtEntry.TotalDeductions;
+            totalNet += builtEntry.NetSalary;
         }
 
         run.Status = PayrollRunStatus.Processed;
         run.TotalGross = totalGross;
         run.TotalDeductions = totalDeductions;
         run.TotalNet = totalNet;
-        run.EmployeeCount = employeeCount;
+        run.EmployeeCount = entries.Count;
         run.ProcessedOn = DateTime.UtcNow;
         await _payrollRepo.UpdateRunAsync(run, ct).ConfigureAwait(false);
 
@@ -199,6 +202,10 @@ public sealed class PayrollService : IPayrollService
         IList<PayrollEntryLineEntity> lines = await _payrollRepo.GetLinesForEntryAsync(entryId, ct).ConfigureAwait(false);
         IList<SalaryLineItemDto> earnings = lines.Where(l => l.IsEarning).Select(MapLine).ToList();
         IList<SalaryLineItemDto> deductions = lines.Where(l => !l.IsEarning).Select(MapLine).ToList();
+        decimal attendanceCut = deductions
+            .Where(d => string.Equals(d.Name, AttendanceCutComponentName, StringComparison.OrdinalIgnoreCase))
+            .Sum(d => d.Amount);
+        int daysCut = Math.Max(0, context.WorkingDays - context.PresentDays);
 
         return Result<PayslipDto>.Success(new PayslipDto(
             context.EntryId,
@@ -208,8 +215,11 @@ public sealed class PayrollService : IPayrollService
             context.EmployeeCode,
             string.IsNullOrWhiteSpace(context.Department) ? null : context.Department,
             context.Designation,
+            context.UseAttendanceWiseSalary,
             context.WorkingDays,
             context.PresentDays,
+            daysCut,
+            attendanceCut,
             context.BasicSalary,
             context.GrossSalary,
             context.TotalDeductions,
@@ -220,6 +230,184 @@ public sealed class PayrollService : IPayrollService
             earnings,
             deductions));
     }
+
+    private async Task<Result<IList<BuiltPayrollEntry>>> BuildEntriesAsync(
+        int payYear,
+        int payMonth,
+        bool useAttendanceWiseSalary,
+        IList<Guid>? fullSalaryEmployeeIds,
+        CancellationToken ct)
+    {
+        IList<EmployeeSalaryEntity> assignments = await _employeeRepo.GetActiveAssignmentsAsync(ct).ConfigureAwait(false);
+        if (assignments.Count == 0)
+        {
+            return Result<IList<BuiltPayrollEntry>>.Failure("No active employee salary assignments found.");
+        }
+
+        HashSet<Guid> fullSalaryIds = (fullSalaryEmployeeIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .ToHashSet();
+
+        int calendarDays = DateTime.DaysInMonth(payYear, payMonth);
+        int attendanceWorkingDays = calendarDays;
+        Dictionary<Guid, StaffAttendanceReportEmployeeDto> attendanceByEmployee = new();
+
+        if (useAttendanceWiseSalary)
+        {
+            Result<StaffAttendanceReportDto> attendanceResult =
+                await _attendanceService.GetReportAsync(payMonth, payYear, null, ct).ConfigureAwait(false);
+            if (attendanceResult.IsSuccess && attendanceResult.Value is not null)
+            {
+                attendanceWorkingDays = Math.Max(1, attendanceResult.Value.TotalWorkingDays);
+                attendanceByEmployee = attendanceResult.Value.Employees
+                    .GroupBy(e => e.EmployeeId)
+                    .ToDictionary(g => g.Key, g => g.First());
+            }
+            else
+            {
+                attendanceWorkingDays = CountWeekdays(payYear, payMonth);
+            }
+        }
+
+        var builtEntries = new List<BuiltPayrollEntry>();
+
+        foreach (EmployeeSalaryEntity assignment in assignments)
+        {
+            IList<EmployeeSalaryComponentEntity> values =
+                await _employeeRepo.GetComponentValuesForAssignmentAsync(assignment.Id, ct).ConfigureAwait(false);
+            if (values.Count == 0)
+            {
+                continue;
+            }
+
+            IList<SalaryVersionComponentListRow> versionComponentRows =
+                await _structureRepo.GetComponentsAsync(assignment.SalaryStructureVersionId, ct).ConfigureAwait(false);
+            IList<SalaryVersionComponentEntity> versionComponents = versionComponentRows.Select(r => new SalaryVersionComponentEntity
+            {
+                Id = r.Id,
+                SalaryStructureVersionId = r.SalaryStructureVersionId,
+                Name = r.Name,
+                ShortCode = r.ShortCode,
+                ComponentType = r.ComponentType,
+                CalculationType = r.CalculationType,
+                Value = r.Value,
+                IsTaxable = r.IsTaxable,
+                IsActive = r.IsActive
+            }).ToList();
+
+            IList<SalaryVersionComponentEntity> merged = SalaryCalculationHelper.MergeEmployeeValues(versionComponents, values);
+            SalaryBreakdown breakdown = SalaryCalculationHelper.Calculate(merged);
+
+            int entryWorkingDays = useAttendanceWiseSalary ? attendanceWorkingDays : calendarDays;
+            int presentDays = entryWorkingDays;
+            decimal attendanceCut = 0m;
+            bool useFullSalaryOverride = useAttendanceWiseSalary && fullSalaryIds.Contains(assignment.EmployeeId);
+            var lines = breakdown.Earnings.Concat(breakdown.Deductions).ToList();
+            decimal totalDeductions = breakdown.TotalDeductions;
+            decimal netSalary = breakdown.NetSalary;
+            decimal perDayCutAmount = entryWorkingDays > 0
+                ? RoundMoney(breakdown.GrossSalary / entryWorkingDays)
+                : 0m;
+
+            if (useAttendanceWiseSalary && !useFullSalaryOverride
+                && attendanceByEmployee.TryGetValue(assignment.EmployeeId, out StaffAttendanceReportEmployeeDto? att))
+            {
+                decimal payableDays = att.PresentDays + att.LateDays + (att.HalfDayDays * 0.5m);
+                payableDays = Math.Clamp(payableDays, 0m, entryWorkingDays);
+                presentDays = (int)Math.Round(payableDays, MidpointRounding.AwayFromZero);
+                presentDays = Math.Clamp(presentDays, 0, entryWorkingDays);
+
+                decimal ratio = entryWorkingDays > 0 ? payableDays / entryWorkingDays : 1m;
+                ratio = Math.Clamp(ratio, 0m, 1m);
+                attendanceCut = RoundMoney(breakdown.GrossSalary * (1m - ratio));
+            }
+
+            if (attendanceCut > 0)
+            {
+                lines.Add(new SalaryLineItemDto(
+                    null,
+                    AttendanceCutComponentName,
+                    SalaryComponentType.Deduction,
+                    SalaryLabelHelper.ComponentTypeLabel(SalaryComponentType.Deduction),
+                    attendanceCut,
+                    false));
+                totalDeductions = RoundMoney(totalDeductions + attendanceCut);
+                netSalary = RoundMoney(breakdown.GrossSalary - totalDeductions);
+            }
+
+            EmployeeSalaryContextRow? empInfo =
+                await _employeeRepo.GetEmployeeSalaryContextAsync(assignment.EmployeeId, ct).ConfigureAwait(false);
+
+            builtEntries.Add(new BuiltPayrollEntry(
+                assignment.EmployeeId,
+                empInfo?.EmployeeName ?? string.Empty,
+                empInfo?.Department,
+                breakdown.BasicSalary,
+                breakdown.GrossSalary,
+                totalDeductions,
+                netSalary,
+                entryWorkingDays,
+                presentDays,
+                attendanceCut,
+                perDayCutAmount,
+                useFullSalaryOverride,
+                lines));
+        }
+
+        if (builtEntries.Count == 0)
+        {
+            return Result<IList<BuiltPayrollEntry>>.Failure("No employees with salary component values found.");
+        }
+
+        return Result<IList<BuiltPayrollEntry>>.Success(builtEntries);
+    }
+
+    private static PayrollRunDto MapPreviewRun(
+        int payYear,
+        int payMonth,
+        bool useAttendanceWiseSalary,
+        IList<BuiltPayrollEntry> entries) =>
+        new(
+            Guid.Empty,
+            payYear,
+            payMonth,
+            PayrollRunStatus.Draft,
+            SalaryLabelHelper.PayrollRunStatusLabel(PayrollRunStatus.Draft),
+            useAttendanceWiseSalary,
+            entries.Sum(e => e.GrossSalary),
+            entries.Sum(e => e.TotalDeductions),
+            entries.Sum(e => e.NetSalary),
+            entries.Count,
+            null,
+            entries
+                .OrderBy(e => e.EmployeeName)
+                .Select(e =>
+                {
+                    int daysCut = Math.Max(0, e.WorkingDays - e.PresentDays);
+                    IList<SalaryLineItemDto> earnings = e.Lines.Where(l => l.IsEarning).ToList();
+                    IList<SalaryLineItemDto> deductions = e.Lines.Where(l => !l.IsEarning).ToList();
+                    return new PayrollEntryListItemDto(
+                        Guid.Empty,
+                        e.EmployeeId,
+                        e.EmployeeName,
+                        string.IsNullOrWhiteSpace(e.Department) ? null : e.Department,
+                        e.BasicSalary,
+                        0,
+                        RoundMoney(Math.Max(0, e.GrossSalary - e.BasicSalary)),
+                        e.GrossSalary,
+                        e.TotalDeductions,
+                        e.NetSalary,
+                        e.WorkingDays,
+                        e.PresentDays,
+                        daysCut,
+                        e.AttendanceCutAmount,
+                        e.PerDayCutAmount,
+                        e.UseFullSalaryOverride,
+                        PayrollEntryStatus.Draft,
+                        SalaryLabelHelper.PayrollEntryStatusLabel(PayrollEntryStatus.Draft),
+                        earnings,
+                        deductions);
+                }).ToList());
 
     private static PayrollRunDto MapRun(PayrollRunEntity run, IList<PayrollEntryListRow> entries) => new(
         run.Id,
@@ -235,19 +423,35 @@ public sealed class PayrollService : IPayrollService
         run.ProcessedOn,
         entries.Select(MapEntry).ToList());
 
-    private static PayrollEntryListItemDto MapEntry(PayrollEntryListRow row) => new(
-        row.Id,
-        row.EmployeeRecordId,
-        row.EmployeeName,
-        string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
-        row.BasicSalary,
-        row.HraAmount,
-        row.Allowances,
-        row.GrossSalary,
-        row.TotalDeductions,
-        row.NetSalary,
-        row.Status,
-        SalaryLabelHelper.PayrollEntryStatusLabel(row.Status));
+    private static PayrollEntryListItemDto MapEntry(PayrollEntryListRow row)
+    {
+        int daysCut = Math.Max(0, row.WorkingDays - row.PresentDays);
+        decimal perDayCut = daysCut > 0 && row.AttendanceCutAmount > 0
+            ? RoundMoney(row.AttendanceCutAmount / daysCut)
+            : (row.WorkingDays > 0 ? RoundMoney(row.GrossSalary / row.WorkingDays) : 0m);
+
+        return new(
+            row.Id,
+            row.EmployeeRecordId,
+            row.EmployeeName,
+            string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
+            row.BasicSalary,
+            row.HraAmount,
+            row.Allowances,
+            row.GrossSalary,
+            row.TotalDeductions,
+            row.NetSalary,
+            row.WorkingDays,
+            row.PresentDays,
+            daysCut,
+            row.AttendanceCutAmount,
+            perDayCut,
+            false,
+            row.Status,
+            SalaryLabelHelper.PayrollEntryStatusLabel(row.Status),
+            [],
+            []);
+    }
 
     private static SalaryLineItemDto MapLine(PayrollEntryLineEntity line) => new(
         line.SalaryVersionComponentId,
@@ -257,6 +461,38 @@ public sealed class PayrollService : IPayrollService
         line.Amount,
         line.IsEarning);
 
+    private static int CountWeekdays(int year, int month)
+    {
+        int daysInMonth = DateTime.DaysInMonth(year, month);
+        int count = 0;
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            if (new DateTime(year, month, day).DayOfWeek != DayOfWeek.Sunday)
+            {
+                count++;
+            }
+        }
+
+        return Math.Max(1, count);
+    }
+
+    private static decimal RoundMoney(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
+
     private static bool IsValidPeriod(int payYear, int payMonth) =>
         payYear is >= 2000 and <= 2100 && payMonth is >= 1 and <= 12;
+
+    private sealed record BuiltPayrollEntry(
+        Guid EmployeeId,
+        string EmployeeName,
+        string? Department,
+        decimal BasicSalary,
+        decimal GrossSalary,
+        decimal TotalDeductions,
+        decimal NetSalary,
+        int WorkingDays,
+        int PresentDays,
+        decimal AttendanceCutAmount,
+        decimal PerDayCutAmount,
+        bool UseFullSalaryOverride,
+        IList<SalaryLineItemDto> Lines);
 }

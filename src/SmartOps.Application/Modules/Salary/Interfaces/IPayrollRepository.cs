@@ -43,6 +43,9 @@ public sealed class PayrollEntryListRow
     public decimal GrossSalary { get; init; }
     public decimal TotalDeductions { get; init; }
     public decimal NetSalary { get; init; }
+    public int WorkingDays { get; init; }
+    public int PresentDays { get; init; }
+    public decimal AttendanceCutAmount { get; init; }
     public PayrollEntryStatus Status { get; init; }
 }
 
@@ -57,6 +60,7 @@ public sealed class PayslipContextRow
     public string? EmployeeCode { get; init; }
     public string? Department { get; init; }
     public string? Designation { get; init; }
+    public bool UseAttendanceWiseSalary { get; init; }
     public decimal BasicSalary { get; init; }
     public decimal GrossSalary { get; init; }
     public decimal TotalDeductions { get; init; }

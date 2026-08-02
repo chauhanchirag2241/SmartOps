@@ -14,6 +14,10 @@ public interface IClassSettingRepository
         Guid teacherEmployeeId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ClassTeacherAssignmentDto>> GetAssignmentsForTeacherAsync(
+        Guid teacherEmployeeId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Upserts the class-teacher assignment for a section (clears teacherid on other rows if needed).
     /// Pass <paramref name="teacherId"/> null to clear.

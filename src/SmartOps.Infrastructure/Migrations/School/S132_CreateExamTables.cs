@@ -74,8 +74,6 @@ public sealed class S132_CreateExamTables : Migration
                 .WithColumn("name").AsString(300).NotNullable()
                 .WithColumn("examtype").AsString(100).NotNullable()
                 .WithColumn("academicperiodid").AsGuid().Nullable()
-                .WithColumn("startdate").AsDate().NotNullable()
-                .WithColumn("enddate").AsDate().NotNullable()
                 .WithColumn("minpasspercent").AsDecimal(6, 2).NotNullable().WithDefaultValue(33)
                 .WithColumn("gradescaleid").AsGuid().Nullable()
                 .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)

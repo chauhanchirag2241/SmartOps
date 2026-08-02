@@ -7,11 +7,11 @@ using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Class.Interfaces;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
+using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Modules.Teacher.Entities;
 using SmartOps.Infrastructure.Modules.Authorization.Sql;
 using SmartOps.Infrastructure.Persistence.Context;
-using SmartOps.Domain.Common.Configuration;
-using SmartOps.Domain.Common.Enums;
 
 namespace SmartOps.Infrastructure.Modules.Teacher.Services;
 
@@ -81,17 +81,15 @@ ORDER BY startdate DESC
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
+        // Class groups exposed as "Classes" for teacher-assign UI simplicity.
         IEnumerable<MappingLookupOptionDto> classes = await connection
             .QueryAsync<MappingLookupOptionDto>(
                 new CommandDefinition(
                     $"""
-SELECT c.id AS Id,
-       trim(cg.classname || COALESCE(' - ' || NULLIF(trim(c.section), ''), '')) AS Name,
-       c.section AS SubLabel
-FROM {schema}.{DatabaseConfig.TableClasses} c
-INNER JOIN {schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
-WHERE c.isactive = true{classBranchFilter}
-ORDER BY cg.classname, c.section
+SELECT cg.id AS Id, cg.classname AS Name
+FROM {schema}.{DatabaseConfig.TableClassGroups} cg
+WHERE cg.isactive = true{classBranchFilter}
+ORDER BY cg.classname
 """,
                     new { ActiveBranchId = activeBranchId },
                     cancellationToken: cancellationToken))
@@ -150,7 +148,7 @@ ORDER BY u.firstname, u.lastname
         Guid classId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
-        => GetByClassIdAsync(classId, academicYearId, cancellationToken);
+        => GetByClassGroupIdAsync(classId, academicYearId, cancellationToken);
 
     public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByEmployeeAsync(
         Guid employeeId,
@@ -163,13 +161,14 @@ ORDER BY u.firstname, u.lastname
             yearId = await ResolveAcademicYearIdAsync(null, cancellationToken).ConfigureAwait(false);
         }
 
+        // Include inactive so teacher management UI can show soft-deleted rows.
         return await _repository
-            .GetByEmployeeIdAsync(employeeId, yearId, cancellationToken)
+            .GetByEmployeeIdAsync(employeeId, yearId, includeInactive: true, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassIdAsync(
-        Guid classId,
+    public async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> GetByClassGroupIdAsync(
+        Guid classGroupId,
         Guid? academicYearId,
         CancellationToken cancellationToken = default)
     {
@@ -183,91 +182,80 @@ ORDER BY u.firstname, u.lastname
         }
 
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
-        if (_scope.ScopesEnabled && !_scope.IsGlobalScope && !_scope.HasClassAccess(classId))
+        if (_scope.ScopesEnabled && !_scope.IsGlobalScope)
         {
-            return [];
+            bool hasAccess = await HasClassGroupAccessAsync(classGroupId, cancellationToken).ConfigureAwait(false);
+            if (!hasAccess)
+            {
+                return [];
+            }
         }
 
         IReadOnlyList<ClassSubjectTeacherMappingDto> rows = await _repository
-            .GetByClassIdAsync(classId, yearId, cancellationToken)
+            .GetByClassIdAsync(classGroupId, yearId, cancellationToken)
             .ConfigureAwait(false);
 
-        return await FilterMappingsForScopeAsync(classId, rows, yearId, cancellationToken).ConfigureAwait(false);
+        return await FilterMappingsForScopeAsync(classGroupId, rows, yearId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ClassSubjectTeacherMappingDto> AddMappingAsync(
         CreateClassSubjectTeacherMappingDto request,
         CancellationToken cancellationToken = default)
     {
-        if (request.ClassId == Guid.Empty || request.SubjectId == Guid.Empty)
+        if (request.ClassGroupId == Guid.Empty)
         {
-            throw new InvalidOperationException("Class and subject are required.");
+            throw new InvalidOperationException("Class group is required.");
+        }
+
+        if (request.EmployeeId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Employee is required.");
+        }
+
+        IReadOnlyList<Guid> subjectIds = ResolveCreateSubjectIds(request);
+        if (subjectIds.Count == 0)
+        {
+            throw new InvalidOperationException("At least one subject is required.");
         }
 
         try
         {
-            Guid academicYearId = request.AcademicYearId != Guid.Empty
-                ? await ResolveAcademicYearIdAsync(request.AcademicYearId, cancellationToken).ConfigureAwait(false)
-                : await ResolveAcademicYearForClassAsync(request.ClassId, cancellationToken).ConfigureAwait(false);
-
-            bool classExists = await _repository
-                .ExistsActiveClassAsync(request.ClassId, cancellationToken)
-                .ConfigureAwait(false);
-            if (!classExists)
-            {
-                throw new InvalidOperationException("Class not found or is inactive.");
-            }
-
-            Guid? employeeId = NormalizeEmployeeId(request.EmployeeId);
-
-            ClassSubjectTeacherMappingEntity? existing = await _repository
-                .FindByClassSubjectYearAsync(request.ClassId, request.SubjectId, academicYearId, cancellationToken)
+            Guid academicYearId = await ResolveAcademicYearIdAsync(
+                    request.AcademicYearId != Guid.Empty ? request.AcademicYearId : null,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
-            if (existing is { IsActive: true })
-            {
-                if (employeeId.HasValue)
-                {
-                    // Upsert teacher onto existing active mapping for class+subject+year.
-                    existing.EmployeeId = employeeId;
-                    await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
-                    await BumpEmployeeScopeIfLinkedAsync(employeeId.Value, cancellationToken).ConfigureAwait(false);
-                    return await RequireDtoByIdAsync(existing.Id, cancellationToken).ConfigureAwait(false);
-                }
-
-                throw new InvalidOperationException("This subject is already mapped to the selected class.");
-            }
-
-            Guid mappingId;
-            if (existing is not null)
-            {
-                existing.EmployeeId = employeeId;
-                existing.IsActive = true;
-                await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
-                mappingId = existing.Id;
-            }
-            else
-            {
-                mappingId = await _repository.InsertAsync(
-                    new ClassSubjectTeacherMappingEntity
-                    {
-                        ClassId = request.ClassId,
-                        SubjectId = request.SubjectId,
-                        EmployeeId = employeeId,
-                        AcademicYearId = academicYearId
-                    },
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            ClassSubjectTeacherMappingDto created = await RequireDtoByIdAsync(mappingId, cancellationToken)
+            bool classGroupExists = await _repository
+                .ExistsActiveClassGroupAsync(request.ClassGroupId, cancellationToken)
                 .ConfigureAwait(false);
-
-            if (employeeId.HasValue)
+            if (!classGroupExists)
             {
-                await BumpEmployeeScopeIfLinkedAsync(employeeId.Value, cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException("Class group not found or is inactive.");
             }
 
-            return created;
+            bool subjectsOk = await _repository
+                .AllSubjectsBelongToClassGroupAsync(request.ClassGroupId, subjectIds, cancellationToken)
+                .ConfigureAwait(false);
+            if (!subjectsOk)
+            {
+                throw new InvalidOperationException("One or more subjects do not belong to the selected class group.");
+            }
+
+            ClassSubjectTeacherMappingDto? last = null;
+            foreach (Guid subjectId in subjectIds)
+            {
+                last = await UpsertSubjectMappingAsync(
+                        request.ClassGroupId,
+                        subjectId,
+                        request.EmployeeId,
+                        academicYearId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await BumpEmployeeScopeIfLinkedAsync(request.EmployeeId, cancellationToken).ConfigureAwait(false);
+
+            return last ?? throw new InvalidOperationException("Mapping was saved but could not be loaded.");
         }
         catch (Exception ex) when (MapDatabaseException(ex) is InvalidOperationException mapped)
         {
@@ -286,44 +274,82 @@ ORDER BY u.firstname, u.lastname
 
         if (request.Mappings is null || request.Mappings.Count == 0)
         {
-            throw new InvalidOperationException("Add at least one class and subject permission.");
+            throw new InvalidOperationException("Add at least one class group and subject permission.");
         }
 
-        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
-        var created = new List<ClassSubjectTeacherMappingDto>(request.Mappings.Count);
+        Guid academicYearId = await ResolveAcademicYearIdAsync(
+                request.AcademicYearId != Guid.Empty ? request.AcademicYearId : null,
+                cancellationToken)
+            .ConfigureAwait(false);
 
-        foreach (CreateClassSubjectTeacherMappingDto item in request.Mappings)
+        var seenKeys = new HashSet<(Guid ClassGroupId, Guid SubjectId)>();
+        var created = new List<ClassSubjectTeacherMappingDto>();
+
+        try
         {
-            if (item.ClassId == Guid.Empty || item.SubjectId == Guid.Empty)
+            foreach (BulkClassSubjectTeacherMappingItemDto item in request.Mappings)
             {
-                throw new InvalidOperationException("Class and subject are required for every permission.");
+                if (item.ClassGroupId == Guid.Empty)
+                {
+                    throw new InvalidOperationException("Class group is required for every permission.");
+                }
+
+                IReadOnlyList<Guid> subjectIds = NormalizeSubjectIds(item.SubjectIds);
+                if (subjectIds.Count == 0)
+                {
+                    throw new InvalidOperationException("At least one subject is required for every class group.");
+                }
+
+                bool classGroupExists = await _repository
+                    .ExistsActiveClassGroupAsync(item.ClassGroupId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!classGroupExists)
+                {
+                    throw new InvalidOperationException("Class group not found or is inactive.");
+                }
+
+                bool subjectsOk = await _repository
+                    .AllSubjectsBelongToClassGroupAsync(item.ClassGroupId, subjectIds, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!subjectsOk)
+                {
+                    throw new InvalidOperationException("One or more subjects do not belong to the selected class group.");
+                }
+
+                foreach (Guid subjectId in subjectIds)
+                {
+                    if (!seenKeys.Add((item.ClassGroupId, subjectId)))
+                    {
+                        throw new InvalidOperationException("Duplicate class group and subject in this assignment.");
+                    }
+
+                    created.Add(
+                        await UpsertSubjectMappingAsync(
+                                item.ClassGroupId,
+                                subjectId,
+                                request.EmployeeId,
+                                academicYearId,
+                                cancellationToken)
+                            .ConfigureAwait(false));
+                }
             }
 
-            string key = $"{item.ClassId:D}:{item.SubjectId:D}";
-            if (!seenKeys.Add(key))
-            {
-                throw new InvalidOperationException("Duplicate subject for the same class in this assignment.");
-            }
-
-            created.Add(
-                await AddMappingAsync(
-                        new CreateClassSubjectTeacherMappingDto
-                        {
-                            ClassId = item.ClassId,
-                            SubjectId = item.SubjectId,
-                            EmployeeId = request.EmployeeId,
-                            AcademicYearId = request.AcademicYearId != Guid.Empty
-                                ? request.AcademicYearId
-                                : item.AcademicYearId
-                        },
-                        cancellationToken)
-                    .ConfigureAwait(false));
+            await BumpEmployeeScopeIfLinkedAsync(request.EmployeeId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (MapDatabaseException(ex) is InvalidOperationException mapped)
+        {
+            throw mapped;
         }
 
         foreach (Guid sectionId in (request.ClassTeacherClassIds ?? []).Distinct())
         {
-            if (sectionId == Guid.Empty) continue;
-            Guid? classGroupId = await ResolveClassGroupIdAsync(sectionId, cancellationToken).ConfigureAwait(false);
+            if (sectionId == Guid.Empty)
+            {
+                continue;
+            }
+
+            Guid? classGroupId = await ResolveClassGroupIdForSectionAsync(sectionId, cancellationToken)
+                .ConfigureAwait(false);
             await _classSettings
                 .UpsertClassTeacherAsync(sectionId, classGroupId, request.EmployeeId, cancellationToken)
                 .ConfigureAwait(false);
@@ -336,41 +362,6 @@ ORDER BY u.firstname, u.lastname
         };
     }
 
-    public async Task<ClassSubjectTeacherMappingDto> SetClassTeacherAsync(
-        Guid id,
-        bool isClassTeacher,
-        CancellationToken cancellationToken = default)
-    {
-        ClassSubjectTeacherMappingEntity entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
-        if (entity.EmployeeId is null || entity.EmployeeId == Guid.Empty)
-        {
-            throw new InvalidOperationException("Assign a teacher to this subject before setting class teacher.");
-        }
-
-        Guid? classGroupId = await ResolveClassGroupIdAsync(entity.ClassId, cancellationToken).ConfigureAwait(false);
-
-        if (!isClassTeacher)
-        {
-            Guid? current = await _classSettings
-                .GetClassTeacherEmployeeIdAsync(entity.ClassId, cancellationToken)
-                .ConfigureAwait(false);
-            if (current != entity.EmployeeId)
-            {
-                return await RequireDtoByIdAsync(id, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        await _classSettings
-            .UpsertClassTeacherAsync(
-                entity.ClassId,
-                classGroupId,
-                isClassTeacher ? entity.EmployeeId : null,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return await RequireDtoByIdAsync(id, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<ClassSubjectTeacherMappingDto> UpdateMappingAsync(
         Guid id,
         UpdateClassSubjectTeacherMappingDto request,
@@ -378,56 +369,48 @@ ORDER BY u.firstname, u.lastname
     {
         ClassSubjectTeacherMappingEntity entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
 
-        Guid? previousEmployeeId = entity.EmployeeId;
-        Guid? employeeId = request.AssignLater
-            ? null
-            : request.EmployeeId.HasValue
-                ? NormalizeEmployeeId(request.EmployeeId)
-                : entity.EmployeeId;
-
-        if (!request.AssignLater && request.EmployeeId.HasValue && employeeId is null)
+        if (request.SubjectId is null && request.IsActive is null)
         {
-            throw new InvalidOperationException("A valid teacher is required unless assign later is selected.");
+            throw new InvalidOperationException("Provide SubjectId and/or IsActive to update.");
         }
 
-        if (request.SubjectId.HasValue && request.SubjectId.Value != Guid.Empty && request.SubjectId.Value != entity.SubjectId)
+        if (request.SubjectId.HasValue)
         {
-            bool duplicate = await _repository
-                .ExistsActiveClassSubjectAsync(
-                    entity.ClassId,
-                    request.SubjectId.Value,
-                    entity.AcademicYearId,
-                    entity.Id,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (duplicate)
+            if (request.SubjectId.Value == Guid.Empty)
             {
-                throw new InvalidOperationException("This subject is already mapped to the selected class.");
+                throw new InvalidOperationException("Subject is required.");
+            }
+
+            bool subjectsOk = await _repository
+                .AllSubjectsBelongToClassGroupAsync(entity.ClassGroupId, [request.SubjectId.Value], cancellationToken)
+                .ConfigureAwait(false);
+            if (!subjectsOk)
+            {
+                throw new InvalidOperationException("Subject does not belong to the selected class group.");
             }
 
             entity.SubjectId = request.SubjectId.Value;
         }
 
-        if (request.EmployeeId.HasValue || request.AssignLater)
+        if (request.IsActive.HasValue)
         {
-            entity.EmployeeId = employeeId;
+            entity.IsActive = request.IsActive.Value;
+        }
+        else if (request.SubjectId.HasValue)
+        {
+            // Changing subject reactivates the row.
+            entity.IsActive = true;
         }
 
         try
         {
-            entity.IsActive = true;
             int rowsUpdated = await _repository.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
-            if (rowsUpdated == 0)
-            {
-                entity = await GetRequiredEntityAsync(id, cancellationToken).ConfigureAwait(false);
-                rowsUpdated = await _repository.UpdateAsync(entity, cancellationToken).ConfigureAwait(false);
-            }
-
             if (rowsUpdated == 0)
             {
                 throw new InvalidOperationException("Mapping could not be updated. Please refresh and try again.");
             }
-            await BumpEmployeeChangesAsync(previousEmployeeId, entity.EmployeeId, cancellationToken).ConfigureAwait(false);
+
+            await BumpEmployeeScopeIfLinkedAsync(entity.EmployeeId, cancellationToken).ConfigureAwait(false);
 
             return await RequireDtoByIdAsync(entity.Id, cancellationToken).ConfigureAwait(false);
         }
@@ -437,33 +420,58 @@ ORDER BY u.firstname, u.lastname
         }
     }
 
-    public async Task<ClassSubjectTeacherMappingDto> AssignTeacherLaterAsync(
-        Guid id,
-        AssignTeacherLaterRequestDto request,
-        CancellationToken cancellationToken = default)
-    {
-        return await UpdateMappingAsync(
-            id,
-            new UpdateClassSubjectTeacherMappingDto
-            {
-                AssignLater = request.AssignLater,
-                EmployeeId = request.EmployeeId
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    public Task DeleteMappingAsync(Guid id, CancellationToken cancellationToken = default)
-        => RemoveMappingAsync(id, cancellationToken);
-
-    public async Task RemoveMappingAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteMappingAsync(Guid id, CancellationToken cancellationToken = default)
     {
         ClassSubjectTeacherMappingEntity? entity = await _repository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
         await _repository.SoftDeleteAsync(id, cancellationToken).ConfigureAwait(false);
 
-        if (entity?.EmployeeId is Guid empId)
+        if (entity is not null && entity.EmployeeId != Guid.Empty)
         {
-            await BumpEmployeeScopeIfLinkedAsync(empId, cancellationToken).ConfigureAwait(false);
+            await BumpEmployeeScopeIfLinkedAsync(entity.EmployeeId, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async Task<ClassSubjectTeacherMappingDto> UpsertSubjectMappingAsync(
+        Guid classGroupId,
+        Guid subjectId,
+        Guid employeeId,
+        Guid academicYearId,
+        CancellationToken cancellationToken)
+    {
+        ClassSubjectTeacherMappingEntity? existing = await _repository
+            .FindByClassGroupSubjectEmployeeYearAsync(
+                classGroupId,
+                subjectId,
+                employeeId,
+                academicYearId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        Guid mappingId;
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                await _repository.UpdateAsync(existing, cancellationToken).ConfigureAwait(false);
+            }
+
+            mappingId = existing.Id;
+        }
+        else
+        {
+            mappingId = await _repository.InsertAsync(
+                new ClassSubjectTeacherMappingEntity
+                {
+                    ClassGroupId = classGroupId,
+                    SubjectId = subjectId,
+                    EmployeeId = employeeId,
+                    AcademicYearId = academicYearId
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await RequireDtoByIdAsync(mappingId, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ClassSubjectTeacherMappingDto> RequireDtoByIdAsync(
@@ -477,20 +485,26 @@ ORDER BY u.firstname, u.lastname
         return dto ?? throw new InvalidOperationException("Mapping was saved but could not be loaded.");
     }
 
-    private async Task<Guid> ResolveAcademicYearForClassAsync(
-        Guid classId,
-        CancellationToken cancellationToken)
+    private static IReadOnlyList<Guid> ResolveCreateSubjectIds(CreateClassSubjectTeacherMappingDto request)
     {
-        bool classExists = await _repository
-            .ExistsActiveClassAsync(classId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!classExists)
+        var ids = new List<Guid>();
+        if (request.SubjectId.HasValue && request.SubjectId.Value != Guid.Empty)
         {
-            throw new InvalidOperationException("Class not found or is inactive.");
+            ids.Add(request.SubjectId.Value);
         }
 
-        return await ResolveAcademicYearIdAsync(null, cancellationToken).ConfigureAwait(false);
+        ids.AddRange(NormalizeSubjectIds(request.SubjectIds));
+        return ids.Distinct().ToList();
+    }
+
+    private static IReadOnlyList<Guid> NormalizeSubjectIds(IEnumerable<Guid>? subjectIds)
+    {
+        if (subjectIds is null)
+        {
+            return [];
+        }
+
+        return subjectIds.Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     private static InvalidOperationException? MapDatabaseException(Exception ex)
@@ -503,15 +517,13 @@ ORDER BY u.firstname, u.lastname
 
         return pg.SqlState switch
         {
-            PostgresErrorCodes.NotNullViolation when pg.ColumnName == "EmployeeId" =>
-                new InvalidOperationException(
-                    "Cannot save without a teacher. Assign a teacher, or run database migration S111 to allow \"Assign later\"."),
             PostgresErrorCodes.NotNullViolation =>
                 new InvalidOperationException("A required mapping field is missing."),
             PostgresErrorCodes.UniqueViolation =>
-                new InvalidOperationException("This subject is already mapped to the selected class."),
+                new InvalidOperationException(
+                    "This teacher is already mapped to the selected class group and subject for this year."),
             PostgresErrorCodes.ForeignKeyViolation =>
-                new InvalidOperationException("Invalid class, subject, or teacher reference."),
+                new InvalidOperationException("Invalid class group, subject, or teacher reference."),
             _ => null
         };
     }
@@ -532,7 +544,7 @@ ORDER BY u.firstname, u.lastname
         return null;
     }
 
-    private async Task<Guid?> ResolveClassGroupIdAsync(Guid classId, CancellationToken cancellationToken)
+    private async Task<Guid?> ResolveClassGroupIdForSectionAsync(Guid sectionId, CancellationToken cancellationToken)
     {
         IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         string sql = $"""
@@ -540,8 +552,35 @@ SELECT classgroupid FROM {_context.OperationalSchema}.{DatabaseConfig.TableClass
 WHERE id = @ClassId AND isactive = true LIMIT 1
 """;
         return await connection.ExecuteScalarAsync<Guid?>(
-            new CommandDefinition(sql, new { ClassId = classId }, cancellationToken: cancellationToken))
+            new CommandDefinition(sql, new { ClassId = sectionId }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    private async Task<bool> HasClassGroupAccessAsync(Guid classGroupId, CancellationToken cancellationToken)
+    {
+        if (_scope.AllowedClassIds.Contains(classGroupId))
+        {
+            return true;
+        }
+
+        if (_scope.AllowedClassIds.Count == 0)
+        {
+            return false;
+        }
+
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+SELECT EXISTS (
+    SELECT 1 FROM {_context.OperationalSchema}.{DatabaseConfig.TableClasses}
+    WHERE classgroupid = @ClassGroupId
+      AND isactive = true
+      AND id = ANY(@AllowedClassIds))
+""";
+        return await connection.ExecuteScalarAsync<bool>(
+            new CommandDefinition(
+                sql,
+                new { ClassGroupId = classGroupId, AllowedClassIds = _scope.AllowedClassIds.ToArray() },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<ClassSubjectTeacherMappingEntity> GetRequiredEntityAsync(
@@ -552,35 +591,9 @@ WHERE id = @ClassId AND isactive = true LIMIT 1
         return entity ?? throw new InvalidOperationException("Mapping not found.");
     }
 
-    private static Guid? NormalizeEmployeeId(Guid? employeeId)
-    {
-        if (!employeeId.HasValue || employeeId.Value == Guid.Empty)
-        {
-            return null;
-        }
-
-        return employeeId;
-    }
-
-    private async Task BumpEmployeeChangesAsync(
-        Guid? previousEmployeeId,
-        Guid? currentEmployeeId,
-        CancellationToken cancellationToken)
-    {
-        if (previousEmployeeId.HasValue && previousEmployeeId != currentEmployeeId)
-        {
-            await BumpEmployeeScopeIfLinkedAsync(previousEmployeeId.Value, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (currentEmployeeId.HasValue)
-        {
-            await BumpEmployeeScopeIfLinkedAsync(currentEmployeeId.Value, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     private async Task<Guid> ResolveAcademicYearIdAsync(Guid? academicYearId, CancellationToken cancellationToken)
     {
-        if (academicYearId.HasValue)
+        if (academicYearId.HasValue && academicYearId.Value != Guid.Empty)
         {
             return academicYearId.Value;
         }
@@ -668,7 +681,10 @@ LIMIT 1
             return;
         }
 
-        classes.RemoveAll(c => !allowedClassIds.Contains(c.Id));
+        HashSet<Guid> allowedClassGroupIds = await ResolveClassGroupIdsForSectionsAsync(allowedClassIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        classes.RemoveAll(c => !allowedClassGroupIds.Contains(c.Id) && !allowedClassIds.Contains(c.Id));
         summaries.RemoveAll(s => !allowedClassIds.Contains(s.ClassId));
 
         HashSet<Guid> allowedSubjectIds = await ResolveScopedSubjectIdsAsync(academicYearId, cancellationToken)
@@ -682,12 +698,36 @@ LIMIT 1
         subjects.RemoveAll(s => !allowedSubjectIds.Contains(s.Id));
     }
 
+    private async Task<HashSet<Guid>> ResolveClassGroupIdsForSectionsAsync(
+        IReadOnlyCollection<Guid> sectionIds,
+        CancellationToken cancellationToken)
+    {
+        if (sectionIds.Count == 0)
+        {
+            return [];
+        }
+
+        IDbConnection connection = await _context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+SELECT DISTINCT classgroupid
+FROM {_context.OperationalSchema}.{DatabaseConfig.TableClasses}
+WHERE id = ANY(@SectionIds) AND isactive = true AND classgroupid IS NOT NULL
+""";
+        IEnumerable<Guid> ids = await connection.QueryAsync<Guid>(
+            new CommandDefinition(
+                sql,
+                new { SectionIds = sectionIds.ToArray() },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return ids.ToHashSet();
+    }
+
     private async Task<IReadOnlyList<ClassSubjectTeacherMappingDto>> FilterMappingsForScopeAsync(
-        Guid classId,
+        Guid classGroupId,
         IReadOnlyList<ClassSubjectTeacherMappingDto> rows,
         Guid? academicYearId,
         CancellationToken cancellationToken)
     {
+        _ = classGroupId;
         await _scope.EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         if (!_scope.ScopesEnabled || _scope.IsGlobalScope)
         {
@@ -700,8 +740,12 @@ LIMIT 1
                 .GetClassSubjectPairsForTeacherUserAsync(_currentUser.UserId, academicYearId, cancellationToken)
                 .ConfigureAwait(false);
 
-            HashSet<(Guid ClassId, Guid SubjectId)> pairSet = pairs.ToHashSet();
-            return rows.Where(r => pairSet.Contains((classId, r.SubjectId))).ToList();
+            HashSet<Guid> allowedSubjects = pairs
+                .Where(p => _scope.HasClassAccess(p.ClassId))
+                .Select(p => p.SubjectId)
+                .ToHashSet();
+
+            return rows.Where(r => allowedSubjects.Contains(r.SubjectId)).ToList();
         }
 
         HashSet<Guid> allowedSubjectIds = await ResolveScopedSubjectIdsAsync(academicYearId, cancellationToken)

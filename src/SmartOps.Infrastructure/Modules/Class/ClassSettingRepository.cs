@@ -1,6 +1,8 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.Authorization;
+using SmartOps.Application.Modules.Class;
 using SmartOps.Application.Modules.Class.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Class.Entities;
@@ -81,6 +83,32 @@ FROM {Schema}.{DatabaseConfig.TableClassSettings}
 WHERE teacherid = @TeacherId AND isactive = true AND sectionid IS NOT NULL
 """;
         IEnumerable<Guid> rows = await connection.QueryAsync<Guid>(
+            new CommandDefinition(sql, new { TeacherId = teacherEmployeeId }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<ClassTeacherAssignmentDto>> GetAssignmentsForTeacherAsync(
+        Guid teacherEmployeeId,
+        CancellationToken cancellationToken = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        string sql = $"""
+SELECT
+    cs.id AS Id,
+    cs.sectionid AS ClassId,
+    {DashboardClassLabel.DisplayNameSql} AS ClassName,
+    COALESCE(cs.classgroupid, c.classgroupid) AS ClassGroupId,
+    cs.teacherid AS TeacherId
+FROM {Schema}.{DatabaseConfig.TableClassSettings} cs
+INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = cs.sectionid AND c.isactive = true
+INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid AND cg.isactive = true
+WHERE cs.teacherid = @TeacherId
+  AND cs.isactive = true
+  AND cs.sectionid IS NOT NULL
+ORDER BY cg.classname ASC, c.section ASC
+""";
+        IEnumerable<ClassTeacherAssignmentDto> rows = await connection.QueryAsync<ClassTeacherAssignmentDto>(
             new CommandDefinition(sql, new { TeacherId = teacherEmployeeId }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return rows.ToList();

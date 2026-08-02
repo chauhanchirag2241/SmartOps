@@ -24,6 +24,7 @@ public record EmployeeSalaryListItemDto(
     string? EmployeeCode,
     string? Department,
     string? Designation,
+    string? EmployeeType,
     decimal? NetSalary,
     bool HasAssignment);
 
@@ -82,13 +83,28 @@ public record PayrollEntryListItemDto(
     decimal GrossSalary,
     decimal TotalDeductions,
     decimal NetSalary,
+    int WorkingDays,
+    int PresentDays,
+    int DaysCut,
+    decimal AttendanceCutAmount,
+    decimal PerDayCutAmount,
+    bool UseFullSalaryOverride,
     PayrollEntryStatus Status,
-    string StatusLabel);
+    string StatusLabel,
+    IList<SalaryLineItemDto> Earnings,
+    IList<SalaryLineItemDto> Deductions);
 
 public record ProcessPayrollRequestDto(
     int PayYear,
     int PayMonth,
-    bool UseAttendanceWiseSalary);
+    bool UseAttendanceWiseSalary,
+    IList<Guid>? FullSalaryEmployeeIds = null);
+
+public record PreviewPayrollRequestDto(
+    int PayYear,
+    int PayMonth,
+    bool UseAttendanceWiseSalary,
+    IList<Guid>? FullSalaryEmployeeIds = null);
 
 public record MarkPayrollPaidRequestDto(
     IList<Guid>? EntryIds);
@@ -101,8 +117,11 @@ public record PayslipDto(
     string? EmployeeCode,
     string? Department,
     string? Designation,
+    bool UseAttendanceWiseSalary,
     int WorkingDays,
     int PresentDays,
+    int DaysCut,
+    decimal AttendanceCutAmount,
     decimal BasicSalary,
     decimal GrossSalary,
     decimal TotalDeductions,

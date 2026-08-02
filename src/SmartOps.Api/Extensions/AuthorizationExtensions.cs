@@ -51,6 +51,8 @@ public static class AuthorizationExtensions
                 (MenuCodes.Homework, MenuPermissionAction.View),
                 (MenuCodes.ClassTimetable, MenuPermissionAction.View),
                 (MenuCodes.Exams, MenuPermissionAction.View),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.View),
+                (MenuCodes.Students, MenuPermissionAction.View),
                 (MenuCodes.PromoteStudents, MenuPermissionAction.View),
                 (MenuCodes.RollNumbers, MenuPermissionAction.View),
                 (MenuCodes.Teachers, MenuPermissionAction.View));
@@ -66,13 +68,18 @@ public static class AuthorizationExtensions
                 MenuPolicies.Classes.ListForTimetableDropdown,
                 (MenuCodes.Classes, MenuPermissionAction.View),
                 (MenuCodes.ClassTimetable, MenuPermissionAction.View),
-                (MenuCodes.Teachers, MenuPermissionAction.View));
+                (MenuCodes.Teachers, MenuPermissionAction.View),
+                (MenuCodes.Exams, MenuPermissionAction.View),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.View),
+                (MenuCodes.ExamMarksEntry, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,
                 MenuPolicies.Employees.ListForTimetableDropdown,
                 (MenuCodes.Employees, MenuPermissionAction.View),
-                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.View),
+                (MenuCodes.ExamMarksEntry, MenuPermissionAction.View));
 
             RegisterAnyPolicy(
                 options,
@@ -88,6 +95,24 @@ public static class AuthorizationExtensions
                 (MenuCodes.VisitorBook, MenuPermissionAction.View),
                 (MenuCodes.PhoneLogs, MenuPermissionAction.View),
                 (MenuCodes.FrontOfficeSetup, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.ExamGroups.ListForExamModule,
+                (MenuCodes.ExamGroups, MenuPermissionAction.View),
+                (MenuCodes.Exams, MenuPermissionAction.View),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.View),
+                (MenuCodes.ExamMarksEntry, MenuPermissionAction.View),
+                (MenuCodes.ExamResults, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.ExamGradeSetup.ListForExamModule,
+                (MenuCodes.ExamGradeSetup, MenuPermissionAction.View),
+                (MenuCodes.Exams, MenuPermissionAction.View),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.View),
+                (MenuCodes.ExamMarksEntry, MenuPermissionAction.View),
+                (MenuCodes.ExamResults, MenuPermissionAction.View));
         });
 
         return services;

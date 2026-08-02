@@ -18,12 +18,16 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
 
     public async Task<Result<IList<EmployeeSalaryListItemDto>>> GetEmployeesAsync(
         string? search,
-        Guid? departmentId,
-        string? designation,
+        IReadOnlyList<Guid>? userTypeIds,
         CancellationToken ct = default)
     {
+        if (userTypeIds is null || userTypeIds.Count == 0)
+        {
+            return Result<IList<EmployeeSalaryListItemDto>>.Success([]);
+        }
+
         IList<EmployeeSalaryListRow> rows = await _employeeRepo
-            .GetEmployeeSalariesAsync(search, departmentId, designation, ct)
+            .GetEmployeeSalariesAsync(search, userTypeIds, ct)
             .ConfigureAwait(false);
 
         IList<EmployeeSalaryListItemDto> dtos = [];
@@ -48,6 +52,7 @@ public sealed class EmployeeSalaryService : IEmployeeSalaryService
                 row.EmployeeCode,
                 string.IsNullOrWhiteSpace(row.Department) ? null : row.Department,
                 row.Designation,
+                row.UserTypeName,
                 net,
                 row.EmployeeSalaryId.HasValue));
         }

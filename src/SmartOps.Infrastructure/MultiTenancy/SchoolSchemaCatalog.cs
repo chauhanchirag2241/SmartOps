@@ -19,6 +19,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableFeePayment,
         DatabaseConfig.TableFeePaymentLine,
         DatabaseConfig.TableClassGroups,
+        DatabaseConfig.TableClassGroupExamMappings,
         DatabaseConfig.TableClasses,
         DatabaseConfig.TableClassAcademicPeriods,
         DatabaseConfig.TableSubjects,

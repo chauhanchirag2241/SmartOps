@@ -342,6 +342,8 @@ public static class MenuPolicies
         public const string Edit = "Menu:EXAM_GROUPS:Edit";
         public const string Delete = "Menu:EXAM_GROUPS:Delete";
         public const string Export = "Menu:EXAM_GROUPS:Export";
+        /// <summary>List groups when the user can work with exams / schedules / marks.</summary>
+        public const string ListForExamModule = "Menu:EXAM_GROUPS:ViewOrExamModuleView";
     }
 
     public static class Exams
@@ -396,6 +398,8 @@ public static class MenuPolicies
         public const string Edit = "Menu:EXAM_GRADE_SETUP:Edit";
         public const string Delete = "Menu:EXAM_GRADE_SETUP:Delete";
         public const string Export = "Menu:EXAM_GRADE_SETUP:Export";
+        /// <summary>Read grade scales for exam forms when the user has exam module access.</summary>
+        public const string ListForExamModule = "Menu:EXAM_GRADE_SETUP:ViewOrExamModuleView";
     }
 
     public static class Timetable

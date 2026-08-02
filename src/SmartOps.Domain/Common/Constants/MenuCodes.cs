@@ -37,6 +37,8 @@ public static class MenuCodes
 
     public const string Shifts = "SHIFTS";
 
+    public const string AcademicCalendar = "ACADEMIC_CALENDAR";
+
     public const string PromoteStudents = "PROMOTE_STUDENTS";
 
     public const string RollNumbers = "ROLL_NUMBERS";
@@ -132,6 +134,7 @@ public static class MenuCodes
         Teachers,
         Classes,
         Shifts,
+        AcademicCalendar,
         PromoteStudents,
         RollNumbers,
         AcademicYears,

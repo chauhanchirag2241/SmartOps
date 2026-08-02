@@ -41,6 +41,7 @@ public static class DefaultSchoolRolePermissions
     private static readonly Guid Reports = Guid.Parse("10000000-0000-0000-0000-000000000044");
     private static readonly Guid AcademicSetup = Guid.Parse("10000000-0000-0000-0000-000000000045");
     private static readonly Guid Shifts = Guid.Parse("10000000-0000-0000-0000-000000000047");
+    private static readonly Guid AcademicCalendar = Guid.Parse("10000000-0000-0000-0000-000000000083");
     private static readonly Guid PromoteStudents = Guid.Parse("10000000-0000-0000-0000-000000000048");
     private static readonly Guid RollNumbers = Guid.Parse("10000000-0000-0000-0000-000000000049");
     private static readonly Guid FrontOffice = Guid.Parse("10000000-0000-0000-0000-000000000050");
@@ -122,6 +123,7 @@ public static class DefaultSchoolRolePermissions
         Full(AcademicYears, MenuCodes.AcademicYears),
         Full(Classes, MenuCodes.Classes),
         Full(Shifts, MenuCodes.Shifts),
+        Full(AcademicCalendar, MenuCodes.AcademicCalendar),
         Full(PromoteStudents, MenuCodes.PromoteStudents),
         Full(RollNumbers, MenuCodes.RollNumbers),
         V(LeaveManagement, MenuCodes.LeaveManagement),

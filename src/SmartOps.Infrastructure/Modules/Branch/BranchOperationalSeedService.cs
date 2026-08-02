@@ -140,6 +140,20 @@ WHERE NOT EXISTS (
 """,
                     new { BranchId = branch.Id, Name = name, Desc = desc, Order = order, Actor = SeedActor, Now = now }).ConfigureAwait(false);
             }
+
+            await connection.ExecuteAsync(
+                $"""
+INSERT INTO {s}.{DatabaseConfig.TableCalendarWeekendSettings}
+    (id, branchid, sundayoff, saturdayoff, mondayoff, tuesdayoff, wednesdayoff, thursdayoff, fridayoff,
+     isactive, versionno, createdby, createdon, updatedby, updatedon)
+SELECT gen_random_uuid(), @BranchId, true, false, false, false, false, false, false,
+       true, 1, @Actor, @Now, @Actor, @Now
+WHERE NOT EXISTS (
+    SELECT 1 FROM {s}.{DatabaseConfig.TableCalendarWeekendSettings}
+    WHERE branchid = @BranchId AND isactive = true
+);
+""",
+                new { BranchId = branch.Id, Actor = SeedActor, Now = now }).ConfigureAwait(false);
         }
     }
 }

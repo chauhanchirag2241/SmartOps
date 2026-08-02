@@ -155,6 +155,15 @@ public static class MenuPolicies
         public const string Export = "Menu:SHIFTS:Export";
     }
 
+    public static class AcademicCalendar
+    {
+        public const string View = "Menu:ACADEMIC_CALENDAR:View";
+        public const string Add = "Menu:ACADEMIC_CALENDAR:Add";
+        public const string Edit = "Menu:ACADEMIC_CALENDAR:Edit";
+        public const string Delete = "Menu:ACADEMIC_CALENDAR:Delete";
+        public const string Export = "Menu:ACADEMIC_CALENDAR:Export";
+    }
+
     public static class FeeMaster
     {
         public const string View = "Menu:FEE_MASTER:View";

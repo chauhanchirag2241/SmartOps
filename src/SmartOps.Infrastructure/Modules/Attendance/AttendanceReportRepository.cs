@@ -1,10 +1,13 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
 using SmartOps.Application.Modules.Attendance;
 using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Application.Modules.Authorization;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Modules.AcademicCalendar;
 using SmartOps.Infrastructure.Persistence.Context;
 
 namespace SmartOps.Infrastructure.Modules.Attendance;
@@ -13,11 +16,19 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
 {
     private readonly DapperContext _context;
     private readonly ITenantSchemaProvider _tenantSchema;
+    private readonly IAcademicCalendarService _calendarService;
+    private readonly IBranchContext _branchContext;
 
-    public AttendanceReportRepository(DapperContext context, ITenantSchemaProvider tenantSchema)
+    public AttendanceReportRepository(
+        DapperContext context,
+        ITenantSchemaProvider tenantSchema,
+        IAcademicCalendarService calendarService,
+        IBranchContext branchContext)
     {
         _context = context;
         _tenantSchema = tenantSchema;
+        _calendarService = calendarService;
+        _branchContext = branchContext;
     }
 
     private string OperationalSchema =>
@@ -54,16 +65,18 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
         int daysInMonth = DateTime.DaysInMonth(year, month);
         DateOnly startDate = new DateOnly(year, month, 1);
         DateOnly endDate = new DateOnly(year, month, daysInMonth);
-        
-        // Count working days (excluding Sundays for this simple implementation)
-        int totalWorkingDays = 0;
-        for (int i = 1; i <= daysInMonth; i++)
-        {
-            if (new DateTime(year, month, i).DayOfWeek != DayOfWeek.Sunday)
-            {
-                totalWorkingDays++;
-            }
-        }
+
+        await _branchContext.EnsureResolvedAsync(cancellationToken).ConfigureAwait(false);
+        var nonWorkingDays = await _calendarService
+            .GetNonWorkingDayNumbersAsync(
+                _branchContext.ActiveBranchId,
+                year,
+                month,
+                CalendarAudience.Students,
+                cancellationToken,
+                classId)
+            .ConfigureAwait(false);
+        int totalWorkingDays = Math.Max(0, daysInMonth - nonWorkingDays.Count);
 
         // Fetch Class Name
         string classSql = $"""
@@ -154,12 +167,12 @@ public sealed class AttendanceReportRepository : IAttendanceReportRepository
                 }
             }
 
-            // Fill in missing days with "S" for holidays (Sundays) and empty for others
+            // Fill in missing days with "S" for non-working days (weekends/holidays) and empty for others
             for (int i = 1; i <= daysInMonth; i++)
             {
                 if (!dailyStatus.ContainsKey(i))
                 {
-                    if (new DateTime(year, month, i).DayOfWeek == DayOfWeek.Sunday)
+                    if (nonWorkingDays.Contains(i))
                     {
                         dailyStatus[i] = "S";
                     }

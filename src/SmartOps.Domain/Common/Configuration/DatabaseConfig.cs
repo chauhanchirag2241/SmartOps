@@ -122,4 +122,10 @@ public static class DatabaseConfig
     public const string TablePeriods = "periods";
     public const string TableClassTimetables = "class_timetables";
     public const string TableClassTimetableSlots = "class_timetable_slots";
+
+    // Academic Calendar Module
+    public const string TableCalendarEventTypes = "calendareventtypes";
+    public const string TableCalendarWeekendSettings = "calendarweekendsettings";
+    public const string TableCalendarEvents = "calendarevents";
+    public const string TableCalendarEventClasses = "calendareventclasses";
 }

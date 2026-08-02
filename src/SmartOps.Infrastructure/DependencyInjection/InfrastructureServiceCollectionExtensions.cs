@@ -57,6 +57,9 @@ using SmartOps.Domain.Modules.Timetable;
 using SmartOps.Application.Modules.Timetable.Interfaces;
 using SmartOps.Infrastructure.Modules.Timetable;
 using SmartOps.Infrastructure.Modules.Timetable.Services;
+using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
+using SmartOps.Infrastructure.Modules.AcademicCalendar;
+using SmartOps.Infrastructure.Modules.AcademicCalendar.Services;
 using SmartOps.Infrastructure.Modules.Salary;
 using SmartOps.Infrastructure.Modules.Salary.Services;
 using SmartOps.Infrastructure.Modules.Class;
@@ -161,6 +164,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IPeriodTemplateRepository, PeriodTemplateRepository>();
         services.AddScoped<ITimetableRepository, TimetableRepository>();
         services.AddScoped<ITimetableService, TimetableService>();
+        services.AddScoped<IAcademicCalendarRepository, AcademicCalendarRepository>();
+        services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
 
         if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDatabase"))
             && string.IsNullOrWhiteSpace(configuration.GetConnectionString("GlobalDb"))

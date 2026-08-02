@@ -1,8 +1,11 @@
+using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Salary;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Application.Modules.StaffAttendance;
 using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Modules.AcademicCalendar;
 using SmartOps.Domain.Modules.Salary;
 
 namespace SmartOps.Infrastructure.Modules.Salary.Services;
@@ -15,17 +18,23 @@ public sealed class PayrollService : IPayrollService
     private readonly IEmployeeSalaryRepository _employeeRepo;
     private readonly ISalaryStructureRepository _structureRepo;
     private readonly IStaffAttendanceService _attendanceService;
+    private readonly IAcademicCalendarService _calendarService;
+    private readonly IBranchContext _branchContext;
 
     public PayrollService(
         IPayrollRepository payrollRepo,
         IEmployeeSalaryRepository employeeRepo,
         ISalaryStructureRepository structureRepo,
-        IStaffAttendanceService attendanceService)
+        IStaffAttendanceService attendanceService,
+        IAcademicCalendarService calendarService,
+        IBranchContext branchContext)
     {
         _payrollRepo = payrollRepo;
         _employeeRepo = employeeRepo;
         _structureRepo = structureRepo;
         _attendanceService = attendanceService;
+        _calendarService = calendarService;
+        _branchContext = branchContext;
     }
 
     public async Task<Result<PayrollRunDto>> GetPayrollAsync(int payYear, int payMonth, CancellationToken ct = default)
@@ -265,7 +274,17 @@ public sealed class PayrollService : IPayrollService
             }
             else
             {
-                attendanceWorkingDays = CountWeekdays(payYear, payMonth);
+                await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+                attendanceWorkingDays = Math.Max(
+                    1,
+                    await _calendarService
+                        .CountWorkingDaysAsync(
+                            _branchContext.ActiveBranchId,
+                            payYear,
+                            payMonth,
+                            CalendarAudience.Staff,
+                            ct)
+                        .ConfigureAwait(false));
             }
         }
 
@@ -460,21 +479,6 @@ public sealed class PayrollService : IPayrollService
         SalaryLabelHelper.ComponentTypeLabel(line.ComponentType),
         line.Amount,
         line.IsEarning);
-
-    private static int CountWeekdays(int year, int month)
-    {
-        int daysInMonth = DateTime.DaysInMonth(year, month);
-        int count = 0;
-        for (int day = 1; day <= daysInMonth; day++)
-        {
-            if (new DateTime(year, month, day).DayOfWeek != DayOfWeek.Sunday)
-            {
-                count++;
-            }
-        }
-
-        return Math.Max(1, count);
-    }
 
     private static decimal RoundMoney(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 

@@ -2,9 +2,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Abstractions.Storage;
+using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
+using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.StaffAttendance;
 using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Modules.AcademicCalendar;
 using SmartOps.Domain.Modules.StaffAttendance;
 using SmartOps.Domain.Modules.StaffAttendance.Entities;
 using SmartOps.Infrastructure.Modules.StaffAttendance;
@@ -23,6 +26,8 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
     private readonly IBlobStorageService _blobStorage;
     private readonly ICurrentUserService _currentUser;
     private readonly ITenantProvider _tenantProvider;
+    private readonly IAcademicCalendarService _calendarService;
+    private readonly IBranchContext _branchContext;
     private readonly FaceServiceOptions _faceOptions;
     private readonly ILogger<StaffAttendanceService> _logger;
 
@@ -34,6 +39,8 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         IBlobStorageService blobStorage,
         ICurrentUserService currentUser,
         ITenantProvider tenantProvider,
+        IAcademicCalendarService calendarService,
+        IBranchContext branchContext,
         IOptions<FaceServiceOptions> faceOptions,
         ILogger<StaffAttendanceService> logger)
     {
@@ -44,6 +51,8 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         _blobStorage = blobStorage;
         _currentUser = currentUser;
         _tenantProvider = tenantProvider;
+        _calendarService = calendarService;
+        _branchContext = branchContext;
         _faceOptions = faceOptions.Value;
         _logger = logger;
     }
@@ -375,15 +384,10 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
             .GetReportSourceAsync(month, year, departmentId, ct)
             .ConfigureAwait(false);
 
-        int daysInMonth = DateTime.DaysInMonth(year, month);
-        int totalWorkingDays = 0;
-        for (int day = 1; day <= daysInMonth; day++)
-        {
-            if (new DateTime(year, month, day).DayOfWeek != DayOfWeek.Sunday)
-            {
-                totalWorkingDays++;
-            }
-        }
+        await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+        int totalWorkingDays = await _calendarService
+            .CountWorkingDaysAsync(_branchContext.ActiveBranchId, year, month, CalendarAudience.Staff, ct)
+            .ConfigureAwait(false);
 
         var employees = source
             .GroupBy(r => r.EmployeeId)

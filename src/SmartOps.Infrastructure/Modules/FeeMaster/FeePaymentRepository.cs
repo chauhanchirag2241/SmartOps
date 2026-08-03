@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
@@ -150,7 +151,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
         IReadOnlyList<FeePaymentLineEntity> lines,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         payment.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(payment.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -161,7 +162,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
         }
 
         EnsureInsertAudit(payment, utcNow);
-        payment.PaymentDate = payment.PaymentDate == default ? DateTimeOffset.UtcNow : payment.PaymentDate;
+        payment.PaymentDate = payment.PaymentDate == default ? SchoolLocalTime.Now() : payment.PaymentDate;
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -197,7 +198,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
 
         var schema = Context.OperationalSchema;
         var identity = Context.IdentitySchema;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = SchoolLocalTime.Today(null);
 
         var studentSql = $"""
             SELECT

@@ -164,7 +164,7 @@ public sealed class NoticeService : INoticeService
         }
 
         entity.Status = NoticeStatus.Published;
-        entity.PublishedOn = DateTimeOffset.UtcNow;
+        entity.PublishedOn = SchoolLocalTime.Now();
         await _noticeRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
 
         WorkflowItemType workflowType = entity.ContentType == NoticeContentType.Form
@@ -343,7 +343,7 @@ public sealed class NoticeService : INoticeService
         {
             item.Status = WorkflowItemStatus.Completed;
             item.CompletedByUserId = userId;
-            item.CompletedOn = DateTimeOffset.UtcNow;
+            item.CompletedOn = SchoolLocalTime.Now();
             item.Outcome = WorkflowActionCodes.Respond;
             await _workflowRepo.UpdateItemAsync(item, ct).ConfigureAwait(false);
             await _workflowRepo.InsertActionAsync(item.Id, WorkflowActionCodes.Respond, request.ResponseBody, userId, null, ct)

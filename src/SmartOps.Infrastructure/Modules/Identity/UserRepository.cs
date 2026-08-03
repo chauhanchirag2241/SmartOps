@@ -254,7 +254,7 @@ LIMIT 1
             user.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         EnsureInsertAudit(user, utcNow, user.Id);
 
         string sql = $"""
@@ -309,7 +309,7 @@ VALUES
 
     public async Task UpdateAsync(ApplicationUser user, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor(user.Id);
 
         string sql = $"""
@@ -482,7 +482,7 @@ LIMIT 1
         CancellationToken cancellationToken)
     {
         Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
 
@@ -599,7 +599,7 @@ VALUES
     public async Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default)
     {
         Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 

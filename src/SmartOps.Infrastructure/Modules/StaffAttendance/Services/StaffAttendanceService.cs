@@ -84,7 +84,7 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
             return Result<StaffAttendanceRowDto?>.Failure("No employee profile linked to your account.");
         }
 
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = SchoolLocalTime.Today(null);
         StaffAttendanceEntity? entity = await _attendanceRepo
             .GetByEmployeeAndDateAsync(employeeId.Value, today, ct)
             .ConfigureAwait(false);
@@ -149,10 +149,10 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         }
 
         Guid employeeId = employeeResult.Value!;
-        DateOnly date = request.AttendanceDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly date = request.AttendanceDate ?? SchoolLocalTime.Today(null);
         DateTimeOffset punchTime = request.PunchType.Equals(StaffAttendancePunchTypes.CheckOut, StringComparison.OrdinalIgnoreCase)
-            ? (request.CheckOutTime ?? DateTimeOffset.UtcNow)
-            : (request.CheckInTime ?? DateTimeOffset.UtcNow);
+            ? (request.CheckOutTime ?? SchoolLocalTime.Now())
+            : (request.CheckInTime ?? SchoolLocalTime.Now());
 
         return await ApplyPunchAsync(
                 employeeId,
@@ -331,7 +331,7 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
             return Result<StaffAttendanceRowDto>.Failure("No matching employee face found.");
         }
 
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = SchoolLocalTime.Today(null);
         StaffAttendanceEntity? existing = await _attendanceRepo
             .GetByEmployeeAndDateAsync(match.EmployeeId, today, ct)
             .ConfigureAwait(false);
@@ -344,7 +344,7 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
                 match.EmployeeId,
                 today,
                 punchType,
-                DateTimeOffset.UtcNow,
+                SchoolLocalTime.Now(),
                 StaffAttendanceSources.Face,
                 match.Score,
                 remarks: null,

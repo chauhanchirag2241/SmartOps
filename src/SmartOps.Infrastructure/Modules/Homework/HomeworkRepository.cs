@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Homework.Interfaces;
@@ -41,7 +42,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<Guid> CreateAsync(HomeworkEntity homework, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         homework.Id = homework.Id == Guid.Empty ? Guid.NewGuid() : homework.Id;
@@ -67,7 +68,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task UpdateAsync(HomeworkEntity homework, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(homework, GetActorId(), DateTime.UtcNow);
+        ApplyUpdateAudit(homework, GetActorId(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableHomework}
@@ -93,7 +94,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         string sql = $"""
@@ -151,7 +152,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = SchoolLocalTime.Today(null);
 
         var where = new StringBuilder($"h.isactive = true{HomeworkAcademicYearSql.FilterOnClassGroup()}");
         var parameters = new DynamicParameters();
@@ -229,7 +230,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             .GetActiveBranchFilterAsync(_branchContext, "cg", ct)
             .ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = SchoolLocalTime.Today(null);
         string yearFilter = HomeworkAcademicYearSql.FilterOnClassGroup();
         string classJoins = $"""
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = h.classid
@@ -316,7 +317,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -352,7 +353,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
         Guid homeworkId = details[0].HomeworkId;
 
@@ -525,12 +526,12 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             return "done";
         }
 
-        if (dueDate < DateOnly.FromDateTime(DateTime.UtcNow))
+        if (dueDate < SchoolLocalTime.Today(null))
         {
             return "overdue";
         }
 
-        if (dueDate == DateOnly.FromDateTime(DateTime.UtcNow))
+        if (dueDate == SchoolLocalTime.Today(null))
         {
             return "today";
         }

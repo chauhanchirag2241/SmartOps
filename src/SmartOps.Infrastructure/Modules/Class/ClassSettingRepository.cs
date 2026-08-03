@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Class;
 using SmartOps.Application.Modules.Class.Interfaces;
@@ -121,7 +122,7 @@ ORDER BY cg.classname ASC, c.section ASC
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor();
 
         ClassSettingEntity? existing = await GetBySectionIdAsync(sectionId, cancellationToken).ConfigureAwait(false);

@@ -5,6 +5,9 @@ using SmartOps.Application.Modules.Timetable;
 using SmartOps.Application.Modules.Timetable.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Api.Modules.Timetable.Controllers;
 
 [ApiController]
@@ -69,7 +72,7 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         [FromQuery] DateOnly? asOf,
         CancellationToken ct)
     {
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? SchoolLocalTime.Today(null);
         var result = await timetableService.GetClassGridAsOfAsync(classId, academicYearId, date, ct).ConfigureAwait(false);
         return Ok(result);
     }
@@ -83,7 +86,7 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         [FromQuery] DateOnly? asOf,
         CancellationToken ct)
     {
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? SchoolLocalTime.Today(null);
         var result = await timetableService.GetTeacherGridAsync(employeeId, academicYearId, date, ct).ConfigureAwait(false);
         return Ok(result);
     }
@@ -134,7 +137,7 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         [FromQuery] DateOnly? asOf,
         CancellationToken ct)
     {
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? SchoolLocalTime.Today(null);
         var result = await timetableService.GetMyTimetableAsync(academicYearId, date, ct).ConfigureAwait(false);
         return Ok(result);
     }
@@ -152,7 +155,7 @@ public sealed class TimetablesController(ITimetableService timetableService) : C
         [FromQuery] bool includeGrids = true,
         CancellationToken ct = default)
     {
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? SchoolLocalTime.Today(null);
         var empIds = ParseGuids(employeeIds);
         var clsIds = ParseGuids(classIds);
         var subIds = ParseGuids(subjectIds);

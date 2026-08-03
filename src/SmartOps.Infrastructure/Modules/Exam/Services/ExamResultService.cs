@@ -161,7 +161,7 @@ public sealed class ExamResultService : IExamResultService
         Guid actorId = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
             ? _currentUser.UserId
             : Guid.Parse(DatabaseConfig.SystemUserId);
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         await _resultRepo.MarkResultsDeclaredAsync(request.ExamId, request.ClassId, now, actorId, ct).ConfigureAwait(false);
         await _examRepo.MarkResultDeclaredAsync(request.ExamId, now, actorId, ct).ConfigureAwait(false);
@@ -701,7 +701,7 @@ public sealed class ExamResultService : IExamResultService
             .Select(w => char.ToUpperInvariant(w[0]))
             .Take(4)
             .ToArray());
-        return $"{initials}{DateTime.UtcNow.Year % 100:D2}";
+        return $"{initials}{SchoolLocalTime.NowDateTime().Year % 100:D2}";
     }
 
     private static List<SubjectResultSnapshot> DeserializeSubjects(string? json) =>

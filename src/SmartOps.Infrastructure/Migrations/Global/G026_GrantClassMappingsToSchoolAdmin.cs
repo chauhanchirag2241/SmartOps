@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>
@@ -15,7 +18,7 @@ public sealed class G026_GrantClassMappingsToSchoolAdmin : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
         string g = DatabaseConfig.Schema_Global;
 
         Execute.Sql($"""

@@ -5,6 +5,8 @@ using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.FrontOffice;
 using SmartOps.Domain.Modules.FrontOffice.Entities;
 
+using SmartOps.Application.Abstractions;
+
 namespace SmartOps.Infrastructure.Modules.FrontOffice.Services;
 
 public sealed class FrontOfficeService : IFrontOfficeService
@@ -256,7 +258,7 @@ public sealed class FrontOfficeService : IFrontOfficeService
             return Result<VisitorDto>.Failure("Visitor already checked out.");
         }
 
-        await _repo.CheckoutVisitorAsync(id, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+        await _repo.CheckoutVisitorAsync(id, SchoolLocalTime.Now(), ct).ConfigureAwait(false);
         return await GetVisitorByIdAsync(id, ct).ConfigureAwait(false);
     }
 

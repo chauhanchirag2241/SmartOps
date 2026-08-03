@@ -8,6 +8,8 @@ using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.AcademicCalendar;
 using SmartOps.Domain.Modules.Salary;
 
+using SmartOps.Application.Abstractions;
+
 namespace SmartOps.Infrastructure.Modules.Salary.Services;
 
 public sealed class PayrollService : IPayrollService
@@ -176,7 +178,7 @@ public sealed class PayrollService : IPayrollService
         run.TotalDeductions = totalDeductions;
         run.TotalNet = totalNet;
         run.EmployeeCount = entries.Count;
-        run.ProcessedOn = DateTime.UtcNow;
+        run.ProcessedOn = SchoolLocalTime.NowDateTime();
         await _payrollRepo.UpdateRunAsync(run, ct).ConfigureAwait(false);
 
         IList<PayrollEntryListRow> entryRows = await _payrollRepo.GetEntriesForRunAsync(run.Id, ct).ConfigureAwait(false);

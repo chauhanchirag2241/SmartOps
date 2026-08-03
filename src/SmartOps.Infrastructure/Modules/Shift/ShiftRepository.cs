@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
@@ -29,7 +30,7 @@ public sealed class ShiftRepository : BaseRepository, IShiftRepository
 
     public async Task<Guid> CreateAsync(ShiftEntity shift, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (shift.Id == Guid.Empty)
         {
             shift.Id = Guid.NewGuid();
@@ -157,7 +158,7 @@ public sealed class ShiftRepository : BaseRepository, IShiftRepository
 
     public async Task UpdateAsync(ShiftEntity shift, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(shift, actorId, utcNow);
 

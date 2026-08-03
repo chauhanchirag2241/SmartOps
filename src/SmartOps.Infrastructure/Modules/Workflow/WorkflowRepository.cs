@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Workflow.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Workflow;
@@ -32,7 +33,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
     public async Task<Guid> CreateItemAsync(WorkflowItemEntity item, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
         EnsureInsertAudit(item, utcNow, actorId);
@@ -56,7 +57,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
     public async Task UpdateItemAsync(WorkflowItemEntity item, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(item, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(item, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableWorkflowItems}
@@ -167,7 +168,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
         {
             Cancelled = (short)WorkflowItemStatus.Cancelled,
             ActorId = actorId,
-            Now = DateTime.UtcNow,
+            Now = SchoolLocalTime.NowDateTime(),
             RefType = (short)refType,
             RefId = refId,
             Pending = (short)WorkflowItemStatus.Pending
@@ -185,7 +186,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid id = Guid.NewGuid();
         Guid actor = ResolveInsertActor();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableWorkflowItemActions}
@@ -203,7 +204,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
             ActionCode = actionCode,
             Comment = comment,
             ActorUserId = actorUserId,
-            ActedOn = DateTimeOffset.UtcNow,
+            ActedOn = SchoolLocalTime.Now(),
             MetadataJson = metadataJson,
             Actor = actor,
             Now = now

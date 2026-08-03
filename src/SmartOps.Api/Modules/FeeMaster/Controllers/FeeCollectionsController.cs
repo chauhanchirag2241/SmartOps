@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.FeeMaster;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.FeeMaster;
@@ -68,7 +69,7 @@ public sealed class FeeCollectionsController(
             return NotFound("Fee master not found.");
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = SchoolLocalTime.Today(null);
         if (master.PublishedOn.HasValue && master.PublishedOn.Value > today)
         {
             return BadRequest("This fee is not published yet.");
@@ -169,7 +170,7 @@ public sealed class FeeCollectionsController(
             FeeMasterId = request.FeeMasterId,
             AcademicPeriodId = request.AcademicPeriodId,
             BranchId = master.BranchId,
-            PaymentDate = DateTimeOffset.UtcNow,
+            PaymentDate = SchoolLocalTime.Now(),
             PaymentMethod = paymentMethod,
             TotalAmount = paymentLines.Sum(l => l.PaidAmount),
             Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim(),

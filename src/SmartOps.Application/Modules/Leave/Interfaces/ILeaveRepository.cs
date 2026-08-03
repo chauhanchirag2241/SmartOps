@@ -55,6 +55,8 @@ public class LeaveListRow
     public DateOnly FromDate { get; set; }
     public DateOnly ToDate { get; set; }
     public short? LeaveType { get; set; }
+    public Guid? LeaveTypeId { get; set; }
+    public string? LeaveTypeName { get; set; }
     public short Status { get; set; }
     public DateTime CreatedOn { get; set; }
 }

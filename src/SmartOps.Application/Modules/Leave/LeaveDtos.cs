@@ -6,6 +6,7 @@ public record CreateLeaveRequestDto(
     DateOnly FromDate,
     DateOnly ToDate,
     LeaveType? LeaveType,
+    Guid? LeaveTypeId,
     string? Reason,
     bool SubmitImmediately = false);
 
@@ -33,6 +34,8 @@ public record LeaveListItemDto(
     int DayCount,
     LeaveType? LeaveType,
     string? LeaveTypeLabel,
+    Guid? LeaveTypeId,
+    string? LeaveTypeName,
     LeaveRequestStatus Status,
     string StatusLabel,
     DateTime CreatedOn);
@@ -57,6 +60,8 @@ public record LeaveDetailDto(
     int DayCount,
     LeaveType? LeaveType,
     string? LeaveTypeLabel,
+    Guid? LeaveTypeId,
+    string? LeaveTypeName,
     string? Reason,
     LeaveRequestStatus Status,
     string StatusLabel,

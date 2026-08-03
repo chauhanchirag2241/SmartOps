@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
@@ -394,7 +395,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
         IReadOnlyList<FeeStudentAmountEntity> rows,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var resolvedBranch = await _branchWrite
             .ResolveWriteBranchIdAsync(branchId, cancellationToken)
             .ConfigureAwait(false);
@@ -473,7 +474,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>

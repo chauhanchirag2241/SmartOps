@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Attendance.Interfaces;
 using SmartOps.Infrastructure.Persistence.Context;
 using SmartOps.Infrastructure.Persistence;
@@ -252,7 +253,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         AttendanceEntity attendance,
         CancellationToken ct)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         attendance.Id = attendance.Id == Guid.Empty ? Guid.NewGuid() : attendance.Id;
@@ -283,7 +284,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         AttendanceEntity attendance,
         CancellationToken ct)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""

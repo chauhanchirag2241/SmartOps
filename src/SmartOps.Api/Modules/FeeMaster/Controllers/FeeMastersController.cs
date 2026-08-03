@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Audit.Interfaces;
 using SmartOps.Application.Modules.FeeMaster;
 using SmartOps.Domain.Common.Configuration;
@@ -675,7 +677,7 @@ public sealed class FeeMastersController(
             return false;
         }
 
-        return publishedOn.Value <= DateOnly.FromDateTime(DateTime.UtcNow);
+        return publishedOn.Value <= SchoolLocalTime.Today(null);
     }
 
     private static string? ValidateFeeDates(
@@ -684,7 +686,7 @@ public sealed class FeeMastersController(
         DateOnly? existingPublishedOn,
         DateOnly? existingDefaultDueDate)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = SchoolLocalTime.Today(null);
 
         if (publishedOn.HasValue
             && publishedOn.Value < today

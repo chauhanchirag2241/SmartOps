@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
@@ -156,7 +157,7 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
         IReadOnlyList<FeeHeadPeriodAmountEntity> periodAmounts,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (head.Id == Guid.Empty)
         {
             head.Id = Guid.NewGuid();
@@ -195,7 +196,7 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
         IReadOnlyList<FeeHeadPeriodAmountEntity> periodAmounts,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(head, actorId, utcNow);
 

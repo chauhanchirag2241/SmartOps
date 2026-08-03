@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 
 using SmartOps.Application.Configuration;
 
@@ -108,7 +109,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
     public async Task<Guid> CreateSchoolAsync(SchoolEntity school, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (school.Id == Guid.Empty)
         {
             school.Id = Guid.NewGuid();
@@ -432,7 +433,7 @@ WHERE id = @Id;
 
     {
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
 
         var actorId = ResolveUpdateActor();
 
@@ -549,7 +550,7 @@ WHERE id = @Id;
 
                     school.ConnectionString,
 
-                    UpdatedOn = DateTime.UtcNow,
+                    UpdatedOn = SchoolLocalTime.NowDateTime(),
 
                     UpdatedBy = ResolveUpdateActor(Guid.Parse(DatabaseConfig.SystemUserId))
 
@@ -608,7 +609,7 @@ WHERE id = @Id;
                 "School has no dedicated database connection string; branches are stored on the school DB.");
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var branch = new SchoolBranchEntity
         {
             Id = Guid.NewGuid(),
@@ -662,7 +663,7 @@ WHERE id = @Id;
         branch.Name = name.Trim();
         branch.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
         branch.Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
-        ApplyUpdateAudit(branch, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(branch, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         await UpdateAsync(connection, DatabaseConfig.Schema_Man, BranchesTable, branch, null, "Id")
             .ConfigureAwait(false);
 
@@ -699,7 +700,7 @@ WHERE id = @Id;
         }
 
         var actorId = ResolveUpdateActor();
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         await connection.ExecuteAsync(
             $@"UPDATE {DatabaseConfig.Schema_Man}.{BranchesTable}
                SET isactive = false, updatedon = @UpdatedOn, updatedby = @UpdatedBy, versionno = versionno + 1

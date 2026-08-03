@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.StaffAttendance.Entities;
@@ -67,7 +68,7 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
     public async Task UpsertAsync(EmployeeFaceEnrollmentEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -120,7 +121,7 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
     public async Task DeactivateAsync(Guid employeeId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""

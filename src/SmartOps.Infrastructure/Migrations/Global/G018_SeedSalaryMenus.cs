@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
@@ -20,7 +23,7 @@ public sealed class G018_SeedSalaryMenus : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         foreach ((Guid id, string name, string code, string route, string icon, int order) in Menus)
         {

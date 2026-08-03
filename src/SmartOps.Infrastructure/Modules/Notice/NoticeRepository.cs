@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Notice.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Notice.Entities;
@@ -32,7 +33,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     public async Task<Guid> CreateAsync(NoticeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
@@ -56,7 +57,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     public async Task UpdateAsync(NoticeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableNotices}
@@ -114,7 +115,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableNoticeResponses}
@@ -133,7 +134,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
             NoticeId = noticeId,
             RespondentUserId = respondentUserId,
             ResponseBody = responseBody,
-            RespondedOn = DateTimeOffset.UtcNow,
+            RespondedOn = SchoolLocalTime.Now(),
             ActorId = actorId,
             Now = now
         }, cancellationToken: ct)).ConfigureAwait(false);
@@ -217,7 +218,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actor = ResolveUpdateActor();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableNotices}
             SET isactive = false, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1

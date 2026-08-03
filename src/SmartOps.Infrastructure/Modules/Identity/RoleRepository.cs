@@ -71,7 +71,7 @@ LIMIT 1
             role.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         EnsureInsertAudit(role, utcNow);
 
         string sql = $"""
@@ -107,7 +107,7 @@ VALUES
 
     public async Task UpdateAsync(ApplicationRole role, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor();
 
         string sql = $"""
@@ -233,7 +233,7 @@ WHERE roleid = @RoleId AND isactive = true
         }
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         string menusSql = $"""

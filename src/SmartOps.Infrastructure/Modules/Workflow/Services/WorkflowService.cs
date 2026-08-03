@@ -22,6 +22,7 @@ public sealed class WorkflowService : IWorkflowService
 {
     private readonly IWorkflowRepository _workflowRepo;
     private readonly ILeaveRepository _leaveRepo;
+    private readonly ILeaveBalanceService _leaveBalanceService;
     private readonly ILeaveApproverResolver _leaveApproverResolver;
     private readonly INoticeRepository _noticeRepo;
     private readonly ICurrentUserService _currentUser;
@@ -31,6 +32,7 @@ public sealed class WorkflowService : IWorkflowService
     public WorkflowService(
         IWorkflowRepository workflowRepo,
         ILeaveRepository leaveRepo,
+        ILeaveBalanceService leaveBalanceService,
         ILeaveApproverResolver leaveApproverResolver,
         INoticeRepository noticeRepo,
         ICurrentUserService currentUser,
@@ -39,6 +41,7 @@ public sealed class WorkflowService : IWorkflowService
     {
         _workflowRepo = workflowRepo;
         _leaveRepo = leaveRepo;
+        _leaveBalanceService = leaveBalanceService;
         _leaveApproverResolver = leaveApproverResolver;
         _noticeRepo = noticeRepo;
         _currentUser = currentUser;
@@ -336,9 +339,16 @@ public sealed class WorkflowService : IWorkflowService
 
         entity.Status = LeaveRequestStatus.Approved;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = DateTimeOffset.UtcNow;
+        entity.ApprovedOn = SchoolLocalTime.Now();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+
+        Result deduct = await _leaveBalanceService.DeductForApprovedLeaveAsync(entity, ct).ConfigureAwait(false);
+        if (!deduct.IsSuccess)
+        {
+            return Result<LeaveDetailDto>.Failure(deduct.Error!);
+        }
+
         await _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveId, ct)
             .ConfigureAwait(false);
 
@@ -369,7 +379,7 @@ public sealed class WorkflowService : IWorkflowService
 
         entity.Status = LeaveRequestStatus.Rejected;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = DateTimeOffset.UtcNow;
+        entity.ApprovedOn = SchoolLocalTime.Now();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
         await _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveId, ct)
@@ -390,7 +400,7 @@ public sealed class WorkflowService : IWorkflowService
     {
         item.Status = WorkflowItemStatus.Completed;
         item.CompletedByUserId = userId;
-        item.CompletedOn = DateTimeOffset.UtcNow;
+        item.CompletedOn = SchoolLocalTime.Now();
         item.Outcome = outcome;
         await _workflowRepo.UpdateItemAsync(item, ct).ConfigureAwait(false);
         await _workflowRepo.InsertActionAsync(item.Id, outcome, comment, userId, null, ct).ConfigureAwait(false);
@@ -518,6 +528,8 @@ public sealed class WorkflowService : IWorkflowService
         int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
         string? EmployeeName = string.Join(" ", new[] { r.TeacherFirstName, r.TeacherLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         string? studentName = string.Join(" ", new[] { r.StudentFirstName, r.StudentLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+        string? typeLabel = r.LeaveTypeName
+            ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
         return new LeaveDetailDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
@@ -533,7 +545,9 @@ public sealed class WorkflowService : IWorkflowService
             r.ToDate,
             days,
             r.LeaveType.HasValue ? (LeaveType)r.LeaveType : null,
-            r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null,
+            typeLabel,
+            r.LeaveTypeId,
+            r.LeaveTypeName ?? typeLabel,
             r.Reason,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),

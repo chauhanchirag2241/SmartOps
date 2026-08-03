@@ -4,6 +4,9 @@ using Npgsql;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 /// <summary>
@@ -44,7 +47,7 @@ public sealed class SchoolDatabaseSeedService
     {
         string g = DatabaseConfig.Schema_Global;
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         List<Guid> menuIds = (await platform.QueryAsync<Guid>(
             new CommandDefinition(
@@ -98,7 +101,7 @@ WHERE NOT EXISTS (
     {
         string g = DatabaseConfig.Schema_Global;
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         List<Guid> widgetIds = (await platform.QueryAsync<Guid>(
             new CommandDefinition(
@@ -174,7 +177,7 @@ LIMIT 1
         CancellationToken cancellationToken)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         (string Key, string Value)[] defaults =
         [
             (LeaveSettingKeys.StaffApprovalMode, LeaveApprovalModes.AnyOne),
@@ -184,6 +187,7 @@ LIMIT 1
             (LeaveSettingKeys.StudentLongLeaveMinDays, "4"),
             (LeaveSettingKeys.StudentLongLeaveApproverUserTypes, UserTypeCodes.OfficeStaff),
             (LeaveSettingKeys.StudentLongLeaveTransferToPrincipal, "true"),
+            (LeaveSettingKeys.YearlyCarryForwardDays, "15"),
         ];
 
         foreach ((string key, string value) in defaults)

@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
@@ -13,7 +16,7 @@ public sealed class G011_SeedRolesAndRolePermissions : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles}

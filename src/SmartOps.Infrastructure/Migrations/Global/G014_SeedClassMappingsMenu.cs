@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>
@@ -17,7 +20,7 @@ public sealed class G014_SeedClassMappingsMenu : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus}

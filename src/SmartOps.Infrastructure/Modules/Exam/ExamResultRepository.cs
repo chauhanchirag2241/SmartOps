@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Exam;
@@ -39,7 +40,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -169,7 +170,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>

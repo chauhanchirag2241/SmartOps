@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>
@@ -32,7 +35,7 @@ public sealed class G020_SeedDashboardWidgetsAndRolePermissions : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         foreach ((Guid id, string code, string name, string category, string requiredMenu, int order, string size) in Widgets)
         {

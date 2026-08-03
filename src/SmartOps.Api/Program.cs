@@ -1,4 +1,5 @@
 using Serilog;
+using Hangfire;
 using SmartOps.Api.Extensions;
 using SmartOps.Infrastructure.DependencyInjection;
 
@@ -28,6 +29,9 @@ builder.Services.AddControllers()
 WebApplication app = builder.Build();
 
 await app.UseSmartOpsMigrationsAsync();
+
+// Hangfire dashboard (auth can be tightened later).
+app.UseHangfireDashboard("/hangfire");
 
 app.UseExceptionHandlingMiddleware();
 

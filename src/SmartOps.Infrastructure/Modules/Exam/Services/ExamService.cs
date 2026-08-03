@@ -7,6 +7,8 @@ using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.AcademicCalendar.Entities;
 using SmartOps.Domain.Modules.Exam;
 
+using SmartOps.Application.Abstractions;
+
 namespace SmartOps.Infrastructure.Modules.Exam.Services;
 
 public sealed class ExamService : IExamService
@@ -814,7 +816,7 @@ public sealed class ExamService : IExamService
 
     private static ExamScheduleItemDto MapSchedule(ExamScheduleRow row)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = SchoolLocalTime.Today(null);
         string status = row.ExamDate < today ? "Completed"
             : row.ExamDate == today ? "Today"
             : "Upcoming";

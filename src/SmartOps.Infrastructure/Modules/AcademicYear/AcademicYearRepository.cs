@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Common.Models;
 using SmartOps.Domain.Modules.AcademicYear.Entities;
@@ -19,7 +20,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
     public async Task<Guid> CreateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (academicYear.Id == Guid.Empty)
         {
             academicYear.Id = Guid.NewGuid();
@@ -239,7 +240,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
     public async Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -287,7 +288,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             throw new InvalidOperationException("Academic year not found or has been deleted.");
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = SchoolLocalTime.Today(null);
         if (today >= current.Value.StartDate && today <= current.Value.EndDate)
         {
             throw new InvalidOperationException("Cannot delete the current academic year (today falls within its date range).");

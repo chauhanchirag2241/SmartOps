@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Teacher;
 using SmartOps.Application.Modules.Teacher.Interfaces;
@@ -180,7 +181,7 @@ WHERE classgroupid = @ClassGroupId
             entity.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         EnsureInsertAudit(entity, utcNow, ResolveUpdateActor());
 
         string sql = $"""
@@ -200,7 +201,7 @@ RETURNING id
 
     public async Task<int> UpdateAsync(ClassSubjectTeacherMappingEntity entity, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
         ApplyUpdateAudit(entity, actorId, utcNow);
 

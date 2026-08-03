@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Branch.Interfaces;
 using SmartOps.Domain.Common.Configuration;
@@ -96,7 +97,8 @@ ORDER BY m.isdefault DESC, b.isheadoffice DESC, b.name ASC;
         IDbConnection connection = await GetIdentityConnectionAsync(cancellationToken).ConfigureAwait(false);
         string schema = IdentitySchema;
         Guid actor = ResolveInsertActor();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        // IST wall-clock DateTime (Unspecified). Npgsql rejects non-UTC DateTimeOffset for timestamptz.
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         HashSet<Guid> desired = branchIds.Where(id => id != Guid.Empty).ToHashSet();
         Guid? resolvedDefault = defaultBranchId is not null && desired.Contains(defaultBranchId.Value)

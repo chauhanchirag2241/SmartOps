@@ -91,8 +91,17 @@ public static class DatabaseConfig
 
     // Leave & Workflow Module
     public const string TableLeaveRequests = "leaverequests";
+    public const string TableLeaveTypes = "leavetypes";
+    public const string TableLeavePolicies = "leavepolicies";
+    public const string TableLeaveBalances = "leavebalances";
+    public const string TableLeaveLedger = "leaveledger";
+    public const string TableLeaveAccrualRuns = "leaveaccrualruns";
     public const string TableWorkflowItems = "workflowitems";
     public const string TableWorkflowItemActions = "workflowitemactions";
+
+    // Platform jobs / Hangfire master (global DB)
+    public const string TableJobDefinitions = "jobdefinitions";
+    public const string TableHangfireConfig = "hangfireconfig";
     public const string TableNotices = "notices";
     public const string TableNoticeResponses = "noticeresponses";
 

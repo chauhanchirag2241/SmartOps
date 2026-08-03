@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
@@ -288,7 +289,7 @@ WHERE a.attendancedate >= @AttendanceFromDate
         string schema,
         CancellationToken cancellationToken)
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
         string branchFilter = BuildBranchColumnFilter("pr");
         string sql = $"""
 SELECT
@@ -450,7 +451,7 @@ LIMIT 5
 
         return rows.Select(r =>
         {
-            int days = (r.DueDate.Date - DateTime.UtcNow.Date).Days;
+            int days = (r.DueDate.Date - SchoolLocalTime.NowDateTime().Date).Days;
             string label = days <= 0 ? "Today" : days == 1 ? "Tomorrow" : r.DueDate.ToString("dd MMM", CultureInfo.InvariantCulture);
             string tone = days <= 0 ? "alert" : "warn";
             return new HomeworkDueDto

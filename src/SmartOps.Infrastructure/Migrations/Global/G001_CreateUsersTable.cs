@@ -3,6 +3,9 @@ using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Infrastructure.Migrations.Extensions;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
@@ -19,7 +22,7 @@ public sealed class G001_CreateUsersTable : Migration
         }
 
         string g = DatabaseConfig.Schema_Global;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         if (!Schema.Schema(g).Table(DatabaseConfig.TableUserTypes).Exists())
         {

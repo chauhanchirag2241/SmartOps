@@ -68,6 +68,14 @@ public static class MenuCodes
 
     public const string LeaveStudent = "LEAVE_STUDENT";
 
+    public const string LeaveTypes = "LEAVE_TYPES";
+
+    public const string LeavePolicies = "LEAVE_POLICIES";
+
+    public const string LeaveBalances = "LEAVE_BALANCES";
+
+    public const string JobMaster = "JOB_MASTER";
+
     public const string MyActions = "MY_ACTIONS";
 
     public const string Notices = "NOTICES";
@@ -116,6 +124,10 @@ public static class MenuCodes
 
     public const string FeeCollection = "FEE_COLLECTION";
 
+    public const string BulkImport = "BULK_IMPORT";
+
+    public const string StudentBulkImport = "STUDENT_BULK_IMPORT";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -148,6 +160,10 @@ public static class MenuCodes
         SalaryPayroll,
         LeaveStaff,
         LeaveStudent,
+        LeaveTypes,
+        LeavePolicies,
+        LeaveBalances,
+        JobMaster,
         MyActions,
         Notices,
         FrontOffice,
@@ -171,6 +187,8 @@ public static class MenuCodes
         TeacherTimetableReport,
         FeeManagement,
         FeeMaster,
-        FeeCollection
+        FeeCollection,
+        BulkImport,
+        StudentBulkImport
     ];
 }

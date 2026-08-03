@@ -4,7 +4,6 @@ using SmartOps.Application.Modules.Leave;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Application.Modules.Workflow.Interfaces;
 using SmartOps.Domain.Common;
-using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Leave;
 using SmartOps.Domain.Modules.Leave.Entities;
 
@@ -13,6 +12,8 @@ namespace SmartOps.Infrastructure.Modules.Leave.Services;
 public sealed class LeaveService : ILeaveService
 {
     private readonly ILeaveRepository _leaveRepo;
+    private readonly ILeaveBalanceService _balanceService;
+    private readonly ILeaveTypeRepository _leaveTypeRepo;
     private readonly IWorkflowService _workflowService;
     private readonly ICurrentUserService _currentUser;
     private readonly ITenantProvider _tenantProvider;
@@ -20,12 +21,16 @@ public sealed class LeaveService : ILeaveService
 
     public LeaveService(
         ILeaveRepository leaveRepo,
+        ILeaveBalanceService balanceService,
+        ILeaveTypeRepository leaveTypeRepo,
         IWorkflowService workflowService,
         ICurrentUserService currentUser,
         ITenantProvider tenantProvider,
         ILogger<LeaveService> logger)
     {
         _leaveRepo = leaveRepo;
+        _balanceService = balanceService;
+        _leaveTypeRepo = leaveTypeRepo;
         _workflowService = workflowService;
         _currentUser = currentUser;
         _tenantProvider = tenantProvider;
@@ -94,6 +99,23 @@ public sealed class LeaveService : ILeaveService
             return Result<LeaveDetailDto>.Failure("Overlapping approved leave already exists for this period.");
         }
 
+        Guid? leaveTypeId = request.LeaveTypeId;
+        if (!leaveTypeId.HasValue && request.LeaveType == LeaveType.Casual)
+        {
+            leaveTypeId = LeaveTypeSeedIds.CasualLeave;
+        }
+
+        if (leaveTypeId.HasValue)
+        {
+            LeaveTypeEntity? leaveType = await _leaveTypeRepo.GetByIdAsync(leaveTypeId.Value, ct).ConfigureAwait(false);
+            if (leaveType is null || !leaveType.IsActive)
+            {
+                return Result<LeaveDetailDto>.Failure("Leave type not found.");
+            }
+        }
+
+        decimal totalDays = request.ToDate.DayNumber - request.FromDate.DayNumber + 1;
+
         var entity = new LeaveRequestEntity
         {
             RequestType = LeaveRequestType.Staff,
@@ -102,6 +124,10 @@ public sealed class LeaveService : ILeaveService
             FromDate = request.FromDate,
             ToDate = request.ToDate,
             LeaveType = request.LeaveType,
+            LeaveTypeId = leaveTypeId,
+            TotalDays = totalDays,
+            IsHalfDay = false,
+            DeductedFromBalance = false,
             Reason = request.Reason,
             Status = LeaveRequestStatus.Draft
         };
@@ -126,7 +152,31 @@ public sealed class LeaveService : ILeaveService
             return Result<LeaveDetailDto>.Failure("Leave request not found.");
         }
 
-        if (entity.Status is LeaveRequestStatus.Approved or LeaveRequestStatus.Rejected or LeaveRequestStatus.Cancelled)
+        if (entity.Status is LeaveRequestStatus.Rejected or LeaveRequestStatus.Cancelled)
+        {
+            return Result<LeaveDetailDto>.Failure("Leave request cannot be cancelled in its current status.");
+        }
+
+        if (entity.Status == LeaveRequestStatus.Approved && entity.DeductedFromBalance)
+        {
+            Result reverse = await _balanceService.ReverseForCancelledLeaveAsync(entity, ct).ConfigureAwait(false);
+            if (!reverse.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(reverse.Error!);
+            }
+
+            // Reload after reverse (DeductedFromBalance updated)
+            entity = await _leaveRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
+            if (entity is null)
+            {
+                return Result<LeaveDetailDto>.Failure("Leave request not found.");
+            }
+        }
+        else if (entity.Status is LeaveRequestStatus.Approved)
+        {
+            // Approved but never deducted — allow cancel without reverse
+        }
+        else if (entity.Status is not (LeaveRequestStatus.Draft or LeaveRequestStatus.Submitted))
         {
             return Result<LeaveDetailDto>.Failure("Leave request cannot be cancelled in its current status.");
         }
@@ -172,6 +222,8 @@ public sealed class LeaveService : ILeaveService
             return Result<LeaveDetailDto>.Failure("Overlapping approved leave already exists for this student.");
         }
 
+        decimal totalDays = request.ToDate.DayNumber - request.FromDate.DayNumber + 1;
+
         var entity = new LeaveRequestEntity
         {
             RequestType = LeaveRequestType.Student,
@@ -180,6 +232,7 @@ public sealed class LeaveService : ILeaveService
             FromDate = request.FromDate,
             ToDate = request.ToDate,
             LeaveType = request.LeaveType,
+            TotalDays = totalDays,
             Reason = request.Reason,
             Status = request.SubmitImmediately ? LeaveRequestStatus.Submitted : LeaveRequestStatus.Draft
         };
@@ -232,6 +285,22 @@ public sealed class LeaveService : ILeaveService
             return Result<LeaveDetailDto>.Failure("Only draft requests can be submitted.");
         }
 
+        if (entity.RequestType == LeaveRequestType.Staff
+            && entity.EmployeeId.HasValue
+            && entity.LeaveTypeId.HasValue)
+        {
+            decimal days = entity.TotalDays > 0
+                ? entity.TotalDays
+                : entity.ToDate.DayNumber - entity.FromDate.DayNumber + 1;
+            Result balanceCheck = await _balanceService
+                .EnsureSufficientBalanceAsync(entity.EmployeeId.Value, entity.LeaveTypeId.Value, days, ct)
+                .ConfigureAwait(false);
+            if (!balanceCheck.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(balanceCheck.Error!);
+            }
+        }
+
         entity.Status = LeaveRequestStatus.Submitted;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
 
@@ -270,9 +339,18 @@ public sealed class LeaveService : ILeaveService
 
         entity.Status = status;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = DateTimeOffset.UtcNow;
+        entity.ApprovedOn = SchoolLocalTime.Now();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+
+        if (status == LeaveRequestStatus.Approved)
+        {
+            Result deduct = await _balanceService.DeductForApprovedLeaveAsync(entity, ct).ConfigureAwait(false);
+            if (!deduct.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(deduct.Error!);
+            }
+        }
 
         return await GetByIdAsync(leaveId, ct).ConfigureAwait(false);
     }
@@ -300,6 +378,8 @@ public sealed class LeaveService : ILeaveService
     private static LeaveListItemDto MapList(LeaveListRow r)
     {
         int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
+        string? typeLabel = r.LeaveTypeName
+            ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
         return new LeaveListItemDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
@@ -315,7 +395,9 @@ public sealed class LeaveService : ILeaveService
             r.ToDate,
             days,
             r.LeaveType.HasValue ? (LeaveType)r.LeaveType : null,
-            r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null,
+            typeLabel,
+            r.LeaveTypeId,
+            r.LeaveTypeName ?? typeLabel,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),
             r.CreatedOn);
@@ -324,6 +406,8 @@ public sealed class LeaveService : ILeaveService
     private static LeaveDetailDto MapDetail(LeaveDetailRow r)
     {
         int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
+        string? typeLabel = r.LeaveTypeName
+            ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
         return new LeaveDetailDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
@@ -339,7 +423,9 @@ public sealed class LeaveService : ILeaveService
             r.ToDate,
             days,
             r.LeaveType.HasValue ? (LeaveType)r.LeaveType : null,
-            r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null,
+            typeLabel,
+            r.LeaveTypeId,
+            r.LeaveTypeName ?? typeLabel,
             r.Reason,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),

@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Identity.Interfaces;
@@ -55,7 +56,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (student.Id == Guid.Empty)
         {
             student.Id = Guid.NewGuid();
@@ -252,7 +253,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     /// <inheritdoc />
     public async Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(student, actorId, utcNow);
 
@@ -321,6 +322,28 @@ SELECT EXISTS (
     }
 
     /// <inheritdoc />
+    public async Task<Guid?> GetStudentIdByAdmissionNoAsync(
+        string admissionNo,
+        Guid branchId,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+SELECT id
+FROM {Context.OperationalSchema}.{DatabaseConfig.TableStudents}
+WHERE lower(admissionno) = lower(@AdmissionNo)
+  AND branchid = @BranchId
+  AND isactive = true
+LIMIT 1;
+""";
+
+        return await connection.QuerySingleOrDefaultAsync<Guid?>(
+                sql,
+                new { AdmissionNo = admissionNo.Trim(), BranchId = branchId })
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default)
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -333,7 +356,7 @@ WHERE id = @StudentId AND isactive = true
         {
             StudentId = studentId,
             UserId = userId,
-            Now = DateTime.UtcNow,
+            Now = SchoolLocalTime.NowDateTime(),
             Actor = ResolveUpdateActor()
         }).ConfigureAwait(false);
     }
@@ -374,7 +397,7 @@ WHERE id = @StudentId AND isactive = true
             throw new InvalidOperationException("Cannot recover student because the assigned class is inactive. Please recover the class first.");
         }
 
-        var now = DateTime.UtcNow;
+        var now = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -907,7 +930,7 @@ WHERE id = @StudentId AND isactive = true
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
         int promoted = 0;
 
@@ -1091,7 +1114,7 @@ WHERE id = @StudentId AND isactive = true
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         int updated = 0;
 
@@ -1157,7 +1180,7 @@ WHERE id = @StudentId AND isactive = true
 
     public async Task AddDocumentAsync(StudentDocumentEntity document, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (document.Id == Guid.Empty) document.Id = Guid.NewGuid();
         EnsureInsertAudit(document, utcNow);
 
@@ -1187,7 +1210,7 @@ WHERE id = @StudentId AND isactive = true
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var sql = $"UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableStudents} SET photourl = @PhotoUrl, updatedon = @Now, updatedby = @Actor, versionno = versionno + 1 WHERE id = @StudentId AND isactive = true";
-        await connection.ExecuteAsync(sql, new { StudentId = studentId, PhotoUrl = photoUrl, Now = DateTime.UtcNow, Actor = ResolveUpdateActor() }).ConfigureAwait(false);
+        await connection.ExecuteAsync(sql, new { StudentId = studentId, PhotoUrl = photoUrl, Now = SchoolLocalTime.NowDateTime(), Actor = ResolveUpdateActor() }).ConfigureAwait(false);
     }
 
     #endregion

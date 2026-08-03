@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Identity.Entities;
@@ -77,7 +78,8 @@ LIMIT 1;
         // usertypeid soft-references platform global.usertypes (canonical IDs in UserTypeCodes).
         Guid userTypeId = UserTypeCodes.Ids.SchoolAdmin;
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        // IST wall-clock DateTime (Unspecified). Npgsql rejects non-UTC DateTimeOffset for timestamptz.
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid userId;
 
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -156,7 +158,15 @@ VALUES
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Npgsql may dispose the transaction when the command fails; keep the original error.
+            }
+
             throw;
         }
     }
@@ -183,7 +193,7 @@ VALUES
         string schema,
         Guid userId,
         Guid roleId,
-        DateTimeOffset now,
+        DateTime now,
         CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(

@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.AcademicCalendar;
 using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
 using SmartOps.Application.Modules.Authorization;
@@ -57,7 +58,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task<Guid> CreateEventTypeAsync(CalendarEventTypeEntity entity, CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty)
         {
             entity.Id = Guid.NewGuid();
@@ -75,7 +76,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task UpdateEventTypeAsync(CalendarEventTypeEntity entity, CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         ApplyUpdateAudit(entity, ResolveUpdateActor(), utcNow);
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -140,7 +141,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task<Guid> UpsertWeekendSettingsAsync(CalendarWeekendSettingEntity entity, CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         entity.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(entity.BranchId, ct)
             .ConfigureAwait(false);
@@ -274,7 +275,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         IReadOnlyList<Guid> classIds,
         CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty)
         {
             entity.Id = Guid.NewGuid();
@@ -301,7 +302,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         IReadOnlyList<Guid> classIds,
         CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(entity, actorId, utcNow);
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
@@ -315,7 +316,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task DeleteEventAsync(Guid id, CancellationToken ct = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>

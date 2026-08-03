@@ -4,6 +4,9 @@ using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Identity.Entities;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
@@ -19,7 +22,7 @@ public sealed class G012_SeedDefaultAdminUser : Migration
         var hasher = new PasswordHasher<ApplicationUser>();
         var tempUser = new ApplicationUser { Email = AdminEmail, Username = "platform.admin" };
         string passwordHash = hasher.HashPassword(tempUser, AdminPassword);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
         Guid userId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         Guid adminTypeId = UserTypeCodes.Ids.Admin;
 

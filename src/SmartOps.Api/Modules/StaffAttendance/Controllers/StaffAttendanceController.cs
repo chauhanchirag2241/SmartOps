@@ -4,6 +4,9 @@ using SmartOps.Application.Modules.StaffAttendance;
 using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Api.Modules.StaffAttendance.Controllers;
 
 [ApiController]
@@ -36,7 +39,7 @@ public sealed class StaffAttendanceController : ControllerBase
     [ProducesResponseType(typeof(IList<StaffAttendanceRowDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListByDate([FromQuery] DateOnly? date, CancellationToken ct)
     {
-        DateOnly attendanceDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly attendanceDate = date ?? SchoolLocalTime.Today(null);
         var result = await _service.ListByDateAsync(attendanceDate, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }

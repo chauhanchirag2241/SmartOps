@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
@@ -29,7 +30,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task<Guid> CreateAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (fee.Id == Guid.Empty)
         {
             fee.Id = Guid.NewGuid();
@@ -133,7 +134,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task UpdateAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(fee, actorId, utcNow);
 
@@ -147,7 +148,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task UpdateBasicAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(fee, actorId, utcNow);
 
@@ -221,7 +222,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
         bool allowRemove,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var desired = (classGroupIds ?? [])
             .Where(id => id != Guid.Empty)
             .Distinct()

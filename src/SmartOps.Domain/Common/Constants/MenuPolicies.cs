@@ -104,6 +104,24 @@ public static class MenuPolicies
         public const string Export = "Menu:ROLL_NUMBERS:Export";
     }
 
+    public static class BulkImport
+    {
+        public const string View = "Menu:BULK_IMPORT:View";
+        public const string Add = "Menu:BULK_IMPORT:Add";
+        public const string Edit = "Menu:BULK_IMPORT:Edit";
+        public const string Delete = "Menu:BULK_IMPORT:Delete";
+        public const string Export = "Menu:BULK_IMPORT:Export";
+    }
+
+    public static class StudentBulkImport
+    {
+        public const string View = "Menu:STUDENT_BULK_IMPORT:View";
+        public const string Add = "Menu:STUDENT_BULK_IMPORT:Add";
+        public const string Edit = "Menu:STUDENT_BULK_IMPORT:Edit";
+        public const string Delete = "Menu:STUDENT_BULK_IMPORT:Delete";
+        public const string Export = "Menu:STUDENT_BULK_IMPORT:Export";
+    }
+
     public static class Employees
     {
         public const string View = "Menu:EMPLOYEES:View";
@@ -270,6 +288,42 @@ public static class MenuPolicies
         public const string Edit = "Menu:LEAVE_STUDENT:Edit";
         public const string Delete = "Menu:LEAVE_STUDENT:Delete";
         public const string Export = "Menu:LEAVE_STUDENT:Export";
+    }
+
+    public static class LeaveTypes
+    {
+        public const string View = "Menu:LEAVE_TYPES:View";
+        public const string Add = "Menu:LEAVE_TYPES:Add";
+        public const string Edit = "Menu:LEAVE_TYPES:Edit";
+        public const string Delete = "Menu:LEAVE_TYPES:Delete";
+        public const string Export = "Menu:LEAVE_TYPES:Export";
+    }
+
+    public static class LeavePolicies
+    {
+        public const string View = "Menu:LEAVE_POLICIES:View";
+        public const string Add = "Menu:LEAVE_POLICIES:Add";
+        public const string Edit = "Menu:LEAVE_POLICIES:Edit";
+        public const string Delete = "Menu:LEAVE_POLICIES:Delete";
+        public const string Export = "Menu:LEAVE_POLICIES:Export";
+    }
+
+    public static class LeaveBalances
+    {
+        public const string View = "Menu:LEAVE_BALANCES:View";
+        public const string Add = "Menu:LEAVE_BALANCES:Add";
+        public const string Edit = "Menu:LEAVE_BALANCES:Edit";
+        public const string Delete = "Menu:LEAVE_BALANCES:Delete";
+        public const string Export = "Menu:LEAVE_BALANCES:Export";
+    }
+
+    public static class JobMaster
+    {
+        public const string View = "Menu:JOB_MASTER:View";
+        public const string Add = "Menu:JOB_MASTER:Add";
+        public const string Edit = "Menu:JOB_MASTER:Edit";
+        public const string Delete = "Menu:JOB_MASTER:Delete";
+        public const string Export = "Menu:JOB_MASTER:Export";
     }
 
     public static class MyActions

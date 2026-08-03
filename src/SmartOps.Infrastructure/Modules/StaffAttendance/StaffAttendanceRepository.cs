@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.StaffAttendance;
@@ -112,7 +113,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
     public async Task<Guid> UpsertPunchAsync(StaffAttendanceEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         if (entity.Id == Guid.Empty)
@@ -199,7 +200,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
     public async Task UpdateAsync(StaffAttendanceEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableStaffAttendance}
@@ -290,7 +291,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
         {
             EmployeeId = employeeId,
             PhotoUrl = photoUrl,
-            Now = DateTime.UtcNow,
+            Now = SchoolLocalTime.NowDateTime(),
             Actor = ResolveUpdateActor()
         }, cancellationToken: ct)).ConfigureAwait(false);
     }

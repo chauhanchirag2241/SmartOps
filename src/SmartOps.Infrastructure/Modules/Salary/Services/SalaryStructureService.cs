@@ -3,6 +3,8 @@ using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common;
 using SmartOps.Domain.Modules.Salary;
 
+using SmartOps.Application.Abstractions;
+
 namespace SmartOps.Infrastructure.Modules.Salary.Services;
 
 public sealed class SalaryStructureService : ISalaryStructureService
@@ -337,7 +339,7 @@ public sealed class SalaryStructureService : ISalaryStructureService
             return null;
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = SchoolLocalTime.Today(null);
         if (effectiveDate.Value < today && effectiveDate != existingEffectiveDate)
         {
             return "Effective date cannot be in the past.";
@@ -377,7 +379,7 @@ public sealed class SalaryStructureService : ISalaryStructureService
             return false;
         }
 
-        return effectiveDate.Value <= DateOnly.FromDateTime(DateTime.UtcNow);
+        return effectiveDate.Value <= SchoolLocalTime.Today(null);
     }
 
     private static SalaryStructureVersionListItemDto MapVersionListItem(SalaryStructureVersionListRow row) => new(

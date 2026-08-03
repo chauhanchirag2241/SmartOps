@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Infrastructure.Migrations.Extensions;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.School;
 
 [Tags("School")]
@@ -87,7 +90,7 @@ public sealed class S146_CreateAcademicCalendarTables : Migration
                 .OnColumn("eventtypeid").Ascending();
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
         Execute.Sql($"""
 INSERT INTO {S}.{DatabaseConfig.TableCalendarEventTypes}
     (id, name, code, color, isnonworkingdefault, displayorder, isactive, versionno, createdby, createdon, updatedby, updatedon)

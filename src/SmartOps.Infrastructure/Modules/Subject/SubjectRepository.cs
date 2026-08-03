@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Models;
@@ -38,7 +39,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
             throw new InvalidOperationException("Class group is required. Create subjects from a class.");
         }
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (subject.Id == Guid.Empty)
         {
             subject.Id = Guid.NewGuid();
@@ -203,7 +204,7 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
     public async Task UpdateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(subject, actorId, utcNow);
 

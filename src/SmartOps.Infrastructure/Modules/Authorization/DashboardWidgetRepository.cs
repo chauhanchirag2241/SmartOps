@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Identity;
 using SmartOps.Domain.Common.Configuration;
@@ -57,7 +58,7 @@ WHERE roleid = @RoleId AND isactive = true
         }
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         string widgetsSql = $"""

@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Models;
@@ -34,7 +35,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
         IReadOnlyList<PeriodEntity> periods,
         CancellationToken cancellationToken)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (template.Id == Guid.Empty) template.Id = Guid.NewGuid();
         EnsureInsertAudit(template, utcNow);
         template.BranchId = await _branchWrite
@@ -62,7 +63,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
         IReadOnlyList<PeriodEntity> periods,
         CancellationToken cancellationToken)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
         ApplyUpdateAudit(template, actor, utcNow);
 

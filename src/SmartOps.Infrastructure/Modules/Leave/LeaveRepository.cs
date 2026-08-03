@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Domain.Common.Configuration;
@@ -36,7 +37,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     public async Task<Guid> CreateAsync(LeaveRequestEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
@@ -44,11 +45,13 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableLeaveRequests}
                 (id, requesttype, employeeid, studentid, requestedbyuserid, fromdate, todate,
-                 leavetype, reason, status, approvedbyuserid, approvedon, approverremark,
+                 leavetype, leavetypeid, totaldays, ishalfday, deductedfrombalance,
+                 reason, status, approvedbyuserid, approvedon, approverremark,
                  isactive, versionno, createdby, createdon, updatedby, updatedon)
             VALUES
                 (@Id, @RequestType, @EmployeeId, @StudentId, @RequestedByUserId, @FromDate, @ToDate,
-                 @LeaveType, @Reason, @Status, @ApprovedByUserId, @ApprovedOn, @ApproverRemark,
+                 @LeaveType, @LeaveTypeId, @TotalDays, @IsHalfDay, @DeductedFromBalance,
+                 @Reason, @Status, @ApprovedByUserId, @ApprovedOn, @ApproverRemark,
                  @IsActive, @VersionNo, @CreatedBy, @CreatedOn, @UpdatedBy, @UpdatedOn);
             """;
 
@@ -62,6 +65,10 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             entity.FromDate,
             entity.ToDate,
             LeaveType = entity.LeaveType.HasValue ? (short?)entity.LeaveType : null,
+            entity.LeaveTypeId,
+            entity.TotalDays,
+            entity.IsHalfDay,
+            entity.DeductedFromBalance,
             entity.Reason,
             Status = (short)entity.Status,
             entity.ApprovedByUserId,
@@ -81,7 +88,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     public async Task UpdateAsync(LeaveRequestEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableLeaveRequests}
@@ -93,6 +100,10 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                 fromdate = @FromDate,
                 todate = @ToDate,
                 leavetype = @LeaveType,
+                leavetypeid = @LeaveTypeId,
+                totaldays = @TotalDays,
+                ishalfday = @IsHalfDay,
+                deductedfrombalance = @DeductedFromBalance,
                 updatedby = @UpdatedBy,
                 updatedon = @UpdatedOn,
                 versionno = versionno + 1
@@ -110,6 +121,10 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             entity.FromDate,
             entity.ToDate,
             LeaveType = entity.LeaveType.HasValue ? (short?)entity.LeaveType : null,
+            entity.LeaveTypeId,
+            entity.TotalDays,
+            entity.IsHalfDay,
+            entity.DeductedFromBalance,
             entity.UpdatedBy,
             entity.UpdatedOn
         }, cancellationToken: ct)).ConfigureAwait(false);
@@ -121,7 +136,9 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         string sql = $"""
             SELECT id AS Id, requesttype AS RequestType, employeeid AS EmployeeId, studentid AS StudentId,
                    requestedbyuserid AS RequestedByUserId, fromdate AS FromDate, todate AS ToDate,
-                   leavetype AS LeaveType, reason AS Reason, status AS Status,
+                   leavetype AS LeaveType, leavetypeid AS LeaveTypeId, totaldays AS TotalDays,
+                   ishalfday AS IsHalfDay, deductedfrombalance AS DeductedFromBalance,
+                   reason AS Reason, status AS Status,
                    approvedbyuserid AS ApprovedByUserId, approvedon AS ApprovedOn, approverremark AS ApproverRemark,
                    isactive AS IsActive, versionno AS VersionNo, createdby AS CreatedBy, createdon AS CreatedOn,
                    updatedby AS UpdatedBy, updatedon AS UpdatedOn
@@ -160,6 +177,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    {DashboardClassLabel.DisplayNameSql} AS ClassName,
                    lr.requestedbyuserid AS RequestedByUserId, u.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
+                   lr.leavetypeid AS LeaveTypeId, lt.name AS LeaveTypeName,
                    lr.status AS Status, lr.createdon AS CreatedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
@@ -170,6 +188,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
             LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = lr.requestedbyuserid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableLeaveTypes} lt ON lt.id = lr.leavetypeid
             WHERE lr.isactive = true AND lr.requesttype = @RequestType
             """);
 
@@ -238,6 +257,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    {DashboardClassLabel.DisplayNameSql} AS ClassName,
                    lr.requestedbyuserid AS RequestedByUserId, ru.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
+                   lr.leavetypeid AS LeaveTypeId, lt.name AS LeaveTypeName,
                    lr.status AS Status, lr.reason AS Reason,
                    lr.approvedbyuserid AS ApprovedByUserId, au.email AS ApprovedByEmail,
                    lr.approvedon AS ApprovedOn, lr.approverremark AS ApproverRemark,
@@ -252,6 +272,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} ru ON ru.id = lr.requestedbyuserid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} au ON au.id = lr.approvedbyuserid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableLeaveTypes} lt ON lt.id = lr.leavetypeid
             WHERE lr.id = @Id AND lr.isactive = true;
             """;
 

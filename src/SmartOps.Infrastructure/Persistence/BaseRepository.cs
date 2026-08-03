@@ -186,7 +186,7 @@ public abstract class BaseRepository
         Guid id,
         IDbTransaction? transaction = null)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         var sql = $@"
@@ -220,7 +220,7 @@ public abstract class BaseRepository
         Guid foreignKeyId,
         IDbTransaction? transaction = null)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         var fk = foreignKeyColumn.ToLowerInvariant();

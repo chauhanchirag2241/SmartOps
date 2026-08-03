@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 [Tags("Global")]
@@ -19,7 +22,7 @@ public sealed class G033_SeedFeeMenus : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         foreach ((Guid id, string name, string code, Guid? parentId, string? route, string icon, int order) in Menus)
         {
@@ -39,7 +42,7 @@ WHERE NOT EXISTS (
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoleMenuPermissions}
     (id, roleid, menuid, canview, canadd, canedit, candelete, canexport, isactive, versionno, createdby, createdon, updatedby, updatedon)
-SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{DateTimeOffset.UtcNow:O}', '{SeedActor}', '{DateTimeOffset.UtcNow:O}'
+SELECT gen_random_uuid(), r.id, m.id, true, true, true, true, true, true, 1, '{SeedActor}', '{SchoolLocalTime.Now():O}', '{SeedActor}', '{SchoolLocalTime.Now():O}'
 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableRoles} r
 CROSS JOIN {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableMenus} m
 WHERE lower(trim(r.name)) = lower(trim('{RoleNames.SmartOpsAdmin}')) AND m.code IN ('{menuCodes}')

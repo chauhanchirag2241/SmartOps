@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Identity.Interfaces;
@@ -43,7 +44,7 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (employee.Id == Guid.Empty)
         {
             employee.Id = Guid.NewGuid();
@@ -254,7 +255,7 @@ INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
 
     public async Task UpdateEmployeeAsync(EmployeeEntity employee, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(employee, actorId, utcNow);
 
@@ -307,7 +308,7 @@ WHERE id = @EmployeeId AND isactive = true
                 {
                     EmployeeId = employeeId,
                     UserId = userId,
-                    Now = DateTime.UtcNow,
+                    Now = SchoolLocalTime.NowDateTime(),
                     Actor = ResolveUpdateActor()
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);

@@ -12,6 +12,7 @@ public static class LeaveSettingKeys
     public const string StudentLongLeaveMinDays = "leave.student.longLeaveMinDays";
     public const string StudentLongLeaveApproverUserTypes = "leave.student.longLeaveApproverUserTypes";
     public const string StudentLongLeaveTransferToPrincipal = "leave.student.longLeaveTransferToPrincipal";
+    public const string YearlyCarryForwardDays = "leave.yearlyCarryForwardDays";
 
     public static readonly string[] AllLeaveKeys =
     [
@@ -22,5 +23,6 @@ public static class LeaveSettingKeys
         StudentLongLeaveMinDays,
         StudentLongLeaveApproverUserTypes,
         StudentLongLeaveTransferToPrincipal,
+        YearlyCarryForwardDays,
     ];
 }

@@ -2,6 +2,7 @@ using System.Data;
 using Dapper;
 using Npgsql;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.School.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
@@ -64,7 +65,7 @@ ORDER BY settingkey;
             .ConfigureAwait(false);
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         foreach (SchoolSettingUpsert setting in settings)
         {

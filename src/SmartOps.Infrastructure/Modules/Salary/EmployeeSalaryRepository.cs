@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
@@ -132,7 +133,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeSalaries}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
@@ -145,7 +146,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     public async Task<Guid> CreateAssignmentAsync(EmployeeSalaryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
@@ -165,7 +166,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     public async Task UpdateAssignmentAsync(EmployeeSalaryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveInsertActor(), SchoolLocalTime.NowDateTime());
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeSalaries}
             SET salarystructureid = @SalaryStructureVersionId,
@@ -207,7 +208,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             Guid actorId = ResolveInsertActor();
-            DateTime utcNow = DateTime.UtcNow;
+            DateTime utcNow = SchoolLocalTime.NowDateTime();
 
             await conn.ExecuteAsync(
                 $"""

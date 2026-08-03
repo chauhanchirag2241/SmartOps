@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
@@ -115,7 +116,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         scale.Id = scale.Id == Guid.Empty ? Guid.NewGuid() : scale.Id;
@@ -151,7 +152,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
         ApplyUpdateAudit(scale, actorId, utcNow);
 
@@ -243,7 +244,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task SoftDeleteGradeScaleAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
@@ -361,7 +362,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task<Guid> CreateGroupAsync(ExamGroupEntity group, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         group.Id = group.Id == Guid.Empty ? Guid.NewGuid() : group.Id;
@@ -384,7 +385,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task UpdateGroupAsync(ExamGroupEntity group, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(group, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(group, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamGroups}
@@ -404,7 +405,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task SoftDeleteGroupAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -520,7 +521,7 @@ WHERE c.id = ANY(@ClassIds)
         bool allowRemove,
         CancellationToken ct = default)
     {
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         List<Guid> desired = (classGroupIds ?? [])
             .Where(id => id != Guid.Empty)
             .Distinct()
@@ -790,7 +791,7 @@ WHERE c.id = ANY(@ClassIds)
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         exam.Id = exam.Id == Guid.Empty ? Guid.NewGuid() : exam.Id;
@@ -825,7 +826,7 @@ WHERE c.id = ANY(@ClassIds)
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
         ApplyUpdateAudit(exam, actorId, utcNow);
 
@@ -941,7 +942,7 @@ WHERE c.id = ANY(@ClassIds)
     public async Task SoftDeleteExamAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
@@ -976,7 +977,7 @@ WHERE c.id = ANY(@ClassIds)
 
         await connection.ExecuteAsync(new CommandDefinition(
                 sql,
-                new { Id = id, Status = (short)status, ActorId = ResolveUpdateActor(), UtcNow = DateTime.UtcNow },
+                new { Id = id, Status = (short)status, ActorId = ResolveUpdateActor(), UtcNow = SchoolLocalTime.NowDateTime() },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
@@ -1099,7 +1100,7 @@ WHERE c.id = ANY(@ClassIds)
     public async Task<Guid> CreateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         schedule.Id = schedule.Id == Guid.Empty ? Guid.NewGuid() : schedule.Id;
@@ -1126,7 +1127,7 @@ WHERE c.id = ANY(@ClassIds)
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         foreach (ExamScheduleEntity schedule in schedules)
@@ -1150,7 +1151,7 @@ WHERE c.id = ANY(@ClassIds)
     public async Task UpdateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(schedule, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(schedule, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamSchedules}
@@ -1173,7 +1174,7 @@ WHERE c.id = ANY(@ClassIds)
     public async Task SoftDeleteScheduleAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""

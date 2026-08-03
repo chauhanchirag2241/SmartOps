@@ -4,6 +4,9 @@ using Npgsql;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.MultiTenancy;
 
 /// <summary>
@@ -20,7 +23,7 @@ public static class SchoolDefaultRoleSeeder
         CancellationToken cancellationToken = default)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         string insertRoleSql = $"""
 INSERT INTO {man}.{DatabaseConfig.TableRoles}
@@ -47,7 +50,7 @@ WHERE NOT EXISTS (
         CancellationToken cancellationToken = default)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
 
         string insertPermSql = $"""
 INSERT INTO {man}.{DatabaseConfig.TableRoleMenuPermissions}

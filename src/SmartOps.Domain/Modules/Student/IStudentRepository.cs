@@ -39,6 +39,12 @@ public interface IStudentRepository
         Guid? excludingStudentId = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Active student id for admission number within a branch, if any.</summary>
+    Task<Guid?> GetStudentIdByAdmissionNoAsync(
+        string admissionNo,
+        Guid branchId,
+        CancellationToken cancellationToken = default);
+
     Task SetStudentUserIdAsync(Guid studentId, Guid userId, CancellationToken cancellationToken = default);
 
     Task DeleteStudentAsync(Guid id, CancellationToken cancellationToken = default);

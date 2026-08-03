@@ -2,6 +2,9 @@ using FluentMigrator;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Common.Constants;
 
+using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
+
 namespace SmartOps.Infrastructure.Migrations.Global;
 
 /// <summary>
@@ -17,7 +20,7 @@ public sealed class G022_UserTypesAndSchoolSettings : Migration
     public override void Up()
     {
         string g = DatabaseConfig.Schema_Global;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = SchoolLocalTime.Now();
 
         foreach ((Guid id, string name) in UserTypeCodes.All)
         {

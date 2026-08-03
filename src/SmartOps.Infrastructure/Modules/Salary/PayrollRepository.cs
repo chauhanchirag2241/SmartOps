@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Salary.Interfaces;
 using SmartOps.Domain.Common.Configuration;
@@ -84,7 +85,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task<Guid> CreateRunAsync(PayrollRunEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -107,7 +108,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task UpdateRunAsync(PayrollRunEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveInsertActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveInsertActor(), SchoolLocalTime.NowDateTime());
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TablePayrollRuns}
             SET status = @Status,
@@ -234,7 +235,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task<Guid> CreateEntryAsync(PayrollEntryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         EnsureInsertAudit(entity, utcNow, actorId);
@@ -262,7 +263,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         foreach (PayrollEntryLineEntity line in lineList)
@@ -286,7 +287,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TablePayrollEntries}
             SET status = @Status, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
@@ -302,7 +303,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         IList<Guid> ids = entryIds?.ToList() ?? [];
 
         string sql = ids.Count > 0

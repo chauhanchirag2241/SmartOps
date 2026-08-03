@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Enums;
@@ -52,7 +53,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         classEntity.Section = classEntity.Section.Trim();
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (classEntity.Id == Guid.Empty)
         {
             classEntity.Id = Guid.NewGuid();
@@ -318,7 +319,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         group.ClassName = group.ClassName.Trim();
         group.Description = string.IsNullOrWhiteSpace(group.Description) ? null : group.Description.Trim();
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (group.Id == Guid.Empty)
         {
             group.Id = Guid.NewGuid();
@@ -402,7 +403,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         group.ClassName = group.ClassName.Trim();
         group.Description = string.IsNullOrWhiteSpace(group.Description) ? null : group.Description.Trim();
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(group, actorId, utcNow);
 
@@ -488,7 +489,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -560,7 +561,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     /// <inheritdoc />
     public async Task RemoveClassGroupSubjectAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -796,7 +797,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         classEntity.Section = classEntity.Section.Trim();
 
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         ApplyUpdateAudit(classEntity, actorId, utcNow);
 
@@ -881,7 +882,7 @@ WHERE c.id = @Id AND m.isactive = true;
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var now = DateTime.UtcNow;
+        var now = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>

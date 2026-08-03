@@ -49,6 +49,11 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableStaffScopeAssignments,
         DatabaseConfig.TableEntityAuditLogs,
         DatabaseConfig.TableLeaveRequests,
+        DatabaseConfig.TableLeaveTypes,
+        DatabaseConfig.TableLeavePolicies,
+        DatabaseConfig.TableLeaveBalances,
+        DatabaseConfig.TableLeaveLedger,
+        DatabaseConfig.TableLeaveAccrualRuns,
         DatabaseConfig.TableWorkflowItems,
         DatabaseConfig.TableWorkflowItemActions,
         DatabaseConfig.TableNotices,
@@ -101,6 +106,22 @@ internal static class SchoolSchemaCatalog
             DatabaseConfig.TableNoticeResponses,
             "noticeid",
             "respondentuserid"),
+        new(
+            "uq_leavebalances_emp_type_year",
+            DatabaseConfig.TableLeaveBalances,
+            "employeeid",
+            "leavetypeid",
+            "academicyearid"),
+        new(
+            "uq_leavepolicies_usertype_leavetype",
+            DatabaseConfig.TableLeavePolicies,
+            "usertypeid",
+            "leavetypeid"),
+        new(
+            "uq_leaveaccrualruns_year_month",
+            DatabaseConfig.TableLeaveAccrualRuns,
+            "year",
+            "month"),
     ];
 }
 

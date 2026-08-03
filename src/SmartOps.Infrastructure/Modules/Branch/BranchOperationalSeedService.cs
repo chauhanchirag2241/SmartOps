@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.School.Entities;
 
@@ -73,7 +74,8 @@ public sealed class BranchOperationalSeedService
         string s = DatabaseConfig.Schema_School;
         // Branches SoT is school DB man.schoolbranches (not platform global).
         string man = DatabaseConfig.Schema_Man;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        // IST wall-clock DateTime (Unspecified). Npgsql rejects non-UTC DateTimeOffset for timestamptz.
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         foreach (SchoolBranchEntity branch in school.Branches)
         {

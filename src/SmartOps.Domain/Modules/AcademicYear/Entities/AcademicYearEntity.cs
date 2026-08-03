@@ -22,7 +22,7 @@ public class AcademicYearEntity : AuditableEntity
     {
         get
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = SchoolLocalTime.Today(null);
             return IsActive && today >= StartDate && today <= EndDate;
         }
     }

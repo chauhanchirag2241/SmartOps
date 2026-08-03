@@ -1,5 +1,6 @@
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Authorization;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.Timetable;
@@ -73,7 +74,7 @@ LIMIT 1;";
 
     public async Task<Guid> CreateTimetableAsync(ClassTimetableEntity entity, CancellationToken cancellationToken)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty) entity.Id = Guid.NewGuid();
         EnsureInsertAudit(entity, utcNow);
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -86,7 +87,7 @@ LIMIT 1;";
 
     public async Task UpdateTimetableAsync(ClassTimetableEntity entity, CancellationToken cancellationToken)
     {
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -151,7 +152,7 @@ WHERE s.timetableid = @TimetableId AND s.isactive = true;";
 
     public async Task ReplaceSlotsAsync(Guid timetableId, IReadOnlyList<ClassTimetableSlotEntity> slots, CancellationToken cancellationToken)
     {
-        var utcNow = DateTime.UtcNow;
+        var utcNow = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 

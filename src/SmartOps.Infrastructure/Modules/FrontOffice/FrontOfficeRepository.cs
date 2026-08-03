@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using SmartOps.Application.Abstractions;
+using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Application.Modules.Audit;
 using SmartOps.Application.Modules.FrontOffice.Interfaces;
@@ -80,7 +81,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreateComplaintTypeAsync(ComplaintTypeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -99,7 +100,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task UpdateComplaintTypeAsync(ComplaintTypeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableComplaintTypes}
             SET name = @Name, description = @Description, displayorder = @DisplayOrder,
@@ -156,7 +157,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreateVisitorPurposeAsync(VisitorPurposeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -175,7 +176,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task UpdateVisitorPurposeAsync(VisitorPurposeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableVisitorPurposes}
             SET name = @Name, description = @Description, displayorder = @DisplayOrder,
@@ -239,7 +240,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreateVisitorAsync(VisitorEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -268,7 +269,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         entity.OutTime = patch.OutTime;
         entity.Note = patch.Note;
         entity.DocumentPath = patch.DocumentPath;
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         await UpdateAsync(connection, Schema, DatabaseConfig.TableVisitors, entity, null, "Id")
             .ConfigureAwait(false);
     }
@@ -283,7 +284,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actor = ResolveUpdateActor();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableVisitors}
             SET outtime = @OutTime, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1
@@ -341,7 +342,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreatePhoneLogAsync(PhoneLogEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -354,7 +355,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task UpdatePhoneLogAsync(PhoneLogEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         await UpdateAsync(connection, Schema, DatabaseConfig.TablePhoneLogs, entity, null, "Id")
             .ConfigureAwait(false);
     }
@@ -425,7 +426,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreateComplaintAsync(ComplaintEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -455,7 +456,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         entity.ActionTaken = patch.ActionTaken;
         entity.Note = patch.Note;
         entity.DocumentPath = patch.DocumentPath;
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         await UpdateAsync(connection, Schema, DatabaseConfig.TableComplaints, entity, null, "Id")
             .ConfigureAwait(false);
     }
@@ -524,7 +525,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     public async Task<Guid> CreateAdmissionInquiryAsync(AdmissionInquiryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime utcNow = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
@@ -558,7 +559,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         entity.Description = patch.Description;
         entity.AutoFollowUp = patch.AutoFollowUp;
         entity.StreamGroup = patch.StreamGroup;
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), DateTime.UtcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), SchoolLocalTime.NowDateTime());
         await UpdateAsync(connection, Schema, DatabaseConfig.TableAdmissionInquiries, entity, null, "Id")
             .ConfigureAwait(false);
     }
@@ -573,7 +574,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actor = ResolveUpdateActor();
-        DateTime now = DateTime.UtcNow;
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableAdmissionInquiries}
             SET status = @Status, updatedby = @Actor, updatedon = @Now, versionno = versionno + 1

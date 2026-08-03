@@ -11,9 +11,11 @@ public abstract class AuditableEntity
 
     public Guid CreatedBy { get; set; }
 
-    public DateTime CreatedOn { get; set; } = DateTime.UtcNow;
+    /// <summary>Stored as school local wall-clock (IST).</summary>
+    public DateTime CreatedOn { get; set; }
 
     public Guid UpdatedBy { get; set; }
 
-    public DateTime UpdatedOn { get; set; } = DateTime.UtcNow;
+    /// <summary>Stored as school local wall-clock (IST).</summary>
+    public DateTime UpdatedOn { get; set; }
 }

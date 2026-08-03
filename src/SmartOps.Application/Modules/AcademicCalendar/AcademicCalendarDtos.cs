@@ -91,6 +91,8 @@ public sealed class CalendarEventDto
     public bool IsNonWorkingDay { get; set; }
     public string Color { get; set; } = "#5B8DEF";
     public List<Guid> ClassIds { get; set; } = [];
+    public Guid? SourceExamId { get; set; }
+    public List<string> ClassNames { get; set; } = [];
 }
 
 public sealed class WorkingDaysResponseDto

@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
+using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
 using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Exam;
 using SmartOps.Application.Modules.Exam.Interfaces;
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Modules.AcademicCalendar.Entities;
 using SmartOps.Domain.Modules.Exam;
 
 namespace SmartOps.Infrastructure.Modules.Exam.Services;
@@ -10,12 +12,18 @@ namespace SmartOps.Infrastructure.Modules.Exam.Services;
 public sealed class ExamService : IExamService
 {
     private readonly IExamRepository _repo;
+    private readonly IAcademicCalendarRepository _calendarRepo;
     private readonly IUserScopeContext _scope;
     private readonly ILogger<ExamService> _logger;
 
-    public ExamService(IExamRepository repo, IUserScopeContext scope, ILogger<ExamService> logger)
+    public ExamService(
+        IExamRepository repo,
+        IAcademicCalendarRepository calendarRepo,
+        IUserScopeContext scope,
+        ILogger<ExamService> logger)
     {
         _repo = repo;
+        _calendarRepo = calendarRepo;
         _scope = scope;
         _logger = logger;
     }
@@ -452,6 +460,7 @@ public sealed class ExamService : IExamService
         exam.Description = request.Description?.Trim();
 
         await _repo.UpdateExamAsync(exam, request.ClassIds, MapComponents(request.Components), ct).ConfigureAwait(false);
+        await SyncExamCalendarEventAsync(exam.Id, ct).ConfigureAwait(false);
         return Result<ExamDetailDto>.Success(await BuildExamDetailAsync(exam, ct).ConfigureAwait(false));
     }
 
@@ -469,6 +478,7 @@ public sealed class ExamService : IExamService
         }
 
         await _repo.SoftDeleteExamAsync(id, ct).ConfigureAwait(false);
+        await RemoveExamCalendarEventAsync(id, ct).ConfigureAwait(false);
         return Result<bool>.Success(true);
     }
 
@@ -636,6 +646,7 @@ public sealed class ExamService : IExamService
         };
 
         Guid id = await _repo.CreateScheduleAsync(schedule, ct).ConfigureAwait(false);
+        await SyncExamCalendarEventAsync(request.ExamId, ct).ConfigureAwait(false);
         return await FindScheduleDtoAsync(id, request.ExamId, ct).ConfigureAwait(false);
     }
 
@@ -707,6 +718,7 @@ public sealed class ExamService : IExamService
         }
 
         await _repo.CreateSchedulesAsync(entities, ct).ConfigureAwait(false);
+        await SyncExamCalendarEventAsync(request.ExamId, ct).ConfigureAwait(false);
 
         IList<ExamScheduleRow> rows = await _repo.GetSchedulesAsync(request.ExamId, null, ct).ConfigureAwait(false);
         HashSet<Guid> createdIds = entities.Select(e => e.Id).ToHashSet();
@@ -750,6 +762,7 @@ public sealed class ExamService : IExamService
         schedule.InvigilatorId = request.InvigilatorId;
 
         await _repo.UpdateScheduleAsync(schedule, ct).ConfigureAwait(false);
+        await SyncExamCalendarEventAsync(schedule.ExamId, ct).ConfigureAwait(false);
         return await FindScheduleDtoAsync(id, schedule.ExamId, ct).ConfigureAwait(false);
     }
 
@@ -761,7 +774,9 @@ public sealed class ExamService : IExamService
             return Result<bool>.Failure("Schedule slot not found.");
         }
 
+        Guid examId = schedule.ExamId;
         await _repo.SoftDeleteScheduleAsync(id, ct).ConfigureAwait(false);
+        await SyncExamCalendarEventAsync(examId, ct).ConfigureAwait(false);
         return Result<bool>.Success(true);
     }
 
@@ -820,5 +835,110 @@ public sealed class ExamService : IExamService
             row.InvigilatorName,
             row.MaxMarks,
             status);
+    }
+
+    /// <summary>
+    /// Upserts one calendar event spanning all active schedule dates for the exam,
+    /// or removes it when no slots remain.
+    /// </summary>
+    private async Task SyncExamCalendarEventAsync(Guid examId, CancellationToken ct)
+    {
+        try
+        {
+            ExamEntity? exam = await _repo.GetExamByIdAsync(examId, ct).ConfigureAwait(false);
+            if (exam is null)
+            {
+                await RemoveExamCalendarEventAsync(examId, ct).ConfigureAwait(false);
+                return;
+            }
+
+            IList<ExamScheduleRow> slots = await _repo.GetSchedulesAsync(examId, null, ct).ConfigureAwait(false);
+            if (slots.Count == 0)
+            {
+                await RemoveExamCalendarEventAsync(examId, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var examType = (await _calendarRepo.GetEventTypesAsync(ct).ConfigureAwait(false))
+                .FirstOrDefault(t => string.Equals(t.Code, "EXAM", StringComparison.OrdinalIgnoreCase));
+            if (examType is null)
+            {
+                _logger.LogWarning("Calendar event type EXAM not found; skipped sync for exam {ExamId}", examId);
+                return;
+            }
+
+            DateOnly start = slots.Min(s => s.ExamDate);
+            DateOnly end = slots.Max(s => s.ExamDate);
+            List<Guid> classIds = slots.Select(s => s.ClassId).Distinct().ToList();
+            string classLabel = string.Join(", ",
+                slots.Select(s => s.ClassName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+
+            CalendarEventEntity? existing = await _calendarRepo
+                .GetEventBySourceExamIdAsync(examId, ct)
+                .ConfigureAwait(false);
+
+            if (existing is null)
+            {
+                var created = new CalendarEventEntity
+                {
+                    BranchId = exam.BranchId,
+                    AcademicYearId = exam.AcademicYearId,
+                    EventTypeId = examType.Id,
+                    Title = exam.Name.Trim(),
+                    Description = string.IsNullOrWhiteSpace(classLabel) ? null : $"Classes: {classLabel}",
+                    StartDate = start,
+                    EndDate = end,
+                    AppliesToStudents = true,
+                    AppliesToTeachers = true,
+                    AppliesToStaff = false,
+                    IsNonWorkingDay = false,
+                    Color = examType.Color,
+                    SourceExamId = examId
+                };
+                await _calendarRepo.CreateEventAsync(created, classIds, ct).ConfigureAwait(false);
+                return;
+            }
+
+            existing.Title = exam.Name.Trim();
+            existing.Description = string.IsNullOrWhiteSpace(classLabel) ? null : $"Classes: {classLabel}";
+            existing.StartDate = start;
+            existing.EndDate = end;
+            existing.EventTypeId = examType.Id;
+            existing.AppliesToStudents = true;
+            existing.AppliesToTeachers = true;
+            existing.AppliesToStaff = false;
+            existing.IsNonWorkingDay = false;
+            existing.Color = examType.Color;
+            existing.SourceExamId = examId;
+            existing.AcademicYearId = exam.AcademicYearId;
+            await _calendarRepo.UpdateEventAsync(existing, classIds, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to sync academic calendar event for exam {ExamId}", examId);
+        }
+    }
+
+    private async Task RemoveExamCalendarEventAsync(Guid examId, CancellationToken ct)
+    {
+        try
+        {
+            CalendarEventEntity? existing = await _calendarRepo
+                .GetEventBySourceExamIdAsync(examId, ct)
+                .ConfigureAwait(false);
+            if (existing is null)
+            {
+                return;
+            }
+
+            await _calendarRepo.DeleteEventAsync(existing.Id, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove academic calendar event for exam {ExamId}", examId);
+        }
     }
 }

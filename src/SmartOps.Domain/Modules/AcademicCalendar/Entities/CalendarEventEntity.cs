@@ -19,4 +19,6 @@ public sealed class CalendarEventEntity : AuditableEntity
     public bool AppliesToStaff { get; set; } = true;
     public bool IsNonWorkingDay { get; set; }
     public string? Color { get; set; }
+    /// <summary>When set, this calendar entry is auto-synced from an exam schedule.</summary>
+    public Guid? SourceExamId { get; set; }
 }

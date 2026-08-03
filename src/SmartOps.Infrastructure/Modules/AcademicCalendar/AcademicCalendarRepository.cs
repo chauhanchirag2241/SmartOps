@@ -2,6 +2,7 @@ using Dapper;
 using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.AcademicCalendar;
 using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
+using SmartOps.Application.Modules.Authorization;
 using SmartOps.Application.Modules.Branch;
 using SmartOps.Domain.Common.Configuration;
 using SmartOps.Domain.Modules.AcademicCalendar;
@@ -202,7 +203,8 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
                 e.appliestoteachers AS AppliesToTeachers,
                 e.appliestostaff AS AppliesToStaff,
                 e.isnonworkingday AS IsNonWorkingDay,
-                COALESCE(NULLIF(e.color, ''), t.color) AS Color
+                COALESCE(NULLIF(e.color, ''), t.color) AS Color,
+                e.sourceexamid AS SourceExamId
             FROM {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEvents} e
             INNER JOIN {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEventTypes} t ON t.id = e.eventtypeid
             WHERE e.isactive = true
@@ -251,6 +253,20 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         var rows = await connection.QueryAsync<Guid>(
             new CommandDefinition(sql, new { EventId = eventId }, cancellationToken: ct)).ConfigureAwait(false);
         return rows.ToList();
+    }
+
+    public async Task<CalendarEventEntity?> GetEventBySourceExamIdAsync(Guid sourceExamId, CancellationToken ct = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        var sql = $"""
+            SELECT *
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEvents}
+            WHERE sourceexamid = @SourceExamId AND isactive = true
+            LIMIT 1;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<CalendarEventEntity>(
+            new CommandDefinition(sql, new { SourceExamId = sourceExamId }, cancellationToken: ct))
+            .ConfigureAwait(false);
     }
 
     public async Task<Guid> CreateEventAsync(
@@ -414,6 +430,32 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         foreach (var ev in events)
         {
             ev.ClassIds = byEvent.TryGetValue(ev.Id, out var classIds) ? classIds : [];
+        }
+
+        var allClassIds = events.SelectMany(e => e.ClassIds).Distinct().ToArray();
+        if (allClassIds.Length == 0)
+        {
+            return;
+        }
+
+        var nameSql = $"""
+            SELECT c.id AS ClassId, COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName
+            FROM {Context.OperationalSchema}.{DatabaseConfig.TableClasses} c
+            INNER JOIN {Context.OperationalSchema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            WHERE c.id = ANY(@Ids) AND c.isactive = true;
+            """;
+        var names = await connection.QueryAsync<(Guid ClassId, string ClassName)>(
+            new CommandDefinition(nameSql, new { Ids = allClassIds }, cancellationToken: ct)).ConfigureAwait(false);
+        var nameById = names.ToDictionary(x => x.ClassId, x => x.ClassName);
+        foreach (var ev in events)
+        {
+            ev.ClassNames = ev.ClassIds
+                .Where(id => nameById.ContainsKey(id))
+                .Select(id => nameById[id])
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
     }
 

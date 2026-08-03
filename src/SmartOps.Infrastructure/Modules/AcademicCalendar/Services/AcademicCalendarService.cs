@@ -197,7 +197,8 @@ public sealed class AcademicCalendarService : IAcademicCalendarService
             AppliesToStaff = entity.AppliesToStaff,
             IsNonWorkingDay = entity.IsNonWorkingDay,
             Color = !string.IsNullOrWhiteSpace(entity.Color) ? entity.Color! : (type?.Color ?? "#5B8DEF"),
-            ClassIds = classIds.ToList()
+            ClassIds = classIds.ToList(),
+            SourceExamId = entity.SourceExamId
         });
     }
 

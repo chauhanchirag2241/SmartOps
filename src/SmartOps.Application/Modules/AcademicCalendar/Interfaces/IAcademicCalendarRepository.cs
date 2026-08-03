@@ -31,6 +31,7 @@ public interface IAcademicCalendarRepository
     Task UpdateEventAsync(CalendarEventEntity entity, IReadOnlyList<Guid> classIds, CancellationToken ct = default);
     Task DeleteEventAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<Guid>> GetEventClassIdsAsync(Guid eventId, CancellationToken ct = default);
+    Task<CalendarEventEntity?> GetEventBySourceExamIdAsync(Guid sourceExamId, CancellationToken ct = default);
     Task<IReadOnlyList<DateOnly>> GetNonWorkingEventDatesAsync(
         Guid branchId,
         DateOnly from,

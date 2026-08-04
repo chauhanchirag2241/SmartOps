@@ -74,9 +74,9 @@ LIMIT 1;";
 
     public async Task<Guid> CreateTimetableAsync(ClassTimetableEntity entity, CancellationToken cancellationToken)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty) entity.Id = Guid.NewGuid();
-        EnsureInsertAudit(entity, utcNow);
+        EnsureInsertAudit(entity, now);
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -152,7 +152,7 @@ WHERE s.timetableid = @TimetableId AND s.isactive = true;";
 
     public async Task ReplaceSlotsAsync(Guid timetableId, IReadOnlyList<ClassTimetableSlotEntity> slots, CancellationToken cancellationToken)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -162,14 +162,14 @@ WHERE s.timetableid = @TimetableId AND s.isactive = true;";
 UPDATE {Schema}.{DatabaseConfig.TableClassTimetableSlots}
 SET isactive = false, versionno = versionno + 1, updatedby = @Actor, updatedon = @Now
 WHERE timetableid = @TimetableId AND isactive = true;",
-                new { TimetableId = timetableId, Actor = actor, Now = utcNow }, tx, cancellationToken: cancellationToken))
+                new { TimetableId = timetableId, Actor = actor, Now = now }, tx, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
             foreach (var slot in slots)
             {
                 if (slot.Id == Guid.Empty) slot.Id = Guid.NewGuid();
                 slot.TimetableId = timetableId;
-                EnsureInsertAudit(slot, utcNow);
+                EnsureInsertAudit(slot, now);
                 await InsertAsync(conn, Schema, DatabaseConfig.TableClassTimetableSlots, slot, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);

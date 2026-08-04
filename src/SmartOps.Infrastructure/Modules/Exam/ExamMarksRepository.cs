@@ -118,7 +118,7 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -127,7 +127,7 @@ public sealed class ExamMarksRepository : BaseRepository, IExamMarksRepository
             {
                 mark.Id = mark.Id == Guid.Empty ? Guid.NewGuid() : mark.Id;
                 mark.ExamScheduleId = scheduleId;
-                EnsureInsertAudit(mark, utcNow, actorId);
+                EnsureInsertAudit(mark, now, actorId);
 
                 string sql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableExamStudentMarks}

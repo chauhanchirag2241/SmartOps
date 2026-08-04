@@ -113,13 +113,13 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
     public async Task<Guid> UpsertPunchAsync(StaffAttendanceEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         if (entity.Id == Guid.Empty)
         {
             entity.Id = Guid.NewGuid();
-            EnsureInsertAudit(entity, utcNow, actorId);
+            EnsureInsertAudit(entity, now, actorId);
 
             string insertSql = $"""
                 INSERT INTO {Schema}.{DatabaseConfig.TableStaffAttendance}
@@ -159,7 +159,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
             return entity.Id;
         }
 
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), utcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), now);
 
         string updateSql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableStaffAttendance}

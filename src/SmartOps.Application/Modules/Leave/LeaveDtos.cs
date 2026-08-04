@@ -67,6 +67,6 @@ public record LeaveDetailDto(
     string StatusLabel,
     Guid? ApprovedByUserId,
     string? ApprovedByName,
-    DateTimeOffset? ApprovedOn,
+    DateTime? ApprovedOn,
     string? ApproverRemark,
     DateTime CreatedOn);

@@ -71,7 +71,7 @@ public record LeaveLedgerDto(
     Guid? ReferenceId,
     string? Remark,
     DateOnly TxnDate,
-    DateTimeOffset CreatedOn);
+    DateTime CreatedOn);
 
 public record ManualCreditLeaveDto(
     Guid EmployeeId,

@@ -80,6 +80,11 @@ public sealed class UsersController(
         string email = request.Email.Trim().ToLowerInvariant();
         string username = request.Username.Trim();
 
+        if (request.UserTypeId is Guid createTypeId && UserTypeCodes.IsHiddenFromPortal(createTypeId))
+        {
+            return BadRequest("This user type is reserved and cannot be assigned.");
+        }
+
         if (await userRepository.GetByEmailAsync(email, cancellationToken).ConfigureAwait(false) is not null
             || await userRepository.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false) is not null)
         {
@@ -93,6 +98,7 @@ public sealed class UsersController(
             UserTypeId = request.UserTypeId ?? UserTypeCodes.Ids.OfficeStaff,
             IsActive = request.IsActive,
             LockoutEnabled = request.LockoutEnabled,
+            MustChangePassword = true,
         };
         string password = string.IsNullOrWhiteSpace(request.Password) ? DefaultPassword : request.Password;
         user.PasswordHash = passwordHasher.HashPassword(user, password);
@@ -158,6 +164,11 @@ public sealed class UsersController(
         if (user is null || !await BelongsToSchoolAsync(user.Id, schoolId, cancellationToken).ConfigureAwait(false))
         {
             return NotFound();
+        }
+
+        if (request.UserTypeId is Guid updateTypeId && UserTypeCodes.IsHiddenFromPortal(updateTypeId))
+        {
+            return BadRequest("This user type is reserved and cannot be assigned.");
         }
 
         user.Username = request.Username.Trim();
@@ -235,6 +246,7 @@ public sealed class UsersController(
 
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
         user.SecurityStamp = Guid.NewGuid().ToString("N");
+        user.MustChangePassword = true;
         await userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
@@ -256,6 +268,16 @@ public sealed class UsersController(
         {
             IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
             types.TryGetValue(user.Id, out UserTypeSummary? type);
+            if (PortalUserVisibility.IsHiddenFromPortal(
+                    user.Email,
+                    user.Username,
+                    user.Id,
+                    roles,
+                    type?.UserTypeId))
+            {
+                continue;
+            }
+
             IReadOnlyList<SmartOps.Application.Modules.Branch.BranchDropdownItemDto> branches = await branchRepository
                 .GetUserBranchesAsync(user.Id, schoolId, cancellationToken)
                 .ConfigureAwait(false);
@@ -278,9 +300,11 @@ public sealed class UsersController(
         IReadOnlyList<string> targetRoleNames,
         CancellationToken cancellationToken)
     {
+        // Portal must never assign SmartOpsAdmin; keep it if the user already has it.
         HashSet<string> desired = targetRoleNames
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r.Trim())
+            .Where(r => !RoleNames.IsHiddenFromPortal(r))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (string roleName in desired)
@@ -294,6 +318,11 @@ public sealed class UsersController(
         IList<string> current = await userRepository.GetRolesAsync(userId, cancellationToken).ConfigureAwait(false);
         foreach (string role in current.Where(r => !desired.Contains(r)))
         {
+            if (RoleNames.IsHiddenFromPortal(role))
+            {
+                continue;
+            }
+
             await userRepository.RemoveUserFromRoleAsync(userId, role, cancellationToken).ConfigureAwait(false);
         }
 
@@ -318,7 +347,7 @@ public sealed class UsersController(
             UserTypeId = userType?.UserTypeId,
             UserTypeCode = userType?.Code,
             UserTypeName = userType?.Name,
-            Roles = roles.ToList(),
+            Roles = roles.Where(r => !RoleNames.IsHiddenFromPortal(r)).ToList(),
             BranchIds = branches?.Select(b => b.Id).ToList() ?? [],
             DefaultBranchId = branches?.FirstOrDefault(b => b.IsDefault)?.Id ?? branches?.FirstOrDefault()?.Id,
         };

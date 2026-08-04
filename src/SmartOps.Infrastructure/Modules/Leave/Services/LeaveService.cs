@@ -4,6 +4,7 @@ using SmartOps.Application.Modules.Leave;
 using SmartOps.Application.Modules.Leave.Interfaces;
 using SmartOps.Application.Modules.Workflow.Interfaces;
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Constants;
 using SmartOps.Domain.Modules.Leave;
 using SmartOps.Domain.Modules.Leave.Entities;
 
@@ -44,8 +45,25 @@ public sealed class LeaveService : ILeaveService
             return Result<IList<LeaveApproverDto>>.Failure("School context is not available.");
         }
 
-        IList<SchoolAdminUserRow> rows = await _leaveRepo.GetSchoolAdminUsersAsync(schoolId, ct).ConfigureAwait(false);
-        IList<LeaveApproverDto> list = rows.Select(r => new LeaveApproverDto(r.Id, r.Name)).ToList();
+        // Same rule as LeaveApproverResolver: Reporting Manager → Principal only.
+        Guid userId = RequireUserId();
+        Guid? employeeId = await _leaveRepo.GetEmployeeIdByUserIdAsync(userId, ct).ConfigureAwait(false);
+        if (employeeId.HasValue)
+        {
+            SchoolAdminUserRow? manager = await _leaveRepo
+                .GetReportingManagerUserAsync(employeeId.Value, ct)
+                .ConfigureAwait(false);
+            if (manager is not null)
+            {
+                return Result<IList<LeaveApproverDto>>.Success(
+                    [new LeaveApproverDto(manager.Id, manager.Name)]);
+            }
+        }
+
+        IList<SchoolAdminUserRow> principals = await _leaveRepo
+            .GetUsersByUserTypeAsync(UserTypeCodes.Ids.Principal, ct)
+            .ConfigureAwait(false);
+        IList<LeaveApproverDto> list = principals.Select(r => new LeaveApproverDto(r.Id, r.Name)).ToList();
         return Result<IList<LeaveApproverDto>>.Success(list);
     }
 
@@ -339,7 +357,7 @@ public sealed class LeaveService : ILeaveService
 
         entity.Status = status;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = SchoolLocalTime.Now();
+        entity.ApprovedOn = SchoolLocalTime.NowDateTime();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
 

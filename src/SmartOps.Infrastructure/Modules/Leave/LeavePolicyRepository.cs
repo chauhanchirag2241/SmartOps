@@ -62,7 +62,7 @@ public sealed class LeavePolicyRepository : BaseRepository, ILeavePolicyReposito
     public async Task UpdateMonthlyLeaveAsync(Guid id, decimal monthlyLeave, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableLeavePolicies}
@@ -74,7 +74,7 @@ public sealed class LeavePolicyRepository : BaseRepository, ILeavePolicyReposito
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
-            new { Id = id, MonthlyLeave = monthlyLeave, UpdatedBy = actor, UpdatedOn = utcNow },
+            new { Id = id, MonthlyLeave = monthlyLeave, UpdatedBy = actor, UpdatedOn = now },
             cancellationToken: ct)).ConfigureAwait(false);
     }
 
@@ -98,7 +98,7 @@ public sealed class LeavePolicyRepository : BaseRepository, ILeavePolicyReposito
     public async Task<Guid> UpsertAsync(LeavePolicyEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         LeavePolicyEntity? existing = await GetByUserTypeAndLeaveTypeAsync(entity.UserTypeId, entity.LeaveTypeId, ct)
             .ConfigureAwait(false);
@@ -107,7 +107,7 @@ public sealed class LeavePolicyRepository : BaseRepository, ILeavePolicyReposito
         {
             existing.MonthlyLeave = entity.MonthlyLeave;
             existing.IsActive = true;
-            ApplyUpdateAudit(existing, ResolveUpdateActor(), utcNow);
+            ApplyUpdateAudit(existing, ResolveUpdateActor(), now);
 
             string updateSql = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableLeavePolicies}
@@ -125,7 +125,7 @@ public sealed class LeavePolicyRepository : BaseRepository, ILeavePolicyReposito
 
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string insertSql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableLeavePolicies}

@@ -133,23 +133,23 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeSalaries}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE employeeid = @EmployeeId AND isactive = true;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, new { EmployeeId = employeeId, UpdatedBy = actorId, UpdatedOn = utcNow }, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { EmployeeId = employeeId, UpdatedBy = actorId, UpdatedOn = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
     public async Task<Guid> CreateAssignmentAsync(EmployeeSalaryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableEmployeeSalaries}
@@ -208,7 +208,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             Guid actorId = ResolveInsertActor();
-            DateTime utcNow = SchoolLocalTime.NowDateTime();
+            DateTime now = SchoolLocalTime.NowDateTime();
 
             await conn.ExecuteAsync(
                 $"""
@@ -222,7 +222,7 @@ public sealed class EmployeeSalaryRepository : BaseRepository, IEmployeeSalaryRe
             {
                 row.Id = row.Id == Guid.Empty ? Guid.NewGuid() : row.Id;
                 row.EmployeeSalaryId = employeeSalaryId;
-                EnsureInsertAudit(row, utcNow, actorId);
+                EnsureInsertAudit(row, now, actorId);
 
                 await conn.ExecuteAsync(
                     $"""

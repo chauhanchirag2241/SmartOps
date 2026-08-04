@@ -26,7 +26,7 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
                 .WithColumn("reason").AsString(int.MaxValue).Nullable()
                 .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
                 .WithColumn("approvedbyuserid").AsGuid().Nullable()
-                .WithColumn("approvedon").AsDateTimeOffset().Nullable()
+                .WithColumn("approvedon").AsDateTime().Nullable()
                 .WithColumn("approverremark").AsString(1000).Nullable()
                 .WithAuditColumns();
 
@@ -63,7 +63,7 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
                 .WithColumn("priority").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithColumn("payloadjson").AsString(int.MaxValue).Nullable()
                 .WithColumn("completedbyuserid").AsGuid().Nullable()
-                .WithColumn("completedon").AsDateTimeOffset().Nullable()
+                .WithColumn("completedon").AsDateTime().Nullable()
                 .WithColumn("outcome").AsString(100).Nullable()
                 .WithAuditColumns();
 
@@ -86,7 +86,7 @@ public sealed class S127_CreateLeaveAndWorkflowTables : Migration
                 .WithColumn("actioncode").AsString(50).NotNullable()
                 .WithColumn("comment").AsString(2000).Nullable()
                 .WithColumn("actoruserid").AsGuid().NotNullable()
-                .WithColumn("actedon").AsDateTimeOffset().NotNullable().WithDefault(SystemMethods.CurrentDateTime)
+                .WithColumn("actedon").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentDateTime)
                 .WithColumn("metadatajson").AsString(int.MaxValue).Nullable()
                 .WithAuditColumns();
 

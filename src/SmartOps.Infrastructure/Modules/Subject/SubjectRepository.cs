@@ -39,13 +39,13 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
             throw new InvalidOperationException("Class group is required. Create subjects from a class.");
         }
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (subject.Id == Guid.Empty)
         {
             subject.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(subject, utcNow);
+        EnsureInsertAudit(subject, now);
 
         subject.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(subject.BranchId, cancellationToken)
@@ -204,9 +204,9 @@ public sealed class SubjectRepository : BaseRepository, ISubjectRepository
 
     public async Task UpdateSubjectAsync(SubjectEntity subject, CancellationToken cancellationToken)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(subject, actorId, utcNow);
+        ApplyUpdateAudit(subject, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 

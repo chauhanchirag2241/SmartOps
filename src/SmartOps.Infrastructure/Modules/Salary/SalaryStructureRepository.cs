@@ -162,11 +162,11 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     public async Task<Guid> CreateVersionAsync(SalaryStructureVersionEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableSalaryStructure}
@@ -200,13 +200,13 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableSalaryStructure}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE id = @Id;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, UpdatedBy = actorId, UpdatedOn = utcNow }, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, UpdatedBy = actorId, UpdatedOn = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -214,7 +214,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
         Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
         string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
@@ -236,7 +236,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                 ActiveStatus = (short)SalaryStructureVersionStatus.Active,
                 ArchivedStatus = (short)SalaryStructureVersionStatus.Archived,
                 UpdatedBy = actorId,
-                UpdatedOn = utcNow,
+                UpdatedOn = now,
                 ActiveBranchId = activeBranchId
             },
             cancellationToken: ct)).ConfigureAwait(false);
@@ -246,7 +246,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
         Guid? activeBranchId = _branchContext.IsResolved ? _branchContext.ActiveBranchId : null;
         string branchFilter = activeBranchId.HasValue ? " AND branchid = @ActiveBranchId" : string.Empty;
@@ -268,7 +268,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                 PublishedStatus = (short)SalaryStructureVersionStatus.Published,
                 ArchivedStatus = (short)SalaryStructureVersionStatus.Archived,
                 UpdatedBy = actorId,
-                UpdatedOn = utcNow,
+                UpdatedOn = now,
                 ActiveBranchId = activeBranchId
             },
             cancellationToken: ct)).ConfigureAwait(false);
@@ -298,7 +298,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
         using IDbTransaction transaction = connection.BeginTransaction();
         try
         {
-            DateTime utcNow = SchoolLocalTime.NowDateTime();
+            DateTime now = SchoolLocalTime.NowDateTime();
             Guid actorId = ResolveInsertActor();
 
             IList<SalaryVersionComponentEntity> sourceComponents = (await connection.QueryAsync<SalaryVersionComponentEntity>(new CommandDefinition(
@@ -327,7 +327,7 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
                     Value = sourceComponent.Value,
                     IsTaxable = sourceComponent.IsTaxable
                 };
-                EnsureInsertAudit(cloneComponent, utcNow, actorId);
+                EnsureInsertAudit(cloneComponent, now, actorId);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
@@ -401,10 +401,10 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     public async Task<Guid> CreateComponentAsync(SalaryVersionComponentEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
@@ -442,13 +442,13 @@ public sealed class SalaryStructureRepository : BaseRepository, ISalaryStructure
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableSalaryVersionComponents}
             SET isactive = false, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
             WHERE id = @Id;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, UpdatedBy = actorId, UpdatedOn = utcNow }, cancellationToken: ct))
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, UpdatedBy = actorId, UpdatedOn = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 

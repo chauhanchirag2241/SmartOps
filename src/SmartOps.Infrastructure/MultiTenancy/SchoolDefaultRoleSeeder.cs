@@ -23,7 +23,7 @@ public static class SchoolDefaultRoleSeeder
         CancellationToken cancellationToken = default)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         string insertRoleSql = $"""
 INSERT INTO {man}.{DatabaseConfig.TableRoles}
@@ -40,7 +40,7 @@ WHERE NOT EXISTS (
             await schoolDb.ExecuteAsync(
                 new CommandDefinition(
                     insertRoleSql,
-                    new { Id = id, Name = name, Description = description, Actor = SeedActor, Now = utcNow },
+                    new { Id = id, Name = name, Description = description, Actor = SeedActor, Now = now },
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
     }
@@ -50,7 +50,7 @@ WHERE NOT EXISTS (
         CancellationToken cancellationToken = default)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         string insertPermSql = $"""
 INSERT INTO {man}.{DatabaseConfig.TableRoleMenuPermissions}
@@ -81,7 +81,7 @@ WHERE lower(trim(r.name)) = lower(trim(@RoleName))
                             CanDelete = grant.CanDelete,
                             CanExport = grant.CanExport,
                             Actor = SeedActor,
-                            Now = utcNow,
+                            Now = now,
                         },
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
             }

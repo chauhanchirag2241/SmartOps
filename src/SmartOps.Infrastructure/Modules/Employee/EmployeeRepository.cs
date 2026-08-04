@@ -44,13 +44,13 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (employee.Id == Guid.Empty)
         {
             employee.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(employee, utcNow);
+        EnsureInsertAudit(employee, now);
 
         employee.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(employee.BranchId, cancellationToken)
@@ -253,11 +253,40 @@ INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
         return items.ToList();
     }
 
+    public async Task<bool> EmployeeCodeExistsAsync(
+        string employeeCode,
+        Guid branchId,
+        Guid? excludingEmployeeId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $"""
+SELECT EXISTS (
+    SELECT 1
+    FROM {Context.OperationalSchema}.{DatabaseConfig.TableEmployees}
+    WHERE lower(employeecode) = lower(@EmployeeCode)
+      AND branchid = @BranchId
+      AND isactive = true
+      AND (@ExcludingEmployeeId IS NULL OR id <> @ExcludingEmployeeId)
+);
+""";
+
+        return await connection.QuerySingleAsync<bool>(
+                sql,
+                new
+                {
+                    EmployeeCode = employeeCode.Trim(),
+                    BranchId = branchId,
+                    ExcludingEmployeeId = excludingEmployeeId
+                })
+            .ConfigureAwait(false);
+    }
+
     public async Task UpdateEmployeeAsync(EmployeeEntity employee, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(employee, actorId, utcNow);
+        ApplyUpdateAudit(employee, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartOps.Application.Configuration;
@@ -18,6 +19,7 @@ public sealed class IdentityService : IIdentityService
     private readonly IMenuRepository _menuRepository;
     private readonly IJwtService _jwtService;
     private readonly IUserCredentialValidator _credentialValidator;
+    private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
     private readonly IUserScopeService _userScopeService;
     private readonly TenantContext _tenantContext;
     private readonly IOptions<JwtOptions> _jwtOptions;
@@ -29,6 +31,7 @@ public sealed class IdentityService : IIdentityService
         IMenuRepository menuRepository,
         IJwtService jwtService,
         IUserCredentialValidator credentialValidator,
+        IPasswordHasher<ApplicationUser> passwordHasher,
         IUserScopeService userScopeService,
         TenantContext tenantContext,
         IOptions<JwtOptions> jwtOptions,
@@ -39,6 +42,7 @@ public sealed class IdentityService : IIdentityService
         _menuRepository = menuRepository;
         _jwtService = jwtService;
         _credentialValidator = credentialValidator;
+        _passwordHasher = passwordHasher;
         _userScopeService = userScopeService;
         _tenantContext = tenantContext;
         _jwtOptions = jwtOptions;
@@ -74,7 +78,8 @@ public sealed class IdentityService : IIdentityService
         {
             AccessToken = accessToken,
             RefreshToken = refreshTokenValue,
-            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60
+            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60,
+            MustChangePassword = user.MustChangePassword
         };
 
         return Result<LoginResponseDto>.Success(response);
@@ -91,8 +96,8 @@ public sealed class IdentityService : IIdentityService
             return Result<LoginResponseDto>.Failure("Invalid refresh token.");
         }
 
-        DateTime utcNow = DateTime.UtcNow;
-        if (existing.ExpiresAt < utcNow)
+        DateTime now = DateTime.UtcNow;
+        if (existing.ExpiresAt < now)
         {
             return Result<LoginResponseDto>.Failure("Refresh token has expired.");
         }
@@ -112,7 +117,8 @@ public sealed class IdentityService : IIdentityService
         {
             AccessToken = accessToken,
             RefreshToken = refreshTokenValue,
-            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60
+            ExpiresIn = _jwtOptions.Value.AccessTokenExpiryMinutes * 60,
+            MustChangePassword = user.MustChangePassword
         };
 
         return Result<LoginResponseDto>.Success(response);
@@ -145,19 +151,19 @@ public sealed class IdentityService : IIdentityService
 
         string refreshTokenValue = _jwtService.GenerateRefreshToken();
         JwtOptions jwt = _jwtOptions.Value;
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime now = DateTime.UtcNow;
 
         RefreshToken refreshEntity = new()
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
             Token = refreshTokenValue,
-            ExpiresAt = utcNow.AddDays(jwt.RefreshTokenExpiryDays),
+            ExpiresAt = now.AddDays(jwt.RefreshTokenExpiryDays),
             IsRevoked = false,
             CreatedBy = user.Id,
-            CreatedOn = utcNow,
+            CreatedOn = now,
             UpdatedBy = user.Id,
-            UpdatedOn = utcNow,
+            UpdatedOn = now,
             IsActive = true,
             VersionNo = 1
         };
@@ -229,5 +235,33 @@ public sealed class IdentityService : IIdentityService
         };
 
         return Result<UserPermissionResponseDto>.Success(response);
+    }
+
+    public async Task<Result> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ApplicationUser? user = await _userRepository.GetByIdAsync(userId, cancellationToken).ConfigureAwait(false);
+        if (user is null || !user.IsActive)
+        {
+            return Result.Failure("User was not found.");
+        }
+
+        bool oldValid = await _credentialValidator
+            .VerifyPasswordAsync(user, request.OldPassword, cancellationToken)
+            .ConfigureAwait(false);
+        if (!oldValid)
+        {
+            return Result.Failure("Current password is incorrect.");
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
+        user.MustChangePassword = false;
+        await _userRepository.UpdateAsync(user, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("User {Email} changed password successfully.", user.Email);
+        return Result.Success();
     }
 }

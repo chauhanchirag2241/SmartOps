@@ -18,6 +18,8 @@ public sealed class LoginResponseDto
     public string RefreshToken { get; set; } = string.Empty;
 
     public int ExpiresIn { get; set; }
+
+    public bool MustChangePassword { get; set; }
 }
 
 public static class IdentityMappingExtensions
@@ -28,7 +30,8 @@ public static class IdentityMappingExtensions
         Username = user.Username,
         Email = user.Email,
         IsActive = user.IsActive,
-        CreatedOn = user.CreatedOn
+        CreatedOn = user.CreatedOn,
+        MustChangePassword = user.MustChangePassword
     };
 
     public static SchoolDto ToDto(this SchoolEntity school) => new()
@@ -94,6 +97,9 @@ public sealed class RoleMenuPermissionDto
     public Guid? ParentMenuId { get; set; }
 
     public int DisplayOrder { get; set; }
+
+    /// <summary>CONFIG | SCHOOL | COMMON — used to hide Config menus in school portal.</summary>
+    public string Application { get; set; } = string.Empty;
 
     public bool CanView { get; set; }
 
@@ -249,6 +255,15 @@ public sealed class ResetUserPasswordDto
     public string Password { get; set; } = string.Empty;
 }
 
+public sealed class ChangePasswordRequestDto
+{
+    public string OldPassword { get; set; } = string.Empty;
+
+    public string NewPassword { get; set; } = string.Empty;
+
+    public string ConfirmNewPassword { get; set; } = string.Empty;
+}
+
 public sealed class AssignRoleUsersDto
 {
     public IReadOnlyList<Guid> UserIds { get; set; } = Array.Empty<Guid>();
@@ -269,4 +284,6 @@ public sealed class UserDto
     public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
 
     public Guid? RoleId { get; set; }
+
+    public bool MustChangePassword { get; set; }
 }

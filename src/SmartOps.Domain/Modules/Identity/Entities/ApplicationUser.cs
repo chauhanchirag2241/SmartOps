@@ -27,4 +27,7 @@ public sealed class ApplicationUser : AuditableEntity
     public int AccessFailedCount { get; set; }
 
     public bool LockoutEnabled { get; set; }
+
+    /// <summary>When true, user must set a new password before using the app (first login / admin reset).</summary>
+    public bool MustChangePassword { get; set; }
 }

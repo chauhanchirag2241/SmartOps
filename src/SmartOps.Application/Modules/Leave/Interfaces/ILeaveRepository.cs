@@ -17,9 +17,11 @@ public interface ILeaveRepository
     Task<Guid?> GetClassTeacherUserIdAsync(Guid classId, CancellationToken ct = default);
     Task<IList<Guid>> GetSchoolAdminUserIdsAsync(Guid schoolId, CancellationToken ct = default);
     Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default);
+    Task<IList<SchoolAdminUserRow>> GetUsersByUserTypeAsync(Guid userTypeId, CancellationToken ct = default);
     Task<bool> IsParentLinkedToStudentAsync(Guid parentUserId, Guid studentId, CancellationToken ct = default);
     Task<IList<Guid>> GetActiveTeacherUserIdsAsync(CancellationToken ct = default);
     Task<Guid?> GetReportingManagerUserIdAsync(Guid employeeId, CancellationToken ct = default);
+    Task<SchoolAdminUserRow?> GetReportingManagerUserAsync(Guid employeeId, CancellationToken ct = default);
     Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default);
     Task<LeaveDetailRow?> GetDetailRowAsync(Guid id, CancellationToken ct = default);
     Task<IList<LinkedStudentRow>> GetLinkedStudentsForParentAsync(Guid parentUserId, CancellationToken ct = default);
@@ -66,6 +68,6 @@ public sealed class LeaveDetailRow : LeaveListRow
     public string? Reason { get; set; }
     public Guid? ApprovedByUserId { get; set; }
     public string? ApprovedByEmail { get; set; }
-    public DateTimeOffset? ApprovedOn { get; set; }
+    public DateTime? ApprovedOn { get; set; }
     public string? ApproverRemark { get; set; }
 }

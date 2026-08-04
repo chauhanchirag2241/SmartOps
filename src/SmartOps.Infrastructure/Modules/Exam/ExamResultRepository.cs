@@ -40,7 +40,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -50,7 +50,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
                 result.Id = result.Id == Guid.Empty ? Guid.NewGuid() : result.Id;
                 result.ExamId = examId;
                 result.ClassId = classId;
-                EnsureInsertAudit(result, utcNow, actorId);
+                EnsureInsertAudit(result, now, actorId);
 
                 string sql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableExamResults}
@@ -170,7 +170,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -178,7 +178,7 @@ public sealed class ExamResultRepository : BaseRepository, IExamResultRepository
             foreach (ExamHallTicketEntity ticket in tickets)
             {
                 ticket.Id = ticket.Id == Guid.Empty ? Guid.NewGuid() : ticket.Id;
-                EnsureInsertAudit(ticket, utcNow, actorId);
+                EnsureInsertAudit(ticket, now, actorId);
 
                 string sql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableExamHallTickets}

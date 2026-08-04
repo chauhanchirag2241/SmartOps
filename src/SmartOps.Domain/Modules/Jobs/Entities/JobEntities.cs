@@ -19,5 +19,5 @@ public sealed class HangfireConfigEntity
     public Guid Id { get; set; }
     public bool IsEnabled { get; set; }
     public Guid UpdatedBy { get; set; }
-    public DateTimeOffset UpdatedOn { get; set; }
+    public DateTime UpdatedOn { get; set; }
 }

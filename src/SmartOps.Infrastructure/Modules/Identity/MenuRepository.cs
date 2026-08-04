@@ -204,9 +204,24 @@ WHERE ur.userid = @UserId
         }
     }
 
+    public Task<IReadOnlyList<RoleMenuPermissionDto>> GetAllMenuTemplatesAsync(
+        CancellationToken cancellationToken = default) =>
+        GetAllMenuTemplatesAsync(application: null, cancellationToken);
+
     public async Task<IReadOnlyList<RoleMenuPermissionDto>> GetAllMenuTemplatesAsync(
+        string? application,
         CancellationToken cancellationToken = default)
     {
+        string appFilter = string.Empty;
+        object? args = null;
+        if (!string.IsNullOrWhiteSpace(application))
+        {
+            appFilter = """
+ AND (m.application = @Application OR m.application = @Common)
+""";
+            args = new { Application = application.Trim(), Common = MenuApplications.Common };
+        }
+
         string sql = $"""
 SELECT
     m.id AS MenuId,
@@ -214,19 +229,20 @@ SELECT
     m.name AS MenuName,
     m.parentmenuid AS ParentMenuId,
     m.displayorder AS DisplayOrder,
+    m.application AS Application,
     false AS CanView,
     false AS CanAdd,
     false AS CanEdit,
     false AS CanDelete,
     false AS CanExport
 FROM {CatalogSchema}.{DatabaseConfig.TableMenus} m
-WHERE m.isactive = true
+WHERE m.isactive = true{appFilter}
 ORDER BY m.displayorder, m.name
 """;
 
         IDbConnection connection = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         IEnumerable<RoleMenuPermissionDto> rows = await connection.QueryAsync<RoleMenuPermissionDto>(
-            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition(sql, args, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows.ToList();
     }
 

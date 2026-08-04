@@ -56,13 +56,13 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
         Guid schoolId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (student.Id == Guid.Empty)
         {
             student.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(student, utcNow);
+        EnsureInsertAudit(student, now);
 
         student.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(student.BranchId, cancellationToken)
@@ -82,7 +82,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
                 .ConfigureAwait(false);
             student.Id = id;
 
-            await InsertChildCollectionsAsync(conn, tx, id, student, utcNow).ConfigureAwait(false);
+            await InsertChildCollectionsAsync(conn, tx, id, student, now).ConfigureAwait(false);
 
             return id;
         }).ConfigureAwait(false);
@@ -253,9 +253,9 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
     /// <inheritdoc />
     public async Task UpdateStudentAsync(StudentEntity student, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(student, actorId, utcNow);
+        ApplyUpdateAudit(student, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -293,7 +293,7 @@ public sealed class StudentRepository : BaseRepository, IStudentRepository
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableStudents, student, tx, "Id")
                 .ConfigureAwait(false);
 
-            await UpdateChildCollectionsAsync(conn, tx, student, actorId, utcNow).ConfigureAwait(false);
+            await UpdateChildCollectionsAsync(conn, tx, student, actorId, now).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
@@ -540,7 +540,7 @@ WHERE id = @StudentId AND isactive = true
         IDbTransaction transaction,
         Guid studentId,
         StudentEntity student,
-        DateTime utcNow)
+        DateTime now)
     {
         if (student.Parents is { Count: > 0 })
         {
@@ -548,7 +548,7 @@ WHERE id = @StudentId AND isactive = true
             {
                 parent.Id = Guid.NewGuid();
                 parent.StudentId = studentId;
-                EnsureInsertAudit(parent, utcNow);
+                EnsureInsertAudit(parent, now);
                 await InsertWithoutReturnAsync(
                         connection,
                         Context.OperationalSchema,
@@ -608,7 +608,7 @@ WHERE id = @StudentId AND isactive = true
                     academic.RollNumber = null;
                 }
 
-                EnsureInsertAudit(academic, utcNow);
+                EnsureInsertAudit(academic, now);
                 await InsertWithoutReturnAsync(
                         connection,
                         Context.OperationalSchema,
@@ -625,7 +625,7 @@ WHERE id = @StudentId AND isactive = true
             {
                 prevSchool.Id = Guid.NewGuid();
                 prevSchool.StudentId = studentId;
-                EnsureInsertAudit(prevSchool, utcNow);
+                EnsureInsertAudit(prevSchool, now);
                 await InsertWithoutReturnAsync(
                         connection,
                         Context.OperationalSchema,
@@ -636,7 +636,7 @@ WHERE id = @StudentId AND isactive = true
             }
         }
 
-        await InsertCustomFieldsAsync(connection, transaction, studentId, student.CustomFields, utcNow)
+        await InsertCustomFieldsAsync(connection, transaction, studentId, student.CustomFields, now)
             .ConfigureAwait(false);
     }
 
@@ -645,14 +645,14 @@ WHERE id = @StudentId AND isactive = true
         IDbTransaction transaction,
         StudentEntity student,
         Guid actorId,
-        DateTime utcNow)
+        DateTime now)
     {
         if (student.Parents is not null)
         {
             foreach (var parent in student.Parents)
             {
                 parent.StudentId = student.Id;
-                ApplyUpdateAudit(parent, actorId, utcNow);
+                ApplyUpdateAudit(parent, actorId, now);
                 await UpdateAsync(
                         connection,
                         Context.OperationalSchema,
@@ -729,7 +729,7 @@ WHERE id = @StudentId AND isactive = true
                     academic.RollNumber = null;
                 }
 
-                ApplyUpdateAudit(academic, actorId, utcNow);
+                ApplyUpdateAudit(academic, actorId, now);
                 await UpdateAsync(
                         connection,
                         Context.OperationalSchema,
@@ -747,7 +747,7 @@ WHERE id = @StudentId AND isactive = true
             foreach (var prev in student.PreviousSchools)
             {
                 prev.StudentId = student.Id;
-                ApplyUpdateAudit(prev, actorId, utcNow);
+                ApplyUpdateAudit(prev, actorId, now);
                 await UpdateAsync(
                         connection,
                         Context.OperationalSchema,
@@ -761,7 +761,7 @@ WHERE id = @StudentId AND isactive = true
 
         if (student.CustomFields is not null)
         {
-            await ReplaceCustomFieldsAsync(connection, transaction, student.Id, student.CustomFields, actorId, utcNow)
+            await ReplaceCustomFieldsAsync(connection, transaction, student.Id, student.CustomFields, actorId, now)
                 .ConfigureAwait(false);
         }
     }
@@ -771,7 +771,7 @@ WHERE id = @StudentId AND isactive = true
         IDbTransaction transaction,
         Guid studentId,
         List<StudentCustomFieldEntity>? customFields,
-        DateTime utcNow)
+        DateTime now)
     {
         if (customFields is not { Count: > 0 })
         {
@@ -787,7 +787,7 @@ WHERE id = @StudentId AND isactive = true
 
             field.Id = Guid.NewGuid();
             field.StudentId = studentId;
-            EnsureInsertAudit(field, utcNow);
+            EnsureInsertAudit(field, now);
             await InsertWithoutReturnAsync(
                     connection,
                     Context.OperationalSchema,
@@ -804,7 +804,7 @@ WHERE id = @StudentId AND isactive = true
         Guid studentId,
         List<StudentCustomFieldEntity>? customFields,
         Guid actorId,
-        DateTime utcNow)
+        DateTime now)
     {
         await SoftDeleteRelatedAsync(
                 connection,
@@ -815,7 +815,7 @@ WHERE id = @StudentId AND isactive = true
                 transaction)
             .ConfigureAwait(false);
 
-        await InsertCustomFieldsAsync(connection, transaction, studentId, customFields, utcNow)
+        await InsertCustomFieldsAsync(connection, transaction, studentId, customFields, now)
             .ConfigureAwait(false);
     }
 
@@ -930,7 +930,7 @@ WHERE id = @StudentId AND isactive = true
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
         int promoted = 0;
 
@@ -1006,7 +1006,7 @@ WHERE id = @StudentId AND isactive = true
                         versionno = versionno + 1
                     WHERE id = @Id;
                     """,
-                    new { sourceRecord.Id, UpdatedBy = actorId, UpdatedOn = utcNow },
+                    new { sourceRecord.Id, UpdatedBy = actorId, UpdatedOn = now },
                     tx).ConfigureAwait(false);
 
                 string rollNumber = entry.RollNumber?.Trim() ?? sourceRecord.RollNumber ?? string.Empty;
@@ -1044,9 +1044,9 @@ WHERE id = @StudentId AND isactive = true
                             ClassGroupId = targetClassGroupId,
                             ClassId = entry.TargetClassId,
                             RollNumber = rollNumber,
-                            AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
+                            AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(now),
                             UpdatedBy = actorId,
-                            UpdatedOn = utcNow
+                            UpdatedOn = now
                         },
                         tx).ConfigureAwait(false);
                 }
@@ -1059,10 +1059,10 @@ WHERE id = @StudentId AND isactive = true
                         AcademicYearId = targetAcademicYearId,
                         ClassGroupId = targetClassGroupId,
                         ClassId = entry.TargetClassId,
-                        AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(utcNow),
+                        AdmissionDate = entry.AdmissionDate ?? sourceRecord.AdmissionDate ?? DateOnly.FromDateTime(now),
                         RollNumber = rollNumber
                     };
-                    EnsureInsertAudit(newRecord, utcNow, actorId);
+                    EnsureInsertAudit(newRecord, now, actorId);
                     await InsertAsync(conn, schema, DatabaseConfig.TableStudentAcademics, newRecord, tx)
                         .ConfigureAwait(false);
                 }
@@ -1114,7 +1114,7 @@ WHERE id = @StudentId AND isactive = true
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         int updated = 0;
 
@@ -1156,7 +1156,7 @@ WHERE id = @StudentId AND isactive = true
                         ClassId = classId,
                         RollNumber = string.IsNullOrWhiteSpace(entry.RollNumber) ? null : entry.RollNumber.Trim(),
                         UpdatedBy = actorId,
-                        UpdatedOn = utcNow
+                        UpdatedOn = now
                     },
                     tx).ConfigureAwait(false);
 
@@ -1180,9 +1180,9 @@ WHERE id = @StudentId AND isactive = true
 
     public async Task AddDocumentAsync(StudentDocumentEntity document, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (document.Id == Guid.Empty) document.Id = Guid.NewGuid();
-        EnsureInsertAudit(document, utcNow);
+        EnsureInsertAudit(document, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await InsertWithoutReturnAsync(

@@ -18,7 +18,7 @@ public sealed class S151_GrantLeaveBalanceMenusAndSettings : Migration
 
     public override void Up()
     {
-        DateTimeOffset now = SchoolLocalTime.Now();
+        DateTime now = SchoolLocalTime.NowDateTime();
         string man = DatabaseConfig.Schema_Man;
 
         foreach (Guid menuId in new[] { LeaveTypesMenuId, LeavePoliciesMenuId, LeaveBalancesMenuId })

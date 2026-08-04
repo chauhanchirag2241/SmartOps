@@ -5,6 +5,7 @@ using SmartOps.Application.Abstractions;
 using SmartOps.Domain.Common;
 using SmartOps.Application.Modules.Workflow.Interfaces;
 using SmartOps.Domain.Common.Configuration;
+using SmartOps.Domain.Modules.Notice;
 using SmartOps.Domain.Modules.Workflow;
 using SmartOps.Domain.Modules.Workflow.Entities;
 using SmartOps.Infrastructure.Persistence;
@@ -33,10 +34,10 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
     public async Task<Guid> CreateItemAsync(WorkflowItemEntity item, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
-        EnsureInsertAudit(item, utcNow, actorId);
+        EnsureInsertAudit(item, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableWorkflowItems}
@@ -96,27 +97,39 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         var sb = new StringBuilder($"""
-            SELECT id AS Id, assigneeuserid AS AssigneeUserId, itemtype AS ItemType, status AS Status,
-                   referencetype AS ReferenceType, referenceid AS ReferenceId, title AS Title, summary AS Summary,
-                   duedate AS DueDate, priority AS Priority, payloadjson AS PayloadJson,
-                   completedbyuserid AS CompletedByUserId, completedon AS CompletedOn, outcome AS Outcome,
-                   isactive AS IsActive, versionno AS VersionNo, createdby AS CreatedBy, createdon AS CreatedOn,
-                   updatedby AS UpdatedBy, updatedon AS UpdatedOn
-            FROM {Schema}.{DatabaseConfig.TableWorkflowItems}
-            WHERE isactive = true AND assigneeuserid = @UserId AND status = @Pending
+            SELECT w.id AS Id, w.assigneeuserid AS AssigneeUserId, w.itemtype AS ItemType, w.status AS Status,
+                   w.referencetype AS ReferenceType, w.referenceid AS ReferenceId, w.title AS Title, w.summary AS Summary,
+                   w.duedate AS DueDate, w.priority AS Priority, w.payloadjson AS PayloadJson,
+                   w.completedbyuserid AS CompletedByUserId, w.completedon AS CompletedOn, w.outcome AS Outcome,
+                   w.isactive AS IsActive, w.versionno AS VersionNo, w.createdby AS CreatedBy, w.createdon AS CreatedOn,
+                   w.updatedby AS UpdatedBy, w.updatedon AS UpdatedOn
+            FROM {Schema}.{DatabaseConfig.TableWorkflowItems} w
+            WHERE w.isactive = true AND w.assigneeuserid = @UserId AND w.status = @Pending
+              AND (
+                w.referencetype <> @NoticeRef
+                OR EXISTS (
+                    SELECT 1
+                    FROM {Schema}.{DatabaseConfig.TableNotices} n
+                    WHERE n.id = w.referenceid
+                      AND n.isactive = true
+                      AND n.status = @PublishedStatus
+                      AND n.publishedon IS NOT NULL
+                      AND n.publishedon <= @NowUtc
+                )
+              )
             """);
 
         if (itemType.HasValue)
         {
-            sb.Append(" AND itemtype = @ItemType");
+            sb.Append(" AND w.itemtype = @ItemType");
         }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            sb.Append(" AND (title ILIKE @Search OR summary ILIKE @Search)");
+            sb.Append(" AND (w.title ILIKE @Search OR w.summary ILIKE @Search)");
         }
 
-        sb.Append(" ORDER BY priority DESC, duedate NULLS LAST, createdon DESC");
+        sb.Append(" ORDER BY w.priority DESC, w.duedate NULLS LAST, w.createdon DESC");
 
         var rows = await connection.QueryAsync<WorkflowItemEntity>(new CommandDefinition(
             sb.ToString(),
@@ -125,7 +138,10 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
                 UserId = userId,
                 Pending = (short)WorkflowItemStatus.Pending,
                 ItemType = itemType,
-                Search = string.IsNullOrWhiteSpace(search) ? null : $"%{search.Trim()}%"
+                Search = string.IsNullOrWhiteSpace(search) ? null : $"%{search.Trim()}%",
+                NoticeRef = (short)WorkflowReferenceType.Notice,
+                PublishedStatus = (short)NoticeStatus.Published,
+                NowUtc = DateTimeOffset.UtcNow
             },
             cancellationToken: ct)).ConfigureAwait(false);
 
@@ -137,12 +153,29 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT
-                COUNT(*) FILTER (WHERE status = @Pending) AS TotalPending,
-                COUNT(*) FILTER (WHERE status = @Pending AND itemtype = @LeaveApproval) AS LeaveApprovals,
-                COUNT(*) FILTER (WHERE status = @Pending AND itemtype = @NoticeResponse) AS NoticeResponses,
-                COUNT(*) FILTER (WHERE status = @Pending AND itemtype = @FormFill) AS FormFills
-            FROM {Schema}.{DatabaseConfig.TableWorkflowItems}
-            WHERE isactive = true AND assigneeuserid = @UserId;
+                COUNT(*) FILTER (WHERE visible) AS TotalPending,
+                COUNT(*) FILTER (WHERE visible AND itemtype = @LeaveApproval) AS LeaveApprovals,
+                COUNT(*) FILTER (WHERE visible AND itemtype = @NoticeResponse) AS NoticeResponses,
+                COUNT(*) FILTER (WHERE visible AND itemtype = @FormFill) AS FormFills
+            FROM (
+                SELECT
+                    w.itemtype,
+                    w.status = @Pending
+                    AND (
+                        w.referencetype <> @NoticeRef
+                        OR EXISTS (
+                            SELECT 1
+                            FROM {Schema}.{DatabaseConfig.TableNotices} n
+                            WHERE n.id = w.referenceid
+                              AND n.isactive = true
+                              AND n.status = @PublishedStatus
+                              AND n.publishedon IS NOT NULL
+                              AND n.publishedon <= @NowUtc
+                        )
+                    ) AS visible
+                FROM {Schema}.{DatabaseConfig.TableWorkflowItems} w
+                WHERE w.isactive = true AND w.assigneeuserid = @UserId AND w.status = @Pending
+            ) x;
             """;
 
         return await connection.QuerySingleAsync<MyActionStatsRow>(new CommandDefinition(sql, new
@@ -151,7 +184,10 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
             Pending = (short)WorkflowItemStatus.Pending,
             LeaveApproval = (short)WorkflowItemType.LeaveApproval,
             NoticeResponse = (short)WorkflowItemType.NoticeResponse,
-            FormFill = (short)WorkflowItemType.FormFill
+            FormFill = (short)WorkflowItemType.FormFill,
+            NoticeRef = (short)WorkflowReferenceType.Notice,
+            PublishedStatus = (short)NoticeStatus.Published,
+            NowUtc = DateTimeOffset.UtcNow
         }, cancellationToken: ct)).ConfigureAwait(false);
     }
 
@@ -204,7 +240,7 @@ public sealed class WorkflowRepository : BaseRepository, IWorkflowRepository
             ActionCode = actionCode,
             Comment = comment,
             ActorUserId = actorUserId,
-            ActedOn = SchoolLocalTime.Now(),
+            ActedOn = SchoolLocalTime.NowDateTime(),
             MetadataJson = metadataJson,
             Actor = actor,
             Now = now

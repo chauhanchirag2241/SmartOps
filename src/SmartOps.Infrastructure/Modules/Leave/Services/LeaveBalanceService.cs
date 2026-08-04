@@ -115,7 +115,7 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             Remark = request.Remark,
             TxnDate = SchoolLocalTime.Today(null),
             CreatedBy = actorId,
-            CreatedOn = SchoolLocalTime.Now()
+            CreatedOn = SchoolLocalTime.NowDateTime()
         }, ct).ConfigureAwait(false);
 
         IList<LeaveBalanceListRow> rows = await _balanceRepo
@@ -180,7 +180,7 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             Remark = "Leave approved",
             TxnDate = SchoolLocalTime.Today(null),
             CreatedBy = actorId,
-            CreatedOn = SchoolLocalTime.Now()
+            CreatedOn = SchoolLocalTime.NowDateTime()
         }, ct).ConfigureAwait(false);
 
         leave.DeductedFromBalance = true;
@@ -250,7 +250,7 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             Remark = "Leave cancelled — balance restored",
             TxnDate = SchoolLocalTime.Today(null),
             CreatedBy = actorId,
-            CreatedOn = SchoolLocalTime.Now()
+            CreatedOn = SchoolLocalTime.NowDateTime()
         }, ct).ConfigureAwait(false);
 
         leave.DeductedFromBalance = false;

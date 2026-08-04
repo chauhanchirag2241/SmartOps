@@ -37,10 +37,10 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
     public async Task<Guid> CreateAsync(LeaveRequestEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableLeaveRequests}
@@ -358,19 +358,29 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         return users.Select(u => u.Id).ToList();
     }
 
-    public async Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default)
+    public Task<IList<SchoolAdminUserRow>> GetSchoolAdminUsersAsync(Guid schoolId, CancellationToken ct = default)
     {
         _ = schoolId;
+        return GetUsersByUserTypeAsync(UserTypeCodes.Ids.SchoolAdmin, ct);
+    }
+
+    public async Task<IList<SchoolAdminUserRow>> GetUsersByUserTypeAsync(Guid userTypeId, CancellationToken ct = default)
+    {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
             SELECT DISTINCT u.id AS Id,
-                   COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS Name
+                   COALESCE(
+                       NULLIF(TRIM(CONCAT_WS(' ', u.firstname, u.lastname)), ''),
+                       NULLIF(TRIM(u.username), ''),
+                       u.email
+                   ) AS Name
             FROM {G}.{DatabaseConfig.TableUsers} u
             WHERE u.isactive = true
-              AND u.usertypeid = '{UserTypeCodes.Ids.OfficeStaff}'
+              AND u.usertypeid = @UserTypeId
             ORDER BY Name;
             """;
-        var rows = await connection.QueryAsync<SchoolAdminUserRow>(new CommandDefinition(sql, cancellationToken: ct))
+        var rows = await connection.QueryAsync<SchoolAdminUserRow>(
+                new CommandDefinition(sql, new { UserTypeId = userTypeId }, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.ToList();
     }
@@ -395,16 +405,29 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
 
     public async Task<Guid?> GetReportingManagerUserIdAsync(Guid employeeId, CancellationToken ct = default)
     {
+        SchoolAdminUserRow? manager = await GetReportingManagerUserAsync(employeeId, ct).ConfigureAwait(false);
+        return manager?.Id;
+    }
+
+    public async Task<SchoolAdminUserRow?> GetReportingManagerUserAsync(Guid employeeId, CancellationToken ct = default)
+    {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         string sql = $"""
-            SELECT mgr.userid
+            SELECT mgr.userid AS Id,
+                   COALESCE(
+                       NULLIF(TRIM(CONCAT_WS(' ', mu.firstname, mu.lastname)), ''),
+                       NULLIF(TRIM(mu.username), ''),
+                       mu.email
+                   ) AS Name
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
             INNER JOIN {Schema}.{DatabaseConfig.TableEmployees} mgr
                 ON mgr.id = e.reportingmanagerid AND mgr.isactive = true AND mgr.userid IS NOT NULL
+            INNER JOIN {G}.{DatabaseConfig.TableUsers} mu
+                ON mu.id = mgr.userid AND mu.isactive = true
             WHERE e.id = @EmployeeId AND e.isactive = true
             LIMIT 1;
             """;
-        return await connection.ExecuteScalarAsync<Guid?>(
+        return await connection.QuerySingleOrDefaultAsync<SchoolAdminUserRow>(
             new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: ct))
             .ConfigureAwait(false);
     }

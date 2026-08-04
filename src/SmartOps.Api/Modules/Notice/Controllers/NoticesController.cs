@@ -55,14 +55,6 @@ public sealed class NoticesController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
-    [HttpPost("{id:guid}/publish")]
-    [Authorize(Policy = MenuPolicies.Notices.Edit)]
-    public async Task<IActionResult> Publish(Guid id, CancellationToken ct)
-    {
-        var result = await _service.PublishAsync(id, ct).ConfigureAwait(false);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
-
     [HttpGet("{id:guid}/responses")]
     [Authorize(Policy = MenuPolicies.Notices.View)]
     public async Task<IActionResult> GetResponses(Guid id, CancellationToken ct)

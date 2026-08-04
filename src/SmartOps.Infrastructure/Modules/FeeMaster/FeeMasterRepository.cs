@@ -30,13 +30,13 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task<Guid> CreateAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (fee.Id == Guid.Empty)
         {
             fee.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(fee, utcNow);
+        EnsureInsertAudit(fee, now);
         fee.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(fee.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -134,9 +134,9 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task UpdateAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(fee, actorId, utcNow);
+        ApplyUpdateAudit(fee, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -148,9 +148,9 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
 
     public async Task UpdateBasicAsync(FeeMasterEntity fee, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(fee, actorId, utcNow);
+        ApplyUpdateAudit(fee, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -222,7 +222,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
         bool allowRemove,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var desired = (classGroupIds ?? [])
             .Where(id => id != Guid.Empty)
             .Distinct()
@@ -270,7 +270,7 @@ public sealed class FeeMasterRepository : BaseRepository, IFeeMasterRepository
                     FeeMasterId = feeMasterId,
                     ClassGroupId = classGroupId,
                 };
-                EnsureInsertAudit(row, utcNow);
+                EnsureInsertAudit(row, now);
                 await InsertAsync(conn, schema, table, row, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);

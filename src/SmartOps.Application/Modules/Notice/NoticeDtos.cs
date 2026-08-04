@@ -10,7 +10,8 @@ public record CreateNoticeRequestDto(
     NoticeTargetType TargetType,
     Guid? TargetRefId,
     NoticeContentType ContentType,
-    NoticeContentPayloadDto? Content);
+    NoticeContentPayloadDto? Content,
+    DateTimeOffset? PublishedOn = null);
 
 public record UpdateNoticeRequestDto(
     string Title,
@@ -20,7 +21,8 @@ public record UpdateNoticeRequestDto(
     NoticeTargetType TargetType,
     Guid? TargetRefId,
     NoticeContentType ContentType,
-    NoticeContentPayloadDto? Content);
+    NoticeContentPayloadDto? Content,
+    DateTimeOffset? PublishedOn = null);
 
 public record NoticeListItemDto(
     Guid Id,
@@ -58,4 +60,5 @@ public record NoticeDetailDto(
     Guid? TargetRefId,
     NoticeContentType ContentType,
     string ContentTypeLabel,
-    NoticeContentPayloadDto? Content);
+    NoticeContentPayloadDto? Content,
+    DateTimeOffset? PublishedOn = null);

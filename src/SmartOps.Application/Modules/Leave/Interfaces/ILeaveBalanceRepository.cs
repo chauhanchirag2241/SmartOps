@@ -74,7 +74,7 @@ public sealed class LeaveLedgerListRow
     public Guid? ReferenceId { get; set; }
     public string? Remark { get; set; }
     public DateOnly TxnDate { get; set; }
-    public DateTimeOffset CreatedOn { get; set; }
+    public DateTime CreatedOn { get; set; }
 }
 
 public sealed class EmployeeUserTypeRow

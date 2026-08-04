@@ -24,7 +24,7 @@ public sealed class LeaveSettingsService : ILeaveSettingsService
         return new StaffLeaveApprovalSettings
         {
             ApprovalMode = GetValue(map, LeaveSettingKeys.StaffApprovalMode, LeaveApprovalModes.AnyOne),
-            ApproverUserTypeCodes = ParseCsv(GetValue(map, LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.OfficeStaff)),
+            ApproverUserTypeCodes = ParseCsv(GetValue(map, LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.Principal)),
         };
     }
 

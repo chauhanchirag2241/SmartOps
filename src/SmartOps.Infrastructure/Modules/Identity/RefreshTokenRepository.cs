@@ -49,8 +49,8 @@ LIMIT 1
             token.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = DateTime.UtcNow;
-        EnsureInsertAudit(token, utcNow, token.UserId);
+        DateTime now = DateTime.UtcNow;
+        EnsureInsertAudit(token, now, token.UserId);
 
         string sql = $"""
 INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRefreshTokens}
@@ -95,7 +95,7 @@ VALUES
             return;
         }
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime now = DateTime.UtcNow;
         Guid actor = CurrentUser.IsAuthenticated && CurrentUser.UserId != Guid.Empty
             ? CurrentUser.UserId
             : existing.UserId;
@@ -118,7 +118,7 @@ WHERE token = @Token AND versionno = @VersionNo AND isactive = true
                 {
                     Token = token,
                     UpdatedBy = actor,
-                    UpdatedOn = utcNow,
+                    UpdatedOn = now,
                     VersionNo = existing.VersionNo
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);

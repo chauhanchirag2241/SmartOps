@@ -84,7 +84,7 @@ public sealed class S150_CreateLeaveBalanceTables : Migration
                 .WithColumn("remark").AsString(int.MaxValue).Nullable()
                 .WithColumn("txndate").AsDate().NotNullable()
                 .WithColumn("createdby").AsGuid().NotNullable().WithDefaultValue(SeedActor)
-                .WithColumn("createdon").AsDateTimeOffset().NotNullable().WithDefault(SystemMethods.CurrentDateTime);
+                .WithColumn("createdon").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentDateTime);
 
             Create.Index("ix_leaveledger_employee_type")
                 .OnTable(DatabaseConfig.TableLeaveLedger).InSchema(S)
@@ -98,7 +98,7 @@ public sealed class S150_CreateLeaveBalanceTables : Migration
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
                 .WithColumn("year").AsInt32().NotNullable()
                 .WithColumn("month").AsInt32().NotNullable()
-                .WithColumn("ranon").AsDateTimeOffset().NotNullable().WithDefault(SystemMethods.CurrentDateTime)
+                .WithColumn("ranon").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentDateTime)
                 .WithColumn("status").AsInt16().NotNullable().WithDefaultValue(0)
                 .WithColumn("employeesscored").AsInt32().NotNullable().WithDefaultValue(0)
                 .WithColumn("errorlog").AsString(int.MaxValue).Nullable();
@@ -135,7 +135,7 @@ public sealed class S150_CreateLeaveBalanceTables : Migration
             }
         }
 
-        DateTimeOffset now = SchoolLocalTime.Now();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Execute.Sql($"""
 INSERT INTO {S}.{DatabaseConfig.TableLeaveTypes}
     (id, code, name, ispaid, requiresbalance, allowhalfday, carryforward, sortorder,

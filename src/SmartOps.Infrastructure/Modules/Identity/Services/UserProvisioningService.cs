@@ -97,7 +97,8 @@ public sealed class UserProvisioningService : BaseRepository, IUserProvisioningS
             Username = username,
             Email = email,
             IsActive = true,
-            LockoutEnabled = true
+            LockoutEnabled = true,
+            MustChangePassword = true
         };
         user.PasswordHash = _passwordHasher.HashPassword(user, DefaultPortalPassword);
         user.SecurityStamp = Guid.NewGuid().ToString("N");

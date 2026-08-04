@@ -186,18 +186,18 @@ public abstract class BaseRepository
         Guid id,
         IDbTransaction? transaction = null)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         var sql = $@"
             UPDATE {schema}.{tableName}
             SET isactive = false,
                 updatedby = @ActorId,
-                updatedon = @UtcNow,
+                updatedon = @Now,
                 versionno = versionno + 1
             WHERE id = @Id AND isactive = true;";
 
-        await connection.ExecuteAsync(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, transaction)
+        await connection.ExecuteAsync(sql, new { Id = id, ActorId = actorId, Now = now }, transaction)
             .ConfigureAwait(false);
 
         // Audit: Deleted (check if the entity type calling this tracks history)
@@ -205,7 +205,7 @@ public abstract class BaseRepository
         // Let's assume SoftDelete is used for main entities and just log it for all.
         await WriteAuditLogInternalAsync(
             connection, schema, tableName, id,
-            "Deleted", actorId, utcNow,
+            "Deleted", actorId, now,
             [new FieldChangeDto { Field = "IsActive", OldValue = "True", NewValue = "False" }],
             transaction)
             .ConfigureAwait(false);
@@ -220,7 +220,7 @@ public abstract class BaseRepository
         Guid foreignKeyId,
         IDbTransaction? transaction = null)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         var fk = foreignKeyColumn.ToLowerInvariant();
@@ -228,11 +228,11 @@ public abstract class BaseRepository
             UPDATE {schema}.{tableName}
             SET isactive = false,
                 updatedby = @ActorId,
-                updatedon = @UtcNow,
+                updatedon = @Now,
                 versionno = versionno + 1
             WHERE {fk} = @Id AND isactive = true;";
 
-        await connection.ExecuteAsync(sql, new { Id = foreignKeyId, ActorId = actorId, UtcNow = utcNow }, transaction)
+        await connection.ExecuteAsync(sql, new { Id = foreignKeyId, ActorId = actorId, Now = now }, transaction)
             .ConfigureAwait(false);
     }
 
@@ -422,7 +422,7 @@ public abstract class BaseRepository
 
     #region Audit
 
-    protected void EnsureInsertAudit(AuditableEntity entity, DateTime utcNow, Guid? fallbackActorId = null)
+    protected void EnsureInsertAudit(AuditableEntity entity, DateTime now, Guid? fallbackActorId = null)
     {
         var actor = ResolveInsertActor(fallbackActorId);
 
@@ -436,8 +436,8 @@ public abstract class BaseRepository
             entity.UpdatedBy = entity.CreatedBy;
         }
 
-        entity.CreatedOn = utcNow;
-        entity.UpdatedOn = utcNow;
+        entity.CreatedOn = now;
+        entity.UpdatedOn = now;
         entity.IsActive = true;
         entity.VersionNo = 1;
     }
@@ -472,10 +472,10 @@ public abstract class BaseRepository
         throw new InvalidOperationException("An actor is required for updates.");
     }
 
-    protected static void ApplyUpdateAudit(AuditableEntity entity, Guid actorId, DateTime utcNow)
+    protected static void ApplyUpdateAudit(AuditableEntity entity, Guid actorId, DateTime now)
     {
         entity.UpdatedBy = actorId;
-        entity.UpdatedOn = utcNow;
+        entity.UpdatedOn = now;
     }
 
     #endregion

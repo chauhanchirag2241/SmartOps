@@ -94,7 +94,7 @@ public sealed class JobDefinitionRepository : BaseRepository, IJobDefinitionRepo
             """;
         int affected = await connection.ExecuteAsync(new CommandDefinition(
             sql,
-            new { IsEnabled = isEnabled, UpdatedBy = updatedBy, UpdatedOn = SchoolLocalTime.Now() },
+            new { IsEnabled = isEnabled, UpdatedBy = updatedBy, UpdatedOn = SchoolLocalTime.NowDateTime() },
             cancellationToken: ct)).ConfigureAwait(false);
 
         if (affected == 0)
@@ -112,7 +112,7 @@ public sealed class JobDefinitionRepository : BaseRepository, IJobDefinitionRepo
                     Id = Guid.NewGuid(),
                     IsEnabled = isEnabled,
                     UpdatedBy = updatedBy,
-                    UpdatedOn = SchoolLocalTime.Now()
+                    UpdatedOn = SchoolLocalTime.NowDateTime()
                 },
                 cancellationToken: ct)).ConfigureAwait(false);
         }

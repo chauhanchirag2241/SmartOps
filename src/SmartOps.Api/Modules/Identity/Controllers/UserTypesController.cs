@@ -20,6 +20,7 @@ public sealed class UserTypesController(IUserTypeRepository userTypeRepository) 
             .ConfigureAwait(false);
 
         IReadOnlyList<UserTypeListItemDto> result = types
+            .Where(t => !UserTypeCodes.IsHiddenFromPortal(t.Id) && !UserTypeCodes.IsHiddenFromPortal(t.Name))
             .Select(t => new UserTypeListItemDto(t.Id, t.Name, t.Name))
             .ToList();
 

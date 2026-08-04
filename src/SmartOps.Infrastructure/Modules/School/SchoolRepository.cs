@@ -109,13 +109,13 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
 
     public async Task<Guid> CreateSchoolAsync(SchoolEntity school, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (school.Id == Guid.Empty)
         {
             school.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(school, utcNow);
+        EnsureInsertAudit(school, now);
 
         string? provisionedDatabaseName = null;
         bool platformRowInserted = false;
@@ -134,7 +134,7 @@ public sealed class SchoolRepository : BaseRepository, ISchoolRepository
                 {
                     branch.Id = branch.Id == Guid.Empty ? Guid.NewGuid() : branch.Id;
                     branch.SchoolId = school.Id;
-                    EnsureInsertAudit(branch, utcNow);
+                    EnsureInsertAudit(branch, now);
                 }
 
                 return school.Id;
@@ -433,11 +433,11 @@ WHERE id = @Id;
 
     {
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
 
         var actorId = ResolveUpdateActor();
 
-        ApplyUpdateAudit(school, actorId, utcNow);
+        ApplyUpdateAudit(school, actorId, now);
 
 
 
@@ -609,7 +609,7 @@ WHERE id = @Id;
                 "School has no dedicated database connection string; branches are stored on the school DB.");
         }
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var branch = new SchoolBranchEntity
         {
             Id = Guid.NewGuid(),
@@ -620,7 +620,7 @@ WHERE id = @Id;
             IsHeadOffice = false,
             IsActive = true,
         };
-        EnsureInsertAudit(branch, utcNow);
+        EnsureInsertAudit(branch, now);
 
         await using NpgsqlConnection connection = (NpgsqlConnection)await _schoolDb
             .OpenAsync(school.ConnectionString, cancellationToken)
@@ -700,12 +700,12 @@ WHERE id = @Id;
         }
 
         var actorId = ResolveUpdateActor();
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         await connection.ExecuteAsync(
             $@"UPDATE {DatabaseConfig.Schema_Man}.{BranchesTable}
                SET isactive = false, updatedon = @UpdatedOn, updatedby = @UpdatedBy, versionno = versionno + 1
                WHERE id = @BranchId AND schoolid = @SchoolId",
-            new { BranchId = branchId, SchoolId = schoolId, UpdatedOn = utcNow, UpdatedBy = actorId })
+            new { BranchId = branchId, SchoolId = schoolId, UpdatedOn = now, UpdatedBy = actorId })
             .ConfigureAwait(false);
 
         return true;

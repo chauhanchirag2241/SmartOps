@@ -19,9 +19,9 @@ public sealed class MonthlyLeaveAccrualJob
 
     public async Task Execute(CancellationToken ct = default)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         // Accrue for the previous calendar month (job typically runs on the 1st).
-        DateTime target = utcNow.AddMonths(-1);
+        DateTime target = now.AddMonths(-1);
         int year = target.Year;
         int month = target.Month;
 

@@ -20,6 +20,6 @@ public sealed class LeaveRequestEntity : AuditableEntity
     public string? Reason { get; set; }
     public LeaveRequestStatus Status { get; set; }
     public Guid? ApprovedByUserId { get; set; }
-    public DateTimeOffset? ApprovedOn { get; set; }
+    public DateTime? ApprovedOn { get; set; }
     public string? ApproverRemark { get; set; }
 }

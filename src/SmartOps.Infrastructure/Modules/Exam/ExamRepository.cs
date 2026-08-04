@@ -116,12 +116,12 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         scale.Id = scale.Id == Guid.Empty ? Guid.NewGuid() : scale.Id;
         scale.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(scale.BranchId, ct).ConfigureAwait(false);
-        EnsureInsertAudit(scale, utcNow, actorId);
+        EnsureInsertAudit(scale, now, actorId);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -137,10 +137,10 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
             if (scale.IsDefault)
             {
-                await ClearOtherDefaultsAsync(conn, tx, scale.Id, scale.BranchId, actorId, utcNow, ct).ConfigureAwait(false);
+                await ClearOtherDefaultsAsync(conn, tx, scale.Id, scale.BranchId, actorId, now, ct).ConfigureAwait(false);
             }
 
-            await InsertGradeScaleDetailsAsync(conn, tx, scale.Id, details, actorId, utcNow, ct).ConfigureAwait(false);
+            await InsertGradeScaleDetailsAsync(conn, tx, scale.Id, details, actorId, now, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         return scale.Id;
@@ -152,9 +152,9 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(scale, actorId, utcNow);
+        ApplyUpdateAudit(scale, actorId, now);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -172,23 +172,23 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
             if (scale.IsDefault)
             {
-                await ClearOtherDefaultsAsync(conn, tx, scale.Id, scale.BranchId, actorId, utcNow, ct).ConfigureAwait(false);
+                await ClearOtherDefaultsAsync(conn, tx, scale.Id, scale.BranchId, actorId, now, ct).ConfigureAwait(false);
             }
 
             // Replace grade rows (dynamic add/remove).
             string deactivateSql = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableExamGradeScaleDetails}
-                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
                 WHERE gradescaleid = @ScaleId AND isactive = true;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     deactivateSql,
-                    new { ScaleId = scale.Id, ActorId = actorId, UtcNow = utcNow },
+                    new { ScaleId = scale.Id, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);
 
-            await InsertGradeScaleDetailsAsync(conn, tx, scale.Id, details, actorId, utcNow, ct).ConfigureAwait(false);
+            await InsertGradeScaleDetailsAsync(conn, tx, scale.Id, details, actorId, now, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
@@ -198,17 +198,17 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         Guid keepId,
         Guid branchId,
         Guid actorId,
-        DateTime utcNow,
+        DateTime now,
         CancellationToken ct)
     {
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamGradeScales}
-            SET isdefault = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isdefault = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id <> @KeepId AND branchid = @BranchId AND isdefault = true AND isactive = true;
             """;
         await conn.ExecuteAsync(new CommandDefinition(
                 sql,
-                new { KeepId = keepId, BranchId = branchId, ActorId = actorId, UtcNow = utcNow },
+                new { KeepId = keepId, BranchId = branchId, ActorId = actorId, Now = now },
                 tx,
                 cancellationToken: ct))
             .ConfigureAwait(false);
@@ -220,14 +220,14 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
         Guid scaleId,
         IList<ExamGradeScaleDetailEntity> details,
         Guid actorId,
-        DateTime utcNow,
+        DateTime now,
         CancellationToken ct)
     {
         foreach (ExamGradeScaleDetailEntity detail in details)
         {
             detail.Id = Guid.NewGuid();
             detail.GradeScaleId = scaleId;
-            EnsureInsertAudit(detail, utcNow, actorId);
+            EnsureInsertAudit(detail, now, actorId);
 
             string sql = $"""
                 INSERT INTO {Schema}.{DatabaseConfig.TableExamGradeScaleDetails}
@@ -244,20 +244,20 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task SoftDeleteGradeScaleAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamGradeScales}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableExamGradeScaleDetails}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE gradescaleid = @Id;
             """;
 
         await connection.ExecuteAsync(
-                new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, cancellationToken: ct))
+                new CommandDefinition(sql, new { Id = id, ActorId = actorId, Now = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -362,12 +362,12 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task<Guid> CreateGroupAsync(ExamGroupEntity group, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         group.Id = group.Id == Guid.Empty ? Guid.NewGuid() : group.Id;
         group.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(group.BranchId, ct).ConfigureAwait(false);
-        EnsureInsertAudit(group, utcNow, actorId);
+        EnsureInsertAudit(group, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableExamGroups}
@@ -405,7 +405,7 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
     public async Task SoftDeleteGroupAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -421,12 +421,12 @@ public sealed class ExamRepository : BaseRepository, IExamRepository
 
             string sql = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableExamGroups}
-                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
                 WHERE id = @Id;
                 """;
 
             await conn.ExecuteAsync(
-                    new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, tx, cancellationToken: ct))
+                    new CommandDefinition(sql, new { Id = id, ActorId = actorId, Now = now }, tx, cancellationToken: ct))
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
@@ -521,7 +521,7 @@ WHERE c.id = ANY(@ClassIds)
         bool allowRemove,
         CancellationToken ct = default)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         List<Guid> desired = (classGroupIds ?? [])
             .Where(id => id != Guid.Empty)
             .Distinct()
@@ -569,7 +569,7 @@ WHERE c.id = ANY(@ClassIds)
                     ExamGroupId = examGroupId,
                     ClassGroupId = classGroupId,
                 };
-                EnsureInsertAudit(row, utcNow);
+                EnsureInsertAudit(row, now);
                 await InsertAsync(conn, Schema, table, row, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
@@ -791,12 +791,12 @@ WHERE c.id = ANY(@ClassIds)
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         exam.Id = exam.Id == Guid.Empty ? Guid.NewGuid() : exam.Id;
         exam.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(exam.BranchId, ct).ConfigureAwait(false);
-        EnsureInsertAudit(exam, utcNow, actorId);
+        EnsureInsertAudit(exam, now, actorId);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -812,8 +812,8 @@ WHERE c.id = ANY(@ClassIds)
                 """;
             await conn.ExecuteAsync(new CommandDefinition(sql, exam, tx, cancellationToken: ct)).ConfigureAwait(false);
 
-            await InsertExamClassesAsync(conn, tx, exam.Id, classIds, actorId, utcNow, ct).ConfigureAwait(false);
-            await InsertComponentsAsync(conn, tx, exam.Id, components, actorId, utcNow, ct).ConfigureAwait(false);
+            await InsertExamClassesAsync(conn, tx, exam.Id, classIds, actorId, now, ct).ConfigureAwait(false);
+            await InsertComponentsAsync(conn, tx, exam.Id, components, actorId, now, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         return exam.Id;
@@ -826,9 +826,9 @@ WHERE c.id = ANY(@ClassIds)
         CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(exam, actorId, utcNow);
+        ApplyUpdateAudit(exam, actorId, now);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -850,30 +850,30 @@ WHERE c.id = ANY(@ClassIds)
 
             string deactivateClasses = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableExamClasses}
-                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
                 WHERE examid = @ExamId AND isactive = true;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     deactivateClasses,
-                    new { ExamId = exam.Id, ActorId = actorId, UtcNow = utcNow },
+                    new { ExamId = exam.Id, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);
 
             string deactivateComponents = $"""
                 UPDATE {Schema}.{DatabaseConfig.TableExamMarkComponents}
-                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
                 WHERE examid = @ExamId AND isactive = true;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     deactivateComponents,
-                    new { ExamId = exam.Id, ActorId = actorId, UtcNow = utcNow },
+                    new { ExamId = exam.Id, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);
 
-            await InsertExamClassesAsync(conn, tx, exam.Id, classIds, actorId, utcNow, ct).ConfigureAwait(false);
-            await InsertComponentsAsync(conn, tx, exam.Id, components, actorId, utcNow, ct).ConfigureAwait(false);
+            await InsertExamClassesAsync(conn, tx, exam.Id, classIds, actorId, now, ct).ConfigureAwait(false);
+            await InsertComponentsAsync(conn, tx, exam.Id, components, actorId, now, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
@@ -883,7 +883,7 @@ WHERE c.id = ANY(@ClassIds)
         Guid examId,
         IList<Guid> classIds,
         Guid actorId,
-        DateTime utcNow,
+        DateTime now,
         CancellationToken ct)
     {
         foreach (Guid classId in classIds.Distinct())
@@ -893,14 +893,14 @@ WHERE c.id = ANY(@ClassIds)
                 INSERT INTO {Schema}.{DatabaseConfig.TableExamClasses}
                     (id, examid, classid, isactive, versionno, createdby, createdon, updatedby, updatedon)
                 VALUES
-                    (gen_random_uuid(), @ExamId, @ClassId, true, 1, @ActorId, @UtcNow, @ActorId, @UtcNow)
+                    (gen_random_uuid(), @ExamId, @ClassId, true, 1, @ActorId, @Now, @ActorId, @Now)
                 ON CONFLICT ON CONSTRAINT uq_examclasses_exam_class
-                DO UPDATE SET isactive = true, updatedby = @ActorId, updatedon = @UtcNow,
+                DO UPDATE SET isactive = true, updatedby = @ActorId, updatedon = @Now,
                               versionno = {DatabaseConfig.TableExamClasses}.versionno + 1;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     sql,
-                    new { ExamId = examId, ClassId = classId, ActorId = actorId, UtcNow = utcNow },
+                    new { ExamId = examId, ClassId = classId, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);
@@ -913,14 +913,14 @@ WHERE c.id = ANY(@ClassIds)
         Guid examId,
         IList<ExamMarkComponentEntity> components,
         Guid actorId,
-        DateTime utcNow,
+        DateTime now,
         CancellationToken ct)
     {
         foreach (ExamMarkComponentEntity component in components)
         {
             component.Id = component.Id == Guid.Empty ? Guid.NewGuid() : component.Id;
             component.ExamId = examId;
-            EnsureInsertAudit(component, utcNow, actorId);
+            EnsureInsertAudit(component, now, actorId);
 
             string sql = $"""
                 INSERT INTO {Schema}.{DatabaseConfig.TableExamMarkComponents}
@@ -942,26 +942,26 @@ WHERE c.id = ANY(@ClassIds)
     public async Task SoftDeleteExamAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExams}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableExamClasses}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE examid = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableExamMarkComponents}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE examid = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableExamSchedules}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE examid = @Id;
             """;
 
         await connection.ExecuteAsync(
-                new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, cancellationToken: ct))
+                new CommandDefinition(sql, new { Id = id, ActorId = actorId, Now = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -971,13 +971,13 @@ WHERE c.id = ANY(@ClassIds)
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExams}
-            SET status = @Status, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET status = @Status, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id = @Id AND isactive = true;
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(
                 sql,
-                new { Id = id, Status = (short)status, ActorId = ResolveUpdateActor(), UtcNow = SchoolLocalTime.NowDateTime() },
+                new { Id = id, Status = (short)status, ActorId = ResolveUpdateActor(), Now = SchoolLocalTime.NowDateTime() },
                 cancellationToken: ct))
             .ConfigureAwait(false);
     }
@@ -1100,11 +1100,11 @@ WHERE c.id = ANY(@ClassIds)
     public async Task<Guid> CreateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         schedule.Id = schedule.Id == Guid.Empty ? Guid.NewGuid() : schedule.Id;
-        EnsureInsertAudit(schedule, utcNow, actorId);
+        EnsureInsertAudit(schedule, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableExamSchedules}
@@ -1127,13 +1127,13 @@ WHERE c.id = ANY(@ClassIds)
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         foreach (ExamScheduleEntity schedule in schedules)
         {
             schedule.Id = schedule.Id == Guid.Empty ? Guid.NewGuid() : schedule.Id;
-            EnsureInsertAudit(schedule, utcNow, actorId);
+            EnsureInsertAudit(schedule, now, actorId);
         }
 
         string sql = $"""
@@ -1174,20 +1174,20 @@ WHERE c.id = ANY(@ClassIds)
     public async Task SoftDeleteScheduleAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableExamSchedules}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableExamStudentMarks}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE examscheduleid = @Id;
             """;
 
         await connection.ExecuteAsync(
-                new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, cancellationToken: ct))
+                new CommandDefinition(sql, new { Id = id, ActorId = actorId, Now = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 

@@ -35,7 +35,7 @@ public sealed class G038_CreateJobMasterAndLeaveMenus : Migration
                 .WithColumn("id").AsGuid().PrimaryKey().NotNullable()
                 .WithColumn("isenabled").AsBoolean().NotNullable().WithDefaultValue(true)
                 .WithColumn("updatedby").AsGuid().NotNullable().WithDefaultValue(SeedActor)
-                .WithColumn("updatedon").AsDateTimeOffset().NotNullable().WithDefault(SystemMethods.CurrentDateTime);
+                .WithColumn("updatedon").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentDateTime);
         }
 
         if (!Schema.Schema(g).Table(DatabaseConfig.TableJobDefinitions).Exists())

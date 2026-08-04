@@ -119,13 +119,13 @@ LIMIT 1;
 INSERT INTO {man}.{DatabaseConfig.TableUsers}
 (
     id, firstname, lastname, mobile, usertypeid, username, email, passwordhash, securitystamp,
-    lockoutend, accessfailedcount, lockoutenabled,
+    lockoutend, accessfailedcount, lockoutenabled, mustchangepassword,
     isactive, versionno, createdby, createdon, updatedby, updatedon
 )
 VALUES
 (
     @Id, @FirstName, @LastName, NULL, @UserTypeId, @Username, @Email, @PasswordHash, @SecurityStamp,
-    NULL, 0, true,
+    NULL, 0, true, true,
     true, 1, @Actor, @Now, @Actor, @Now
 );
 """,

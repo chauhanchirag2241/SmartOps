@@ -154,7 +154,7 @@ public sealed class LeaveBalanceRepository : BaseRepository, ILeaveBalanceReposi
                 Id = runId,
                 Year = year,
                 Month = month,
-                RanOn = SchoolLocalTime.Now(),
+                RanOn = SchoolLocalTime.NowDateTime(),
                 Status = (short)LeaveAccrualRunStatus.Running
             },
             cancellationToken: ct)).ConfigureAwait(false);
@@ -185,7 +185,7 @@ public sealed class LeaveBalanceRepository : BaseRepository, ILeaveBalanceReposi
                 Status = (short)status,
                 EmployeesScored = employeesScored,
                 ErrorLog = errorLog,
-                RanOn = SchoolLocalTime.Now()
+                RanOn = SchoolLocalTime.NowDateTime()
             },
             cancellationToken: ct)).ConfigureAwait(false);
     }
@@ -282,7 +282,7 @@ public sealed class LeaveBalanceRepository : BaseRepository, ILeaveBalanceReposi
                 Remark = remark,
                 TxnDate = txnDate,
                 CreatedBy = actorId,
-                CreatedOn = SchoolLocalTime.Now()
+                CreatedOn = SchoolLocalTime.NowDateTime()
             };
             await InsertLedgerInternalAsync(conn, schema, ledger, tx, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -390,7 +390,7 @@ public sealed class LeaveBalanceRepository : BaseRepository, ILeaveBalanceReposi
                 entity.Remark,
                 entity.TxnDate,
                 entity.CreatedBy,
-                entity.CreatedOn
+                CreatedOn = entity.CreatedOn == default ? SchoolLocalTime.NowDateTime() : entity.CreatedOn
             },
             transaction: tx,
             cancellationToken: ct)).ConfigureAwait(false);

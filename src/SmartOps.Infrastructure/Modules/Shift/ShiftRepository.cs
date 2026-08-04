@@ -30,13 +30,13 @@ public sealed class ShiftRepository : BaseRepository, IShiftRepository
 
     public async Task<Guid> CreateAsync(ShiftEntity shift, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (shift.Id == Guid.Empty)
         {
             shift.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(shift, utcNow);
+        EnsureInsertAudit(shift, now);
         shift.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(shift.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -158,9 +158,9 @@ public sealed class ShiftRepository : BaseRepository, IShiftRepository
 
     public async Task UpdateAsync(ShiftEntity shift, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(shift, actorId, utcNow);
+        ApplyUpdateAudit(shift, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>

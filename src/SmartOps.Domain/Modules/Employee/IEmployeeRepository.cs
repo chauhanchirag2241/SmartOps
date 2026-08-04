@@ -25,6 +25,11 @@ public interface IEmployeeRepository
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DropdownDto>> GetClassTeacherDropdownAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DropdownDto>> GetReportingManagerDropdownAsync(CancellationToken cancellationToken = default);
+    Task<bool> EmployeeCodeExistsAsync(
+        string employeeCode,
+        Guid branchId,
+        Guid? excludingEmployeeId = null,
+        CancellationToken cancellationToken = default);
     Task UpdateEmployeeAsync(EmployeeEntity employee, CancellationToken cancellationToken = default);
     Task SetEmployeeUserIdAsync(Guid employeeId, Guid userId, CancellationToken cancellationToken = default);
     Task DeleteEmployeeAsync(Guid id, CancellationToken cancellationToken = default);

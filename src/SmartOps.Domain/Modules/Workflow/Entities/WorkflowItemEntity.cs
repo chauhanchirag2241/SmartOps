@@ -17,6 +17,6 @@ public sealed class WorkflowItemEntity : AuditableEntity
     public int Priority { get; set; }
     public string? PayloadJson { get; set; }
     public Guid? CompletedByUserId { get; set; }
-    public DateTimeOffset? CompletedOn { get; set; }
+    public DateTime? CompletedOn { get; set; }
     public string? Outcome { get; set; }
 }

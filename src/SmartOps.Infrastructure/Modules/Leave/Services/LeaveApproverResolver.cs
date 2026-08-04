@@ -31,7 +31,7 @@ public sealed class LeaveApproverResolver : ILeaveApproverResolver
         {
             StaffLeaveApprovalSettings staff = await _settings.GetStaffSettingsAsync(schoolId, ct).ConfigureAwait(false);
 
-            // Priority: Reporting Manager → Settings-based approvers → School Admin fallback
+            // Priority: Reporting Manager → Principal → School Admin fallback
             IList<Guid> assignees = [];
             if (leave.EmployeeId.HasValue)
             {
@@ -43,10 +43,10 @@ public sealed class LeaveApproverResolver : ILeaveApproverResolver
                 }
             }
 
-            // Fallback to settings-based approver user types if no reporting manager
+            // No reporting manager → Principal user type only (not Office Staff / settings chips)
             if (assignees.Count == 0)
             {
-                assignees = await ResolveUserTypeCodesAsync(schoolId, staff.ApproverUserTypeCodes, ct)
+                assignees = await ResolveUserTypeCodesAsync(schoolId, [UserTypeCodes.Principal], ct)
                     .ConfigureAwait(false);
             }
 

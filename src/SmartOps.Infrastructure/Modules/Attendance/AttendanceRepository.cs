@@ -253,11 +253,11 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         AttendanceEntity attendance,
         CancellationToken ct)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         attendance.Id = attendance.Id == Guid.Empty ? Guid.NewGuid() : attendance.Id;
-        EnsureInsertAudit(attendance, utcNow, actorId);
+        EnsureInsertAudit(attendance, now, actorId);
 
         string sql = $"""
             INSERT INTO {AttendanceSchema}.{DatabaseConfig.TableAttendance}
@@ -284,7 +284,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
         AttendanceEntity attendance,
         CancellationToken ct)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
@@ -309,7 +309,7 @@ public sealed class AttendanceRepository : BaseRepository, IAttendanceRepository
                     attendance.Remarks,
                     attendance.MarkedBy,
                     UpdatedBy = actorId,
-                    UpdatedOn = utcNow
+                    UpdatedOn = now
                 },
                 transaction,
                 cancellationToken: ct))

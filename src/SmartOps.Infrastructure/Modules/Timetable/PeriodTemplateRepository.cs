@@ -35,9 +35,9 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
         IReadOnlyList<PeriodEntity> periods,
         CancellationToken cancellationToken)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (template.Id == Guid.Empty) template.Id = Guid.NewGuid();
-        EnsureInsertAudit(template, utcNow);
+        EnsureInsertAudit(template, now);
         template.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(template.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -50,7 +50,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
             {
                 if (period.Id == Guid.Empty) period.Id = Guid.NewGuid();
                 period.TemplateId = template.Id;
-                EnsureInsertAudit(period, utcNow);
+                EnsureInsertAudit(period, now);
                 await InsertAsync(conn, Schema, DatabaseConfig.TablePeriods, period, tx).ConfigureAwait(false);
             }
 
@@ -63,9 +63,9 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
         IReadOnlyList<PeriodEntity> periods,
         CancellationToken cancellationToken)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actor = ResolveUpdateActor();
-        ApplyUpdateAudit(template, actor, utcNow);
+        ApplyUpdateAudit(template, actor, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -80,7 +80,7 @@ public sealed class PeriodTemplateRepository : BaseRepository, IPeriodTemplateRe
             {
                 if (period.Id == Guid.Empty) period.Id = Guid.NewGuid();
                 period.TemplateId = template.Id;
-                EnsureInsertAudit(period, utcNow);
+                EnsureInsertAudit(period, now);
                 await InsertAsync(conn, Schema, DatabaseConfig.TablePeriods, period, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);

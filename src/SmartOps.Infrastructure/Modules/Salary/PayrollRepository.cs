@@ -85,11 +85,11 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task<Guid> CreateRunAsync(PayrollRunEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
         entity.BranchId = await _branchWrite.ResolveWriteBranchIdAsync(entity.BranchId, ct).ConfigureAwait(false);
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TablePayrollRuns}
@@ -235,10 +235,10 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     public async Task<Guid> CreateEntryAsync(PayrollEntryEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TablePayrollEntries}
@@ -263,13 +263,13 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         foreach (PayrollEntryLineEntity line in lineList)
         {
             line.Id = line.Id == Guid.Empty ? Guid.NewGuid() : line.Id;
-            EnsureInsertAudit(line, utcNow, actorId);
+            EnsureInsertAudit(line, now, actorId);
         }
 
         string sql = $"""
@@ -287,7 +287,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TablePayrollEntries}
             SET status = @Status, updatedby = @UpdatedBy, updatedon = @UpdatedOn, versionno = versionno + 1
@@ -295,7 +295,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
             """;
         await connection.ExecuteAsync(new CommandDefinition(
             sql,
-            new { Id = entryId, Status = (short)status, UpdatedBy = actorId, UpdatedOn = utcNow },
+            new { Id = entryId, Status = (short)status, UpdatedBy = actorId, UpdatedOn = now },
             cancellationToken: ct)).ConfigureAwait(false);
     }
 
@@ -303,7 +303,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actorId = ResolveInsertActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         IList<Guid> ids = entryIds?.ToList() ?? [];
 
         string sql = ids.Count > 0
@@ -326,7 +326,7 @@ public sealed class PayrollRepository : BaseRepository, IPayrollRepository
                 EntryIds = ids.ToArray(),
                 PaidStatus = (short)PayrollEntryStatus.Paid,
                 UpdatedBy = actorId,
-                UpdatedOn = utcNow
+                UpdatedOn = now
             },
             cancellationToken: ct)).ConfigureAwait(false);
     }

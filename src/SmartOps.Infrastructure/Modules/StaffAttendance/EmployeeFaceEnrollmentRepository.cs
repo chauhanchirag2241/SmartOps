@@ -68,7 +68,7 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
     public async Task UpsertAsync(EmployeeFaceEnrollmentEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -78,19 +78,19 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
                 UPDATE {Schema}.{DatabaseConfig.TableEmployeeFaceEnrollments}
                 SET isactive = false,
                     updatedby = @ActorId,
-                    updatedon = @UtcNow,
+                    updatedon = @Now,
                     versionno = versionno + 1
                 WHERE employeeid = @EmployeeId AND isactive = true;
                 """;
 
             await conn.ExecuteAsync(new CommandDefinition(
                 deactivateSql,
-                new { EmployeeId = entity.EmployeeId, ActorId = actorId, UtcNow = utcNow },
+                new { EmployeeId = entity.EmployeeId, ActorId = actorId, Now = now },
                 transaction: tx,
                 cancellationToken: ct)).ConfigureAwait(false);
 
             entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-            EnsureInsertAudit(entity, utcNow, actorId);
+            EnsureInsertAudit(entity, now, actorId);
 
             string insertSql = $"""
                 INSERT INTO {Schema}.{DatabaseConfig.TableEmployeeFaceEnrollments}
@@ -121,14 +121,14 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
     public async Task DeactivateAsync(Guid employeeId, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableEmployeeFaceEnrollments}
             SET isactive = false,
                 updatedby = @ActorId,
-                updatedon = @UtcNow,
+                updatedon = @Now,
                 versionno = versionno + 1
             WHERE employeeid = @EmployeeId AND isactive = true;
             """;
@@ -137,7 +137,7 @@ public sealed class EmployeeFaceEnrollmentRepository : BaseRepository, IEmployee
         {
             EmployeeId = employeeId,
             ActorId = actorId,
-            UtcNow = utcNow
+            Now = now
         }, cancellationToken: ct)).ConfigureAwait(false);
     }
 }

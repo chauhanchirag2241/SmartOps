@@ -71,8 +71,8 @@ LIMIT 1
             role.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
-        EnsureInsertAudit(role, utcNow);
+        DateTime now = SchoolLocalTime.NowDateTime();
+        EnsureInsertAudit(role, now);
 
         string sql = $"""
 INSERT INTO {IdentitySchema}.{DatabaseConfig.TableRoles}
@@ -107,7 +107,7 @@ VALUES
 
     public async Task UpdateAsync(ApplicationRole role, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor();
 
         string sql = $"""
@@ -133,7 +133,7 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
                     role.Description,
                     role.IsActive,
                     UpdatedBy = actor,
-                    UpdatedOn = utcNow,
+                    UpdatedOn = now,
                     VersionNo = role.VersionNo
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -145,7 +145,7 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
 
         role.VersionNo += 1;
         role.UpdatedBy = actor;
-        role.UpdatedOn = utcNow;
+        role.UpdatedOn = now;
     }
 
     public async Task<IReadOnlyList<ApplicationRole>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -183,7 +183,8 @@ SELECT
     m.code AS MenuCode,
     m.name AS MenuName,
     m.parentmenuid AS ParentMenuId,
-    m.displayorder AS DisplayOrder
+    m.displayorder AS DisplayOrder,
+    m.application AS Application
 FROM {CatalogSchema}.{DatabaseConfig.TableMenus} m
 WHERE m.isactive = true
 ORDER BY m.displayorder, m.name
@@ -233,7 +234,7 @@ WHERE roleid = @RoleId AND isactive = true
         }
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         string menusSql = $"""
@@ -301,7 +302,7 @@ DO UPDATE SET
                             permission.CanDelete,
                             permission.CanExport,
                             Actor = actor,
-                            Now = utcNow
+                            Now = now
                         },
                         transaction: transaction,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);

@@ -58,7 +58,7 @@ WHERE roleid = @RoleId AND isactive = true
         }
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         IDbConnection catalog = await Context.GetGlobalDatabaseConnectionAsync(cancellationToken).ConfigureAwait(false);
         string widgetsSql = $"""
@@ -104,7 +104,7 @@ DO UPDATE SET
                             WidgetId = widgetId,
                             permission.CanView,
                             Actor = actor,
-                            Now = utcNow
+                            Now = now
                         },
                         transaction: transaction,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);

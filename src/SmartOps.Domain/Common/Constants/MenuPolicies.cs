@@ -122,6 +122,15 @@ public static class MenuPolicies
         public const string Export = "Menu:STUDENT_BULK_IMPORT:Export";
     }
 
+    public static class EmployeeBulkImport
+    {
+        public const string View = "Menu:EMPLOYEE_BULK_IMPORT:View";
+        public const string Add = "Menu:EMPLOYEE_BULK_IMPORT:Add";
+        public const string Edit = "Menu:EMPLOYEE_BULK_IMPORT:Edit";
+        public const string Delete = "Menu:EMPLOYEE_BULK_IMPORT:Delete";
+        public const string Export = "Menu:EMPLOYEE_BULK_IMPORT:Export";
+    }
+
     public static class Employees
     {
         public const string View = "Menu:EMPLOYEES:View";

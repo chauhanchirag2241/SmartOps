@@ -85,7 +85,7 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         string schema = Context.OperationalSchema;
         string table = DatabaseConfig.TableClassAcademicPeriods;
@@ -138,7 +138,7 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                         classId,
                         TempIndexOffset + i + 1,
                         $"__park_{current.Id:N}");
-                    ApplyUpdateAudit(parked, actorId, utcNow);
+                    ApplyUpdateAudit(parked, actorId, now);
                     await UpdateAsync(conn, schema, table, parked, tx, "Id").ConfigureAwait(false);
                     current.VersionNo = parked.VersionNo;
                 }
@@ -158,14 +158,14 @@ public sealed class AcademicPeriodRepository : BaseRepository, IAcademicPeriodRe
                     classId,
                     incoming.PeriodIndex,
                     incoming.Name);
-                ApplyUpdateAudit(final, actorId, utcNow);
+                ApplyUpdateAudit(final, actorId, now);
                 await UpdateAsync(conn, schema, table, final, tx, "Id").ConfigureAwait(false);
             }
 
             foreach (ClassAcademicPeriodEntity incoming in inserts)
             {
                 incoming.Id = Guid.NewGuid();
-                EnsureInsertAudit(incoming, utcNow, actorId);
+                EnsureInsertAudit(incoming, now, actorId);
                 await InsertAsync(conn, schema, table, incoming, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);

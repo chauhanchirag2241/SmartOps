@@ -18,11 +18,18 @@ public sealed class MenusController(
     [HttpGet("all")]
     [Authorize(Policy = MenuPolicies.Roles.View)]
     [ProducesResponseType(typeof(IReadOnlyList<RoleMenuPermissionDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<RoleMenuPermissionDto>>> GetAllMenus(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<RoleMenuPermissionDto>>> GetAllMenus(
+        [FromQuery] string? app,
+        CancellationToken cancellationToken)
     {
-        IReadOnlyList<RoleMenuPermissionDto> menus = await menuRepository
-            .GetAllMenuTemplatesAsync(cancellationToken)
-            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(app) && !MenuApplications.IsValid(app))
+        {
+            return BadRequest("Query parameter 'app' must be CONFIG, SCHOOL, or COMMON.");
+        }
+
+        IReadOnlyList<RoleMenuPermissionDto> menus = string.IsNullOrWhiteSpace(app)
+            ? await menuRepository.GetAllMenuTemplatesAsync(cancellationToken).ConfigureAwait(false)
+            : await menuRepository.GetAllMenuTemplatesAsync(app.Trim(), cancellationToken).ConfigureAwait(false);
         return Ok(menus);
     }
 

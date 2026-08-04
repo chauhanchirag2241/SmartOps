@@ -157,13 +157,13 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
         IReadOnlyList<FeeHeadPeriodAmountEntity> periodAmounts,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (head.Id == Guid.Empty)
         {
             head.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(head, utcNow);
+        EnsureInsertAudit(head, now);
         head.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(head.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -182,7 +182,7 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
                 }
 
                 period.FeeHeadId = head.Id;
-                EnsureInsertAudit(period, utcNow);
+                EnsureInsertAudit(period, now);
                 await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableFeeHeadPeriodAmount, period, tx)
                     .ConfigureAwait(false);
             }
@@ -196,9 +196,9 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
         IReadOnlyList<FeeHeadPeriodAmountEntity> periodAmounts,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(head, actorId, utcNow);
+        ApplyUpdateAudit(head, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -223,7 +223,7 @@ public sealed class FeeHeadRepository : BaseRepository, IFeeHeadRepository
                 }
 
                 period.FeeHeadId = head.Id;
-                EnsureInsertAudit(period, utcNow);
+                EnsureInsertAudit(period, now);
                 await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableFeeHeadPeriodAmount, period, tx)
                     .ConfigureAwait(false);
             }

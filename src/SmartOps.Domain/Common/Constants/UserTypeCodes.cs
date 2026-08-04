@@ -57,6 +57,16 @@ public static class UserTypeCodes
         || string.Equals(name, FrontOfficeExecutive, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, Principal, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Platform-only type for SmartOpsAdmin — never listed in school portal dropdowns.
+    /// </summary>
+    public static bool IsHiddenFromPortal(string? name) =>
+        string.Equals(name?.Trim(), Admin, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc cref="IsHiddenFromPortal(string?)"/>
+    public static bool IsHiddenFromPortal(Guid userTypeId) =>
+        userTypeId == Ids.Admin;
+
     public static bool IsGlobalScope(string? name) =>
         !string.IsNullOrWhiteSpace(name) && GlobalScopeTypes.Contains(name);
 

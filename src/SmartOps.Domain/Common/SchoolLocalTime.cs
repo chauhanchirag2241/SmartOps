@@ -19,6 +19,15 @@ public static class SchoolLocalTime
     }
 
     /// <summary>
+    /// Npgsql timestamptz only accepts offset 0 — normalize before writing DateTimeOffset parameters.
+    /// </summary>
+    public static DateTimeOffset AsUtc(DateTimeOffset value) => value.ToUniversalTime();
+
+    /// <inheritdoc cref="AsUtc(DateTimeOffset)"/>
+    public static DateTimeOffset? AsUtc(DateTimeOffset? value) =>
+        value.HasValue ? value.Value.ToUniversalTime() : null;
+
+    /// <summary>
     /// Current school local wall-clock as <see cref="DateTime"/> (Kind = Unspecified) for DB columns typed as timestamp without time zone.
     /// </summary>
     public static DateTime NowDateTime(string? timeZoneId = null)

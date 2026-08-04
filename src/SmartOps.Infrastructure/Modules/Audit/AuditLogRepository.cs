@@ -86,6 +86,9 @@ public sealed class AuditLogRepository : IAuditLogRepository
                 };
             }).ToList();
 
+            items = await EnrichUserIdFieldValuesAsync(connection, items, globalSchema, usersTable)
+                .ConfigureAwait(false);
+
             return new PagedResult<AuditLogListItemDto>
             {
                 Items = items,
@@ -156,6 +159,125 @@ public sealed class AuditLogRepository : IAuditLogRepository
         }
     }
 
+    /// <summary>
+    /// Replaces UserId GUID values in field changes with username (fallback email).
+    /// </summary>
+    private static async Task<List<AuditLogListItemDto>> EnrichUserIdFieldValuesAsync(
+        System.Data.IDbConnection connection,
+        List<AuditLogListItemDto> items,
+        string identitySchema,
+        string usersTable)
+    {
+        var userIds = new HashSet<Guid>();
+        foreach (var item in items)
+        {
+            foreach (var change in item.Changes)
+            {
+                if (!IsUserIdField(change.Field))
+                {
+                    continue;
+                }
+
+                TryCollectGuid(change.OldValue, userIds);
+                TryCollectGuid(change.NewValue, userIds);
+            }
+        }
+
+        if (userIds.Count == 0)
+        {
+            return items;
+        }
+
+        var sql = $"""
+            SELECT
+                id AS Id,
+                COALESCE(
+                    NULLIF(TRIM(username), ''),
+                    NULLIF(TRIM(email), ''),
+                    id::text
+                ) AS DisplayName
+            FROM {identitySchema}.{usersTable}
+            WHERE id = ANY(@Ids);
+            """;
+
+        var rows = await connection.QueryAsync<UserDisplayRow>(
+                sql,
+                new { Ids = userIds.ToArray() })
+            .ConfigureAwait(false);
+
+        var names = rows.ToDictionary(
+            r => r.Id,
+            r => r.DisplayName,
+            EqualityComparer<Guid>.Default);
+
+        return items.Select(item => new AuditLogListItemDto
+        {
+            Id = item.Id,
+            Action = item.Action,
+            ChangedBy = item.ChangedBy,
+            ChangedByName = item.ChangedByName,
+            ChangedOn = item.ChangedOn,
+            Changes = MapUserIdChanges(item.Changes, names)
+        }).ToList();
+    }
+
+    private static IReadOnlyList<FieldChangeDto> MapUserIdChanges(
+        IReadOnlyList<FieldChangeDto> changes,
+        IReadOnlyDictionary<Guid, string> userNames)
+    {
+        if (changes.Count == 0 || userNames.Count == 0)
+        {
+            return changes;
+        }
+
+        List<FieldChangeDto> mapped = new(changes.Count);
+        foreach (var change in changes)
+        {
+            if (!IsUserIdField(change.Field))
+            {
+                mapped.Add(change);
+                continue;
+            }
+
+            mapped.Add(new FieldChangeDto
+            {
+                Field = change.Field,
+                OldValue = ResolveUserDisplay(change.OldValue, userNames),
+                NewValue = ResolveUserDisplay(change.NewValue, userNames)
+            });
+        }
+
+        return mapped;
+    }
+
+    private static bool IsUserIdField(string? field) =>
+        string.Equals(field?.Trim(), "UserId", StringComparison.OrdinalIgnoreCase);
+
+    private static void TryCollectGuid(string? raw, ISet<Guid> target)
+    {
+        if (Guid.TryParse(raw?.Trim(), out Guid id) && id != Guid.Empty)
+        {
+            target.Add(id);
+        }
+    }
+
+    private static string? ResolveUserDisplay(string? raw, IReadOnlyDictionary<Guid, string> userNames)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return raw;
+        }
+
+        if (Guid.TryParse(raw.Trim(), out Guid id) &&
+            userNames.TryGetValue(id, out string? name) &&
+            !string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        return raw;
+    }
+
     private sealed class AuditLogRaw
     {
         public Guid Id { get; init; }
@@ -164,5 +286,11 @@ public sealed class AuditLogRepository : IAuditLogRepository
         public string ChangedByName { get; init; } = string.Empty;
         public DateTime ChangedOn { get; init; }
         public string? ChangesJson { get; init; }
+    }
+
+    private sealed class UserDisplayRow
+    {
+        public Guid Id { get; init; }
+        public string DisplayName { get; init; } = string.Empty;
     }
 }

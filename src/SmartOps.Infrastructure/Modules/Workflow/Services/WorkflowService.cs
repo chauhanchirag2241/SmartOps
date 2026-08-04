@@ -339,7 +339,7 @@ public sealed class WorkflowService : IWorkflowService
 
         entity.Status = LeaveRequestStatus.Approved;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = SchoolLocalTime.Now();
+        entity.ApprovedOn = SchoolLocalTime.NowDateTime();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
 
@@ -379,7 +379,7 @@ public sealed class WorkflowService : IWorkflowService
 
         entity.Status = LeaveRequestStatus.Rejected;
         entity.ApprovedByUserId = userId;
-        entity.ApprovedOn = SchoolLocalTime.Now();
+        entity.ApprovedOn = SchoolLocalTime.NowDateTime();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
         await _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveId, ct)
@@ -400,7 +400,7 @@ public sealed class WorkflowService : IWorkflowService
     {
         item.Status = WorkflowItemStatus.Completed;
         item.CompletedByUserId = userId;
-        item.CompletedOn = SchoolLocalTime.Now();
+        item.CompletedOn = SchoolLocalTime.NowDateTime();
         item.Outcome = outcome;
         await _workflowRepo.UpdateItemAsync(item, ct).ConfigureAwait(false);
         await _workflowRepo.InsertActionAsync(item.Id, outcome, comment, userId, null, ct).ConfigureAwait(false);
@@ -414,7 +414,10 @@ public sealed class WorkflowService : IWorkflowService
         CancellationToken ct)
     {
         NoticeEntity? notice = await _noticeRepo.GetByIdAsync(item.ReferenceId, ct).ConfigureAwait(false);
-        if (notice is null || notice.Status != NoticeStatus.Published)
+        if (notice is null
+            || notice.Status != NoticeStatus.Published
+            || !notice.PublishedOn.HasValue
+            || notice.PublishedOn.Value > DateTimeOffset.UtcNow)
         {
             return Result<MyActionDetailDto>.Failure("Notice not found or not published.");
         }
@@ -480,7 +483,8 @@ public sealed class WorkflowService : IWorkflowService
         n.TargetRefId,
         n.ContentType,
         n.ContentType.ToString(),
-        NoticeContentSerializer.Deserialize(n.ContentJson));
+        NoticeContentSerializer.Deserialize(n.ContentJson),
+        n.PublishedOn);
 
     private Guid RequireUserId()
     {

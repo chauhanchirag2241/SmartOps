@@ -47,7 +47,7 @@ public sealed class SchoolDatabaseSeedService
     {
         string g = DatabaseConfig.Schema_Global;
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         List<Guid> menuIds = (await platform.QueryAsync<Guid>(
             new CommandDefinition(
@@ -88,7 +88,7 @@ WHERE NOT EXISTS (
                 await schoolDb.ExecuteAsync(
                     new CommandDefinition(
                         insertSql,
-                        new { RoleId = roleId, MenuId = menuId, Actor = SeedActor, Now = utcNow },
+                        new { RoleId = roleId, MenuId = menuId, Actor = SeedActor, Now = now },
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
             }
         }
@@ -101,7 +101,7 @@ WHERE NOT EXISTS (
     {
         string g = DatabaseConfig.Schema_Global;
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         List<Guid> widgetIds = (await platform.QueryAsync<Guid>(
             new CommandDefinition(
@@ -139,7 +139,7 @@ WHERE NOT EXISTS (
                 await schoolDb.ExecuteAsync(
                     new CommandDefinition(
                         insertSql,
-                        new { RoleId = roleId, WidgetId = widgetId, Actor = SeedActor, Now = utcNow },
+                        new { RoleId = roleId, WidgetId = widgetId, Actor = SeedActor, Now = now },
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
             }
         }
@@ -177,11 +177,11 @@ LIMIT 1
         CancellationToken cancellationToken)
     {
         string man = DatabaseConfig.Schema_Man;
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         (string Key, string Value)[] defaults =
         [
             (LeaveSettingKeys.StaffApprovalMode, LeaveApprovalModes.AnyOne),
-            (LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.OfficeStaff),
+            (LeaveSettingKeys.StaffApproverUserTypes, UserTypeCodes.Principal),
             (LeaveSettingKeys.StudentApprovalMode, LeaveApprovalModes.AnyOne),
             (LeaveSettingKeys.StudentDefaultApprover, LeaveApproverTokens.ClassTeacher),
             (LeaveSettingKeys.StudentLongLeaveMinDays, "4"),
@@ -204,7 +204,7 @@ WHERE NOT EXISTS (
             await schoolDb.ExecuteAsync(
                 new CommandDefinition(
                     insertSql,
-                    new { SchoolId = schoolId, Key = key, Value = value, Actor = SeedActor, Now = utcNow },
+                    new { SchoolId = schoolId, Key = key, Value = value, Actor = SeedActor, Now = now },
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
     }

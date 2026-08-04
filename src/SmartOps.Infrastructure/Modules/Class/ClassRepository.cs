@@ -53,7 +53,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         classEntity.Section = classEntity.Section.Trim();
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (classEntity.Id == Guid.Empty)
         {
             classEntity.Id = Guid.NewGuid();
@@ -96,7 +96,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     "A class with the same section already exists for this class group.");
             }
 
-            EnsureInsertAudit(classEntity, utcNow);
+            EnsureInsertAudit(classEntity, now);
             return await InsertAsync(conn, schema, DatabaseConfig.TableClasses, classEntity, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -319,7 +319,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         group.ClassName = group.ClassName.Trim();
         group.Description = string.IsNullOrWhiteSpace(group.Description) ? null : group.Description.Trim();
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (group.Id == Guid.Empty)
         {
             group.Id = Guid.NewGuid();
@@ -370,7 +370,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                         SET isactive = true,
                             description = @Description,
                             updatedby = @ActorId,
-                            updatedon = @UtcNow,
+                            updatedon = @Now,
                             versionno = versionno + 1
                         WHERE id = @Id;
                         """,
@@ -379,14 +379,14 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                             Id = inactiveId.Value,
                             group.Description,
                             ActorId = ResolveUpdateActor(),
-                            UtcNow = utcNow
+                            Now = now
                         },
                         tx,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
                 return inactiveId.Value;
             }
 
-            EnsureInsertAudit(group, utcNow);
+            EnsureInsertAudit(group, now);
             return await InsertAsync(conn, schema, DatabaseConfig.TableClassGroups, group, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -403,9 +403,9 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         group.ClassName = group.ClassName.Trim();
         group.Description = string.IsNullOrWhiteSpace(group.Description) ? null : group.Description.Trim();
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(group, actorId, utcNow);
+        ApplyUpdateAudit(group, actorId, now);
 
         group.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(group.BranchId, cancellationToken)
@@ -489,7 +489,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -540,7 +540,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                     UPDATE {schema}.{DatabaseConfig.TableSubjects}
                     SET classgroupid = @ClassGroupId,
                         updatedby = @ActorId,
-                        updatedon = @UtcNow,
+                        updatedon = @Now,
                         versionno = versionno + 1
                     WHERE id = @SubjectId AND isactive = true;
                     """,
@@ -549,7 +549,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
                         ClassGroupId = classGroupId,
                         SubjectId = subjectId,
                         ActorId = actorId,
-                        UtcNow = utcNow
+                        Now = now
                     },
                     tx,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -561,7 +561,7 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
     /// <inheritdoc />
     public async Task RemoveClassGroupSubjectAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -571,11 +571,11 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
             UPDATE {schema}.{DatabaseConfig.TableSubjects}
             SET classgroupid = NULL,
                 updatedby = @ActorId,
-                updatedon = @UtcNow,
+                updatedon = @Now,
                 versionno = versionno + 1
             WHERE id = @Id AND isactive = true AND classgroupid IS NOT NULL;
             """,
-            new { Id = id, ActorId = actorId, UtcNow = utcNow }).ConfigureAwait(false);
+            new { Id = id, ActorId = actorId, Now = now }).ConfigureAwait(false);
 
         if (updated == 0)
         {
@@ -797,9 +797,9 @@ public sealed class ClassRepository : BaseRepository, IClassRepository
 
         classEntity.Section = classEntity.Section.Trim();
 
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(classEntity, actorId, utcNow);
+        ApplyUpdateAudit(classEntity, actorId, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
@@ -973,14 +973,15 @@ WHERE c.id = @Id AND m.isactive = true;
     {
         var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
 
+        // Default: class name then section ascending (A, B, C) everywhere sections are listed.
         if (string.IsNullOrWhiteSpace(sortColumn))
         {
-            return "c.createdon DESC, c.id ASC";
+            return "cg.classname ASC, c.section ASC, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "className"))
         {
-            return $"cg.classname {direction}, c.id ASC";
+            return $"cg.classname {direction}, c.section ASC, c.id ASC";
         }
 
         if (IsSortKey(sortColumn, "section"))
@@ -998,7 +999,7 @@ WHERE c.id = @Id AND m.isactive = true;
             return $"c.roomnumber {direction}, c.id ASC";
         }
 
-        return "c.createdon DESC, c.id ASC";
+        return "cg.classname ASC, c.section ASC, c.id ASC";
     }
 
     private static string ResolveGroupListOrderBy(string? sortColumn, string? sortDirection)

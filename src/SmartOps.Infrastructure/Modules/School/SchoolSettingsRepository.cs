@@ -65,7 +65,7 @@ ORDER BY settingkey;
             .ConfigureAwait(false);
 
         Guid actor = ResolveUpdateActor();
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         foreach (SchoolSettingUpsert setting in settings)
         {
@@ -88,7 +88,7 @@ WHERE schoolid = @SchoolId AND settingkey = @Key AND isactive = true;
                         Key = setting.Key.Trim(),
                         Value = setting.Value ?? string.Empty,
                         Actor = actor,
-                        Now = utcNow,
+                        Now = now,
                     },
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
 
@@ -113,7 +113,7 @@ VALUES
                         Key = setting.Key.Trim(),
                         Value = setting.Value ?? string.Empty,
                         Actor = actor,
-                        Now = utcNow,
+                        Now = now,
                     },
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
@@ -124,7 +124,7 @@ VALUES
         SchoolSettingUpsert[] defaults =
         [
             new() { Key = LeaveSettingKeys.StaffApprovalMode, Value = LeaveApprovalModes.AnyOne },
-            new() { Key = LeaveSettingKeys.StaffApproverUserTypes, Value = UserTypeCodes.OfficeStaff },
+            new() { Key = LeaveSettingKeys.StaffApproverUserTypes, Value = UserTypeCodes.Principal },
             new() { Key = LeaveSettingKeys.StudentApprovalMode, Value = LeaveApprovalModes.AnyOne },
             new() { Key = LeaveSettingKeys.StudentDefaultApprover, Value = LeaveApproverTokens.ClassTeacher },
             new() { Key = LeaveSettingKeys.StudentLongLeaveMinDays, Value = "4" },

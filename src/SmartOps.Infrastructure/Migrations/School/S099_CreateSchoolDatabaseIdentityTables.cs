@@ -78,6 +78,7 @@ public sealed class S099_CreateSchoolDatabaseIdentityTables : Migration
             .WithColumn("lockoutend").AsDateTimeOffset().Nullable()
             .WithColumn("accessfailedcount").AsInt32().NotNullable().WithDefaultValue(0)
             .WithColumn("lockoutenabled").AsBoolean().NotNullable().WithDefaultValue(false)
+            .WithColumn("mustchangepassword").AsBoolean().NotNullable().WithDefaultValue(false)
             .WithAuditColumns();
         // usertypeid soft-references platform global.usertypes (no local FK)
     }

@@ -59,13 +59,13 @@ public sealed class JwtService : IJwtService
         SymmetricSecurityKey key = new(Encoding.UTF8.GetBytes(_options.SecretKey));
         SigningCredentials credentials = new(key, SecurityAlgorithms.HmacSha256);
 
-        DateTime utcNow = DateTime.UtcNow;
+        DateTime now = DateTime.UtcNow;
         JwtSecurityToken token = new(
             issuer: _options.Issuer,
             audience: _options.Audience,
             claims: claims,
-            notBefore: utcNow,
-            expires: utcNow.AddMinutes(_options.AccessTokenExpiryMinutes),
+            notBefore: now,
+            expires: now.AddMinutes(_options.AccessTokenExpiryMinutes),
             signingCredentials: credentials);
 
         JwtSecurityTokenHandler handler = new();

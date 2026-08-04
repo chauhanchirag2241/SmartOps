@@ -70,6 +70,7 @@ public static class DefaultSchoolRolePermissions
     private static readonly Guid FeeCollection = Guid.Parse("10000000-0000-0000-0000-000000000082");
     private static readonly Guid BulkImport = Guid.Parse("10000000-0000-0000-0000-000000000088");
     private static readonly Guid StudentBulkImport = Guid.Parse("10000000-0000-0000-0000-000000000089");
+    private static readonly Guid EmployeeBulkImport = Guid.Parse("10000000-0000-0000-0000-000000000090");
 
     private static Grant V(Guid id, string code) => new(id, code, true, false, false, false, false);
     private static Grant VA(Guid id, string code) => new(id, code, true, true, false, false, false);
@@ -130,6 +131,7 @@ public static class DefaultSchoolRolePermissions
         Full(RollNumbers, MenuCodes.RollNumbers),
         V(BulkImport, MenuCodes.BulkImport),
         Full(StudentBulkImport, MenuCodes.StudentBulkImport),
+        Full(EmployeeBulkImport, MenuCodes.EmployeeBulkImport),
         V(LeaveManagement, MenuCodes.LeaveManagement),
         Full(LeaveStaff, MenuCodes.LeaveStaff),
         Full(LeaveStudent, MenuCodes.LeaveStudent),

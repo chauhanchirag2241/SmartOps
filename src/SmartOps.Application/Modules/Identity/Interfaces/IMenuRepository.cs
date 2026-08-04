@@ -21,5 +21,13 @@ public interface IMenuRepository
         string application,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<RoleMenuPermissionDto>> GetAllMenuTemplatesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<RoleMenuPermissionDto>> GetAllMenuTemplatesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Menu permission templates for role editors, scoped to an app (plus COMMON).
+    /// </summary>
+    Task<IReadOnlyList<RoleMenuPermissionDto>> GetAllMenuTemplatesAsync(
+        string application,
+        CancellationToken cancellationToken = default);
 }

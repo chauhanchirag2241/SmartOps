@@ -29,9 +29,9 @@ public sealed class G012_SeedDefaultAdminUser : Migration
         Execute.Sql($"""
 INSERT INTO {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers}
     (id, firstname, lastname, mobile, usertypeid, username, email, passwordhash, securitystamp, lockoutend, accessfailedcount, lockoutenabled,
-     isactive, versionno, createdby, createdon, updatedby, updatedon)
+     mustchangepassword, isactive, versionno, createdby, createdon, updatedby, updatedon)
 SELECT '{userId}', 'Platform', 'Admin', NULL, '{adminTypeId}', 'platform.admin', '{AdminEmail}', '{passwordHash.Replace("'", "''")}', '{Guid.NewGuid():N}',
-       NULL, 0, true, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
+       NULL, 0, true, false, true, 1, '{SeedActor}', '{now:O}', '{SeedActor}', '{now:O}'
 WHERE NOT EXISTS (SELECT 1 FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableUsers} WHERE email = '{AdminEmail}');
 """);
 

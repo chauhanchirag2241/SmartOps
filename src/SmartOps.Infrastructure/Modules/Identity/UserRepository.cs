@@ -46,6 +46,7 @@ SELECT
     lockoutend AS LockoutEnd,
     accessfailedcount AS AccessFailedCount,
     lockoutenabled AS LockoutEnabled,
+    mustchangepassword AS MustChangePassword,
     isactive AS IsActive,
     versionno AS VersionNo,
     createdby AS CreatedBy,
@@ -82,6 +83,7 @@ SELECT
     lockoutend AS LockoutEnd,
     accessfailedcount AS AccessFailedCount,
     lockoutenabled AS LockoutEnabled,
+    mustchangepassword AS MustChangePassword,
     isactive AS IsActive,
     versionno AS VersionNo,
     createdby AS CreatedBy,
@@ -126,6 +128,7 @@ SELECT
     lockoutend AS LockoutEnd,
     accessfailedcount AS AccessFailedCount,
     lockoutenabled AS LockoutEnabled,
+    mustchangepassword AS MustChangePassword,
     isactive AS IsActive,
     versionno AS VersionNo,
     createdby AS CreatedBy,
@@ -204,6 +207,7 @@ SELECT
     lockoutend AS LockoutEnd,
     accessfailedcount AS AccessFailedCount,
     lockoutenabled AS LockoutEnabled,
+    mustchangepassword AS MustChangePassword,
     isactive AS IsActive,
     versionno AS VersionNo,
     createdby AS CreatedBy,
@@ -254,8 +258,8 @@ LIMIT 1
             user.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
-        EnsureInsertAudit(user, utcNow, user.Id);
+        DateTime now = SchoolLocalTime.NowDateTime();
+        EnsureInsertAudit(user, now, user.Id);
 
         string sql = $"""
 INSERT INTO {IdentitySchema}.{DatabaseConfig.TableUsers}
@@ -272,6 +276,7 @@ INSERT INTO {IdentitySchema}.{DatabaseConfig.TableUsers}
     lockoutend,
     accessfailedcount,
     lockoutenabled,
+    mustchangepassword,
     isactive,
     versionno,
     createdby,
@@ -293,6 +298,7 @@ VALUES
     @LockoutEnd,
     @AccessFailedCount,
     @LockoutEnabled,
+    @MustChangePassword,
     @IsActive,
     @VersionNo,
     @CreatedBy,
@@ -309,7 +315,7 @@ VALUES
 
     public async Task UpdateAsync(ApplicationUser user, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor(user.Id);
 
         string sql = $"""
@@ -326,6 +332,7 @@ SET
     lockoutend = @LockoutEnd,
     accessfailedcount = @AccessFailedCount,
     lockoutenabled = @LockoutEnabled,
+    mustchangepassword = @MustChangePassword,
     isactive = @IsActive,
     updatedby = @UpdatedBy,
     updatedon = @UpdatedOn,
@@ -350,9 +357,10 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
                 user.LockoutEnd,
                 user.AccessFailedCount,
                 user.LockoutEnabled,
+                user.MustChangePassword,
                 user.IsActive,
                 UpdatedBy = actor,
-                UpdatedOn = utcNow,
+                UpdatedOn = now,
                 VersionNo = user.VersionNo
             },
             cancellationToken: cancellationToken);
@@ -365,7 +373,7 @@ WHERE id = @Id AND versionno = @VersionNo AND isactive = true
 
         user.VersionNo += 1;
         user.UpdatedBy = actor;
-        user.UpdatedOn = utcNow;
+        user.UpdatedOn = now;
     }
 
     public async Task<IReadOnlyList<ApplicationUser>> GetUsersInRoleAsync(string roleName, CancellationToken cancellationToken = default)
@@ -384,6 +392,7 @@ SELECT
     u.lockoutend AS LockoutEnd,
     u.accessfailedcount AS AccessFailedCount,
     u.lockoutenabled AS LockoutEnabled,
+    u.mustchangepassword AS MustChangePassword,
     u.isactive AS IsActive,
     u.versionno AS VersionNo,
     u.createdby AS CreatedBy,
@@ -482,7 +491,7 @@ LIMIT 1
         CancellationToken cancellationToken)
     {
         Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         IDbConnection connection = await ResolveConnectionAsync(transaction, cancellationToken).ConfigureAwait(false);
 
@@ -543,7 +552,7 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = false AND versionno =
                         UserId = userId,
                         RoleId = roleId,
                         Actor = actor,
-                        Now = utcNow,
+                        Now = now,
                         VersionNo = mappingRow.VersionNo
                     },
                     transaction: transaction,
@@ -590,7 +599,7 @@ VALUES
                     UserId = userId,
                     RoleId = roleId,
                     Actor = actor,
-                    Now = utcNow
+                    Now = now
                 },
                 transaction: transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -599,7 +608,7 @@ VALUES
     public async Task RemoveUserFromRoleAsync(Guid userId, string roleName, CancellationToken cancellationToken = default)
     {
         Guid actor = ResolveUpdateActor(userId);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -653,7 +662,7 @@ WHERE userid = @UserId AND roleid = @RoleId AND isactive = true AND versionno = 
                     UserId = userId,
                     RoleId = roleId,
                     Actor = actor,
-                    Now = utcNow,
+                    Now = now,
                     VersionNo = version.Value
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -702,6 +711,7 @@ SELECT
     u.lockoutend AS LockoutEnd,
     u.accessfailedcount AS AccessFailedCount,
     u.lockoutenabled AS LockoutEnabled,
+    u.mustchangepassword AS MustChangePassword,
     u.isactive AS IsActive,
     u.versionno AS VersionNo,
     u.createdby AS CreatedBy,

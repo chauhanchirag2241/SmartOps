@@ -478,7 +478,7 @@ public sealed class ExcelHelper : IExcelHelper
     }
 
     /// <summary>
-    /// Finds the header row by looking for a known first header (AdmissionNo / Type) or first bold row.
+    /// Finds the header row by looking for a known first data-column header.
     /// Falls back to row 1 for plain sheets.
     /// </summary>
     private static int FindHeaderRow(IXLWorksheet ws)
@@ -497,6 +497,7 @@ public sealed class ExcelHelper : IExcelHelper
             {
                 string header = NormalizeHeader(ws.Cell(r, c).GetString());
                 if (string.Equals(header, "AdmissionNo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(header, "EmployeeCode", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(header, "Type", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(header, "FeeMasterName", StringComparison.OrdinalIgnoreCase))
                 {
@@ -526,9 +527,26 @@ public sealed class ExcelHelper : IExcelHelper
             return string.Empty;
         }
 
-        if (cell.DataType == XLDataType.DateTime)
+        // Date cells (including Excel serials with a date number format)
+        if (cell.DataType == XLDataType.DateTime
+            || (cell.DataType == XLDataType.Number && IsExcelDateNumberFormat(cell.Style.DateFormat.Format)))
         {
-            return cell.GetDateTime().ToString("yyyy-MM-dd");
+            if (cell.TryGetValue(out DateTime dateTime))
+            {
+                return dateTime.ToString("yyyy-MM-dd");
+            }
+
+            if (cell.TryGetValue(out double oaDate))
+            {
+                try
+                {
+                    return DateTime.FromOADate(oaDate).ToString("yyyy-MM-dd");
+                }
+                catch
+                {
+                    // Fall through to numeric/string handling.
+                }
+            }
         }
 
         if (cell.DataType == XLDataType.Number && cell.TryGetValue(out double number))
@@ -542,5 +560,20 @@ public sealed class ExcelHelper : IExcelHelper
         }
 
         return cell.GetString().Trim();
+    }
+
+    /// <summary>
+    /// True when the Excel number format is a date (not General / plain number).
+    /// </summary>
+    private static bool IsExcelDateNumberFormat(string? format)
+    {
+        if (string.IsNullOrWhiteSpace(format)
+            || string.Equals(format, "General", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Date formats typically include day/year tokens (e.g. dd/mm/yyyy, yyyy-mm-dd).
+        return format.IndexOfAny(['d', 'D', 'y', 'Y']) >= 0;
     }
 }

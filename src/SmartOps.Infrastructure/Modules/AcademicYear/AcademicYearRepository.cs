@@ -20,7 +20,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
     public async Task<Guid> CreateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (academicYear.Id == Guid.Empty)
         {
             academicYear.Id = Guid.NewGuid();
@@ -30,7 +30,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
         academicYear.IsActive = true;
         // Status column kept for schema compatibility; current year is date-derived.
         academicYear.Status = AcademicYearStatus.Draft;
-        EnsureInsertAudit(academicYear, utcNow);
+        EnsureInsertAudit(academicYear, now);
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -240,7 +240,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
 
     public async Task UpdateAcademicYearAsync(AcademicYearEntity academicYear, CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -263,7 +263,7 @@ public sealed class AcademicYearRepository : BaseRepository, IAcademicYearReposi
             existing.Title = academicYear.Title.Trim();
             existing.StartDate = academicYear.StartDate;
             existing.EndDate = academicYear.EndDate;
-            ApplyUpdateAudit(existing, actorId, utcNow);
+            ApplyUpdateAudit(existing, actorId, now);
 
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableAcademicYears, existing, tx, "Id")
                 .ConfigureAwait(false);

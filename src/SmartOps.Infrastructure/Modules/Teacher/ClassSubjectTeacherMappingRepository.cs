@@ -181,8 +181,8 @@ WHERE classgroupid = @ClassGroupId
             entity.Id = Guid.NewGuid();
         }
 
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
-        EnsureInsertAudit(entity, utcNow, ResolveUpdateActor());
+        DateTime now = SchoolLocalTime.NowDateTime();
+        EnsureInsertAudit(entity, now, ResolveUpdateActor());
 
         string sql = $"""
 INSERT INTO {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}
@@ -201,9 +201,9 @@ RETURNING id
 
     public async Task<int> UpdateAsync(ClassSubjectTeacherMappingEntity entity, CancellationToken cancellationToken = default)
     {
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
+        ApplyUpdateAudit(entity, actorId, now);
 
         string sql = $"""
 UPDATE {Schema}.{DatabaseConfig.TableClassSubjectTeacherMappings}

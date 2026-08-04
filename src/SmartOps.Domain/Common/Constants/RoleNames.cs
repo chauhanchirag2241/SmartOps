@@ -115,12 +115,25 @@ public static class RoleNames
         && FullAccessSchoolRoles.Any(r => string.Equals(r, roleName.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// Platform / developer role — never listed or assignable in the school portal UI.
+    /// </summary>
+    public static bool IsHiddenFromPortal(string? roleName) =>
+        !string.IsNullOrWhiteSpace(roleName)
+        && string.Equals(roleName.Trim(), SmartOpsAdmin, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc cref="IsHiddenFromPortal(string?)"/>
+    public static bool IsHiddenFromPortal(Guid roleId) =>
+        roleId == Ids.SmartOpsAdmin;
+
+    /// <summary>
     /// Prefer an explicit portal role label when it matches a seeded role;
     /// otherwise map from user type (may be null).
     /// </summary>
     public static string? ResolveForProvision(string? userTypeName, string? preferredRoleName = null)
     {
-        if (!string.IsNullOrWhiteSpace(preferredRoleName) && IsDefaultRole(preferredRoleName))
+        if (!string.IsNullOrWhiteSpace(preferredRoleName)
+            && IsDefaultRole(preferredRoleName)
+            && !IsHiddenFromPortal(preferredRoleName))
         {
             foreach ((Guid _, string name, string _) in Defaults)
             {
@@ -131,6 +144,7 @@ public static class RoleNames
             }
         }
 
-        return FromUserType(userTypeName);
+        string? fromType = FromUserType(userTypeName);
+        return IsHiddenFromPortal(fromType) ? null : fromType;
     }
 }

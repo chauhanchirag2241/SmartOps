@@ -395,7 +395,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
         IReadOnlyList<FeeStudentAmountEntity> rows,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var resolvedBranch = await _branchWrite
             .ResolveWriteBranchIdAsync(branchId, cancellationToken)
             .ConfigureAwait(false);
@@ -448,7 +448,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                     row.VersionNo = existing.VersionNo;
                     row.CreatedBy = existing.CreatedBy;
                     row.CreatedOn = existing.CreatedOn;
-                    ApplyUpdateAudit(row, ResolveUpdateActor(), utcNow);
+                    ApplyUpdateAudit(row, ResolveUpdateActor(), now);
                     await UpdateAsync(conn, schema, DatabaseConfig.TableFeeStudentAmount, row, tx, "Id")
                         .ConfigureAwait(false);
                 }
@@ -459,7 +459,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                         row.Id = Guid.NewGuid();
                     }
 
-                    EnsureInsertAudit(row, utcNow);
+                    EnsureInsertAudit(row, now);
                     await InsertAsync(conn, schema, DatabaseConfig.TableFeeStudentAmount, row, tx)
                         .ConfigureAwait(false);
                 }
@@ -474,7 +474,7 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
     {
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveInsertActor();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -485,13 +485,13 @@ public sealed class FeeStudentAmountRepository : BaseRepository, IFeeStudentAmou
                     UPDATE {schema}.{DatabaseConfig.TableFeeStudentAmount}
                     SET isactive = false,
                         updatedby = @ActorId,
-                        updatedon = @UtcNow,
+                        updatedon = @Now,
                         versionno = versionno + 1
                     WHERE feemasterid = @FeeMasterId
                       AND studentid = @StudentId
                       AND isactive = true;
                     """,
-                    new { FeeMasterId = feeMasterId, StudentId = studentId, ActorId = actorId, UtcNow = utcNow },
+                    new { FeeMasterId = feeMasterId, StudentId = studentId, ActorId = actorId, Now = now },
                     transaction: tx,
                     cancellationToken: cancellationToken))
                 .ConfigureAwait(false);

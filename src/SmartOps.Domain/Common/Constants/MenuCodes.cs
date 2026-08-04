@@ -128,6 +128,8 @@ public static class MenuCodes
 
     public const string StudentBulkImport = "STUDENT_BULK_IMPORT";
 
+    public const string EmployeeBulkImport = "EMPLOYEE_BULK_IMPORT";
+
     public static IReadOnlyList<string> All { get; } =
     [
         Dashboard,
@@ -189,6 +191,7 @@ public static class MenuCodes
         FeeMaster,
         FeeCollection,
         BulkImport,
-        StudentBulkImport
+        StudentBulkImport,
+        EmployeeBulkImport
     ];
 }

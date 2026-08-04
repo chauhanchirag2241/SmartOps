@@ -3,7 +3,10 @@ namespace SmartOps.Application.Modules.BulkImport;
 public sealed class ImportRowResultDto
 {
     public int RowNumber { get; set; }
+    /// <summary>Student admission number (student import).</summary>
     public string? AdmissionNo { get; set; }
+    /// <summary>Employee code (employee import).</summary>
+    public string? EmployeeCode { get; set; }
     public string? DisplayName { get; set; }
     public string Status { get; set; } = "Invalid";
     public List<string> Errors { get; set; } = [];

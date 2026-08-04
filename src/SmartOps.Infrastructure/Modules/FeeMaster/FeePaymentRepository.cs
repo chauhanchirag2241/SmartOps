@@ -151,7 +151,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
         IReadOnlyList<FeePaymentLineEntity> lines,
         CancellationToken cancellationToken = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         payment.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(payment.BranchId, cancellationToken)
             .ConfigureAwait(false);
@@ -161,7 +161,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
             payment.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(payment, utcNow);
+        EnsureInsertAudit(payment, now);
         payment.PaymentDate = payment.PaymentDate == default ? SchoolLocalTime.Now() : payment.PaymentDate;
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -180,7 +180,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
 
                 line.FeePaymentId = payment.Id;
                 line.BranchId = payment.BranchId;
-                EnsureInsertAudit(line, utcNow);
+                EnsureInsertAudit(line, now);
                 await InsertAsync(conn, schema, DatabaseConfig.TableFeePaymentLine, line, tx).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);

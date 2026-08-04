@@ -33,10 +33,10 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
     public async Task<Guid> CreateAsync(NoticeEntity entity, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = ResolveInsertActor();
         entity.Id = entity.Id == Guid.Empty ? Guid.NewGuid() : entity.Id;
-        EnsureInsertAudit(entity, utcNow, actorId);
+        EnsureInsertAudit(entity, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableNotices}
@@ -253,7 +253,7 @@ public sealed class NoticeRepository : BaseRepository, INoticeRepository
         entity.Title,
         entity.Body,
         entity.CreatedByUserId,
-        entity.PublishedOn,
+        PublishedOn = SchoolLocalTime.AsUtc(entity.PublishedOn),
         entity.RequiresResponse,
         entity.ResponseDeadline,
         TargetType = (short)entity.TargetType,

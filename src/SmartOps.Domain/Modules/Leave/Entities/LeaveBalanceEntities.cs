@@ -48,7 +48,7 @@ public sealed class LeaveLedgerEntity
     public string? Remark { get; set; }
     public DateOnly TxnDate { get; set; }
     public Guid CreatedBy { get; set; }
-    public DateTimeOffset CreatedOn { get; set; }
+    public DateTime CreatedOn { get; set; }
 }
 
 public sealed class LeaveAccrualRunEntity
@@ -56,7 +56,7 @@ public sealed class LeaveAccrualRunEntity
     public Guid Id { get; set; }
     public int Year { get; set; }
     public int Month { get; set; }
-    public DateTimeOffset RanOn { get; set; }
+    public DateTime RanOn { get; set; }
     public LeaveAccrualRunStatus Status { get; set; }
     public int EmployeesScored { get; set; }
     public string? ErrorLog { get; set; }

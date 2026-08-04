@@ -21,14 +21,18 @@ public sealed class AuthController : ControllerBase
 
     private readonly IValidator<RefreshTokenRequestDto> _refreshTokenValidator;
 
+    private readonly IValidator<ChangePasswordRequestDto> _changePasswordValidator;
+
     public AuthController(
         IIdentityService identityService,
         IValidator<LoginRequestDto> loginValidator,
-        IValidator<RefreshTokenRequestDto> refreshTokenValidator)
+        IValidator<RefreshTokenRequestDto> refreshTokenValidator,
+        IValidator<ChangePasswordRequestDto> changePasswordValidator)
     {
         _identityService = identityService;
         _loginValidator = loginValidator;
         _refreshTokenValidator = refreshTokenValidator;
+        _changePasswordValidator = changePasswordValidator;
     }
 
     [HttpPost("login")]
@@ -150,5 +154,32 @@ public sealed class AuthController : ControllerBase
         return result.IsSuccess
             ? Ok(result.Value)
             : Unauthorized(result.Error);
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        ValidationResult validation = await _changePasswordValidator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!validation.IsValid)
+        {
+            return BadRequest(validation.Errors.Select(e => e.ErrorMessage));
+        }
+
+        string? sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out Guid userId))
+        {
+            return Unauthorized();
+        }
+
+        Result result = await _identityService.ChangePasswordAsync(userId, request, cancellationToken).ConfigureAwait(false);
+        return result.IsSuccess
+            ? Ok(new { success = true })
+            : BadRequest(result.Error);
     }
 }

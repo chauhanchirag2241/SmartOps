@@ -23,6 +23,7 @@ using SmartOps.Domain.Modules.Shift;
 using SmartOps.Domain.Modules.AcademicYear;
 using SmartOps.Domain.Modules.AcademicPeriod;
 using SmartOps.Domain.Modules.Employee;
+using SmartOps.Application.Modules.Employee.Import;
 using SmartOps.Application.Modules.Department;
 using SmartOps.Infrastructure.Modules.Employee;
 using SmartOps.Infrastructure.Modules.Department;
@@ -117,6 +118,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IFeeStudentAmountRepository, FeeStudentAmountRepository>();
         services.AddScoped<IFeePaymentRepository, FeePaymentRepository>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<IEmployeeImportService, EmployeeImportService>();
         services.AddScoped<IClassSettingRepository, ClassSettingRepository>();
         services.AddScoped<IClassSubjectTeacherMappingRepository, ClassSubjectTeacherMappingRepository>();
         services.AddScoped<IClassSubjectTeacherMappingService, ClassSubjectTeacherMappingService>();

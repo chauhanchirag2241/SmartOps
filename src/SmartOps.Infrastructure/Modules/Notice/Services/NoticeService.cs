@@ -81,6 +81,8 @@ public sealed class NoticeService : INoticeService
         bool requiresResponse = request.RequiresResponse;
         ApplyContentRules(request.ContentType, ref requiresResponse);
         Guid? targetRefId = ResolveStoredTargetRefId(request.TargetType, request.TargetRefId, request.Content);
+        DateTimeOffset? publishedOn = SchoolLocalTime.AsUtc(request.PublishedOn);
+        bool publishNow = publishedOn.HasValue;
 
         var entity = new NoticeEntity
         {
@@ -93,10 +95,27 @@ public sealed class NoticeService : INoticeService
             TargetRefId = targetRefId,
             ContentType = request.ContentType,
             ContentJson = NoticeContentSerializer.Serialize(request.Content),
-            Status = NoticeStatus.Draft
+            Status = publishNow ? NoticeStatus.Published : NoticeStatus.Draft,
+            PublishedOn = publishedOn
         };
 
+        if (publishNow)
+        {
+            Result fanOutPrep = await EnsureRecipientsExistAsync(entity, ct).ConfigureAwait(false);
+            if (!fanOutPrep.IsSuccess)
+            {
+                return Result<NoticeDetailDto>.Failure(fanOutPrep.Error!);
+            }
+        }
+
         Guid id = await _noticeRepo.CreateAsync(entity, ct).ConfigureAwait(false);
+        entity.Id = id;
+
+        if (publishNow)
+        {
+            await FanOutMyActionsAsync(entity, ct).ConfigureAwait(false);
+        }
+
         return await GetByIdAsync(id, ct).ConfigureAwait(false);
     }
 
@@ -113,9 +132,9 @@ public sealed class NoticeService : INoticeService
             return Result<NoticeDetailDto>.Failure("Notice not found.");
         }
 
-        if (entity.Status != NoticeStatus.Draft)
+        if (entity.Status != NoticeStatus.Draft || entity.PublishedOn.HasValue)
         {
-            return Result<NoticeDetailDto>.Failure("Only draft notices can be edited.");
+            return Result<NoticeDetailDto>.Failure("Published notices cannot be edited. View or delete only.");
         }
 
         Result validation = ValidateRequest(request.Title, request.Body, request.ContentType, request.Content, request.TargetType, request.TargetRefId);
@@ -126,6 +145,8 @@ public sealed class NoticeService : INoticeService
 
         bool requiresResponse = request.RequiresResponse;
         ApplyContentRules(request.ContentType, ref requiresResponse);
+        DateTimeOffset? publishedOn = SchoolLocalTime.AsUtc(request.PublishedOn);
+        bool publishNow = publishedOn.HasValue;
 
         entity.Title = request.Title.Trim();
         entity.Body = request.Body.Trim();
@@ -135,37 +156,43 @@ public sealed class NoticeService : INoticeService
         entity.TargetRefId = ResolveStoredTargetRefId(request.TargetType, request.TargetRefId, request.Content);
         entity.ContentType = request.ContentType;
         entity.ContentJson = NoticeContentSerializer.Serialize(request.Content);
+        entity.PublishedOn = publishedOn;
+        entity.Status = publishNow ? NoticeStatus.Published : NoticeStatus.Draft;
+
+        if (publishNow)
+        {
+            Result fanOutPrep = await EnsureRecipientsExistAsync(entity, ct).ConfigureAwait(false);
+            if (!fanOutPrep.IsSuccess)
+            {
+                return Result<NoticeDetailDto>.Failure(fanOutPrep.Error!);
+            }
+        }
+
         await _noticeRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+
+        if (publishNow)
+        {
+            await FanOutMyActionsAsync(entity, ct).ConfigureAwait(false);
+        }
+
         return await GetByIdAsync(id, ct).ConfigureAwait(false);
     }
 
-    public async Task<Result<NoticeDetailDto>> PublishAsync(Guid id, CancellationToken ct = default)
+    private async Task<Result> EnsureRecipientsExistAsync(NoticeEntity entity, CancellationToken ct)
     {
-        NoticeEntity? entity = await _noticeRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (entity is null)
-        {
-            return Result<NoticeDetailDto>.Failure("Notice not found.");
-        }
-
-        if (!entity.IsActive)
-        {
-            return Result<NoticeDetailDto>.Failure("Notice not found.");
-        }
-
-        if (entity.Status != NoticeStatus.Draft)
-        {
-            return Result<NoticeDetailDto>.Failure("Only draft notices can be published.");
-        }
-
         IList<NoticeRecipient> recipients = await ResolveRecipientsAsync(entity, ct).ConfigureAwait(false);
         if (recipients.Count == 0)
         {
-            return Result<NoticeDetailDto>.Failure("No recipients matched the selected audience.");
+            return Result.Failure("No recipients matched the selected audience.");
         }
 
-        entity.Status = NoticeStatus.Published;
-        entity.PublishedOn = SchoolLocalTime.Now();
-        await _noticeRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+        return Result.Success();
+    }
+
+    private async Task FanOutMyActionsAsync(NoticeEntity entity, CancellationToken ct)
+    {
+        Guid id = entity.Id;
+        IList<NoticeRecipient> recipients = await ResolveRecipientsAsync(entity, ct).ConfigureAwait(false);
 
         WorkflowItemType workflowType = entity.ContentType == NoticeContentType.Form
             ? WorkflowItemType.FormFill
@@ -207,10 +234,8 @@ public sealed class NoticeService : INoticeService
 
         if (fanOutCount == 0)
         {
-            _logger.LogWarning("Notice {NoticeId} published but no My Actions tasks were created.", id);
+            _logger.LogWarning("Notice {NoticeId} saved with PublishedOn but no My Actions tasks were created.", id);
         }
-
-        return await GetByIdAsync(id, ct).ConfigureAwait(false);
     }
 
     public async Task<Result<NoticeAudiencePreviewDto>> GetAudiencePreviewAsync(
@@ -327,7 +352,7 @@ public sealed class NoticeService : INoticeService
         }
 
         NoticeEntity? notice = await _noticeRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (notice is null || notice.Status != NoticeStatus.Published)
+        if (notice is null || !IsNoticeVisibleToRecipients(notice))
         {
             return Result.Failure("Notice not found or not published.");
         }
@@ -343,7 +368,7 @@ public sealed class NoticeService : INoticeService
         {
             item.Status = WorkflowItemStatus.Completed;
             item.CompletedByUserId = userId;
-            item.CompletedOn = SchoolLocalTime.Now();
+            item.CompletedOn = SchoolLocalTime.NowDateTime();
             item.Outcome = WorkflowActionCodes.Respond;
             await _workflowRepo.UpdateItemAsync(item, ct).ConfigureAwait(false);
             await _workflowRepo.InsertActionAsync(item.Id, WorkflowActionCodes.Respond, request.ResponseBody, userId, null, ct)
@@ -552,6 +577,11 @@ public sealed class NoticeService : INoticeService
         return _currentUser.UserId;
     }
 
+    private static bool IsNoticeVisibleToRecipients(NoticeEntity notice) =>
+        notice.Status == NoticeStatus.Published
+        && notice.PublishedOn.HasValue
+        && notice.PublishedOn.Value <= DateTimeOffset.UtcNow;
+
     private static NoticeAudienceOptionDto MapAudience(NoticeAudienceRow row) => new()
     {
         Id = row.Id,
@@ -586,7 +616,8 @@ public sealed class NoticeService : INoticeService
         n.TargetRefId,
         n.ContentType,
         n.ContentType.ToString(),
-        NoticeContentSerializer.Deserialize(n.ContentJson));
+        NoticeContentSerializer.Deserialize(n.ContentJson),
+        n.PublishedOn);
 
     private sealed record NoticeRecipient(Guid UserId, string Summary);
 }

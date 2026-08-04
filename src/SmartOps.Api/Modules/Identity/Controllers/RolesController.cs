@@ -27,6 +27,11 @@ public sealed class RolesController(
 
         foreach (ApplicationRole role in roles)
         {
+            if (IsHiddenPortalRole(role))
+            {
+                continue;
+            }
+
             IReadOnlyList<RoleMenuPermissionDto> permissions = await roleRepository
                 .GetMenuPermissionsForRoleAsync(role.Id, cancellationToken)
                 .ConfigureAwait(false);
@@ -52,7 +57,7 @@ public sealed class RolesController(
     public async Task<ActionResult<RoleDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
@@ -86,6 +91,11 @@ public sealed class RolesController(
         }
 
         string name = request.Name.Trim();
+        if (RoleNames.IsHiddenFromPortal(name))
+        {
+            return BadRequest("This role name is reserved and cannot be created.");
+        }
+
         if (await roleRepository.GetByNameAsync(name, cancellationToken).ConfigureAwait(false) is not null)
         {
             return Conflict("A role with this name already exists.");
@@ -134,12 +144,16 @@ public sealed class RolesController(
         CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
 
         string name = request.Name.Trim();
+        if (RoleNames.IsHiddenFromPortal(name))
+        {
+            return BadRequest("This role name is reserved and cannot be used.");
+        }
 
         IReadOnlyList<ApplicationRole> allRoles = await roleRepository.GetAllAsync(cancellationToken).ConfigureAwait(false);
         if (allRoles.Any(r => r.Id != id && string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
@@ -167,7 +181,7 @@ public sealed class RolesController(
         }
 
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
@@ -185,13 +199,18 @@ public sealed class RolesController(
         foreach (ApplicationUser user in schoolUsers.Where(u => roleUserIds.Contains(u.Id)))
         {
             IList<string> roles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
+            if (PortalUserVisibility.IsHiddenFromPortal(user.Email, user.Username, user.Id, roles))
+            {
+                continue;
+            }
+
             result.Add(new SchoolUserDto
             {
                 Id = user.Id,
                 Username = user.Username,
                 Email = user.Email,
                 IsActive = user.IsActive,
-                Roles = roles.ToList()
+                Roles = roles.Where(r => !RoleNames.IsHiddenFromPortal(r)).ToList()
             });
         }
 
@@ -211,7 +230,7 @@ public sealed class RolesController(
         }
 
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
@@ -225,6 +244,11 @@ public sealed class RolesController(
         foreach (ApplicationUser user in schoolUsers)
         {
             IList<string> userRoles = await userRepository.GetRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
+            if (PortalUserVisibility.IsHiddenFromPortal(user.Email, user.Username, user.Id, userRoles))
+            {
+                continue;
+            }
+
             bool hasRole = userRoles.Contains(role.Name, StringComparer.OrdinalIgnoreCase);
             bool shouldHave = desiredIds.Contains(user.Id);
 
@@ -249,7 +273,7 @@ public sealed class RolesController(
         CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
@@ -269,7 +293,7 @@ public sealed class RolesController(
         CancellationToken cancellationToken)
     {
         ApplicationRole? role = await roleRepository.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
-        if (role is null)
+        if (role is null || IsHiddenPortalRole(role))
         {
             return NotFound();
         }
@@ -280,6 +304,9 @@ public sealed class RolesController(
 
         return NoContent();
     }
+
+    private static bool IsHiddenPortalRole(ApplicationRole role) =>
+        RoleNames.IsHiddenFromPortal(role.Name) || RoleNames.IsHiddenFromPortal(role.Id);
 
     private bool TryGetSchoolId(out Guid schoolId)
     {

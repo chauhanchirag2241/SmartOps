@@ -58,13 +58,13 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task<Guid> CreateEventTypeAsync(CalendarEventTypeEntity entity, CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty)
         {
             entity.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(entity, utcNow);
+        EnsureInsertAudit(entity, now);
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         return await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -76,8 +76,8 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task UpdateEventTypeAsync(CalendarEventTypeEntity entity, CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), utcNow);
+        var now = SchoolLocalTime.NowDateTime();
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), now);
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -141,7 +141,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
 
     public async Task<Guid> UpsertWeekendSettingsAsync(CalendarWeekendSettingEntity entity, CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         entity.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(entity.BranchId, ct)
             .ConfigureAwait(false);
@@ -156,7 +156,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
                 entity.Id = Guid.NewGuid();
             }
 
-            EnsureInsertAudit(entity, utcNow);
+            EnsureInsertAudit(entity, now);
             return await WithTransactionAsync(connection, async (conn, tx) =>
             {
                 await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableCalendarWeekendSettings, entity, tx)
@@ -170,7 +170,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         entity.CreatedBy = existing.CreatedBy;
         entity.CreatedOn = existing.CreatedOn;
         entity.IsActive = true;
-        ApplyUpdateAudit(entity, ResolveUpdateActor(), utcNow);
+        ApplyUpdateAudit(entity, ResolveUpdateActor(), now);
 
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
@@ -275,13 +275,13 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         IReadOnlyList<Guid> classIds,
         CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         if (entity.Id == Guid.Empty)
         {
             entity.Id = Guid.NewGuid();
         }
 
-        EnsureInsertAudit(entity, utcNow);
+        EnsureInsertAudit(entity, now);
         entity.BranchId = await _branchWrite
             .ResolveWriteBranchIdAsync(entity.BranchId, ct)
             .ConfigureAwait(false);
@@ -292,7 +292,7 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         {
             await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableCalendarEvents, entity, tx)
                 .ConfigureAwait(false);
-            await ReplaceEventClassesAsync(conn, tx, entity.Id, classIds, actorId, utcNow, ct).ConfigureAwait(false);
+            await ReplaceEventClassesAsync(conn, tx, entity.Id, classIds, actorId, now, ct).ConfigureAwait(false);
             return entity.Id;
         }).ConfigureAwait(false);
     }
@@ -302,33 +302,33 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         IReadOnlyList<Guid> classIds,
         CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
-        ApplyUpdateAudit(entity, actorId, utcNow);
+        ApplyUpdateAudit(entity, actorId, now);
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableCalendarEvents, entity, tx, "Id")
                 .ConfigureAwait(false);
-            await ReplaceEventClassesAsync(conn, tx, entity.Id, classIds, actorId, utcNow, ct).ConfigureAwait(false);
+            await ReplaceEventClassesAsync(conn, tx, entity.Id, classIds, actorId, now, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 
     public async Task DeleteEventAsync(Guid id, CancellationToken ct = default)
     {
-        var utcNow = SchoolLocalTime.NowDateTime();
+        var now = SchoolLocalTime.NowDateTime();
         var actorId = ResolveUpdateActor();
         var connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         await WithTransactionAsync(connection, async (conn, tx) =>
         {
             string deactivateClasses = $"""
                 UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEventClasses}
-                SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+                SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
                 WHERE calendareventid = @EventId AND isactive = true;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     deactivateClasses,
-                    new { EventId = id, ActorId = actorId, UtcNow = utcNow },
+                    new { EventId = id, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);
@@ -466,17 +466,17 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
         Guid eventId,
         IReadOnlyList<Guid> classIds,
         Guid actorId,
-        DateTime utcNow,
+        DateTime now,
         CancellationToken ct)
     {
         string deactivate = $"""
             UPDATE {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEventClasses}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE calendareventid = @EventId AND isactive = true;
             """;
         await conn.ExecuteAsync(new CommandDefinition(
                 deactivate,
-                new { EventId = eventId, ActorId = actorId, UtcNow = utcNow },
+                new { EventId = eventId, ActorId = actorId, Now = now },
                 tx,
                 cancellationToken: ct))
             .ConfigureAwait(false);
@@ -487,14 +487,14 @@ public sealed class AcademicCalendarRepository : BaseRepository, IAcademicCalend
                 INSERT INTO {Context.OperationalSchema}.{DatabaseConfig.TableCalendarEventClasses}
                     (id, calendareventid, classid, isactive, versionno, createdby, createdon, updatedby, updatedon)
                 VALUES
-                    (gen_random_uuid(), @EventId, @ClassId, true, 1, @ActorId, @UtcNow, @ActorId, @UtcNow)
+                    (gen_random_uuid(), @EventId, @ClassId, true, 1, @ActorId, @Now, @ActorId, @Now)
                 ON CONFLICT ON CONSTRAINT uq_calendareventclasses_event_class
-                DO UPDATE SET isactive = true, updatedby = @ActorId, updatedon = @UtcNow,
+                DO UPDATE SET isactive = true, updatedby = @ActorId, updatedon = @Now,
                               versionno = {DatabaseConfig.TableCalendarEventClasses}.versionno + 1;
                 """;
             await conn.ExecuteAsync(new CommandDefinition(
                     sql,
-                    new { EventId = eventId, ClassId = classId, ActorId = actorId, UtcNow = utcNow },
+                    new { EventId = eventId, ClassId = classId, ActorId = actorId, Now = now },
                     tx,
                     cancellationToken: ct))
                 .ConfigureAwait(false);

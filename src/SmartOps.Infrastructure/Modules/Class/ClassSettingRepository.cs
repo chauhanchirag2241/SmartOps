@@ -122,7 +122,7 @@ ORDER BY cg.classname ASC, c.section ASC
         CancellationToken cancellationToken = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actor = ResolveUpdateActor();
 
         ClassSettingEntity? existing = await GetBySectionIdAsync(sectionId, cancellationToken).ConfigureAwait(false);
@@ -141,7 +141,7 @@ ORDER BY cg.classname ASC, c.section ASC
                 SectionId = sectionId,
                 TeacherId = teacherId
             };
-            EnsureInsertAudit(entity, utcNow, actor);
+            EnsureInsertAudit(entity, now, actor);
 
             string insertSql = $"""
 INSERT INTO {Schema}.{DatabaseConfig.TableClassSettings}
@@ -175,7 +175,7 @@ WHERE id = @Id AND isactive = true
                     ClassGroupId = classGroupId,
                     TeacherId = teacherId,
                     Actor = actor,
-                    Now = utcNow
+                    Now = now
                 },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }

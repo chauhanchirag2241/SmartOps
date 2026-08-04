@@ -42,11 +42,11 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task<Guid> CreateAsync(HomeworkEntity homework, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         homework.Id = homework.Id == Guid.Empty ? Guid.NewGuid() : homework.Id;
-        EnsureInsertAudit(homework, utcNow, actorId);
+        EnsureInsertAudit(homework, now, actorId);
 
         string sql = $"""
             INSERT INTO {Schema}.{DatabaseConfig.TableHomework}
@@ -94,20 +94,20 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         string sql = $"""
             UPDATE {Schema}.{DatabaseConfig.TableHomework}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE id = @Id;
             UPDATE {Schema}.{DatabaseConfig.TableHomeworkDetails}
-            SET isactive = false, updatedby = @ActorId, updatedon = @UtcNow, versionno = versionno + 1
+            SET isactive = false, updatedby = @ActorId, updatedon = @Now, versionno = versionno + 1
             WHERE homeworkid = @Id;
             """;
 
         await connection.ExecuteAsync(
-                new CommandDefinition(sql, new { Id = id, ActorId = actorId, UtcNow = utcNow }, cancellationToken: ct))
+                new CommandDefinition(sql, new { Id = id, ActorId = actorId, Now = now }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -317,7 +317,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
 
         await WithTransactionAsync(connection, async (conn, tx) =>
@@ -325,7 +325,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
             foreach (HomeworkDetailEntity detail in details)
             {
                 detail.Id = detail.Id == Guid.Empty ? Guid.NewGuid() : detail.Id;
-                EnsureInsertAudit(detail, utcNow, actorId);
+                EnsureInsertAudit(detail, now, actorId);
 
                 string sql = $"""
                     INSERT INTO {Schema}.{DatabaseConfig.TableHomeworkDetails}
@@ -353,7 +353,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         }
 
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
-        DateTime utcNow = SchoolLocalTime.NowDateTime();
+        DateTime now = SchoolLocalTime.NowDateTime();
         Guid actorId = GetActorId();
         Guid homeworkId = details[0].HomeworkId;
 
@@ -367,7 +367,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                 if (existingByStudent.TryGetValue(detail.StudentId, out Guid existingId))
                 {
                     detail.Id = existingId;
-                    ApplyUpdateAudit(detail, actorId, utcNow);
+                    ApplyUpdateAudit(detail, actorId, now);
 
                     string updateSql = $"""
                         UPDATE {Schema}.{DatabaseConfig.TableHomeworkDetails}
@@ -388,7 +388,7 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
                 else
                 {
                     detail.Id = Guid.NewGuid();
-                    EnsureInsertAudit(detail, utcNow, actorId);
+                    EnsureInsertAudit(detail, now, actorId);
 
                     string insertSql = $"""
                         INSERT INTO {Schema}.{DatabaseConfig.TableHomeworkDetails}

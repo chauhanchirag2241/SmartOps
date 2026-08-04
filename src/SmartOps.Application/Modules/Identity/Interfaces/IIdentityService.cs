@@ -20,4 +20,9 @@ public interface IIdentityService
         CancellationToken cancellationToken = default);
 
     Task<Result<UserScopeDto>> GetUserScopesAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<Result> ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequestDto request,
+        CancellationToken cancellationToken = default);
 }

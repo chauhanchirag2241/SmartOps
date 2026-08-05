@@ -162,6 +162,8 @@ public sealed class SchoolBootstrapDto
 
     public string Subdomain { get; set; } = string.Empty;
 
+    public string? SchoolCode { get; set; }
+
     public string? ShortName { get; set; }
 
     public string? Tagline { get; set; }
@@ -189,6 +191,7 @@ public static class SchoolBootstrapMapping
             Id = school.Id,
             Name = school.Name,
             Subdomain = school.Subdomain,
+            SchoolCode = school.SchoolCode,
             ShortName = null,
             Tagline = null,
             LogoUrl = null,

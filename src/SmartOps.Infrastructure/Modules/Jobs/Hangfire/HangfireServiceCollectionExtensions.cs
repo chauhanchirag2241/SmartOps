@@ -26,8 +26,9 @@ public static class HangfireServiceCollectionExtensions
             .UseRecommendedSerializerSettings()
             .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(cs), new PostgreSqlStorageOptions
             {
-                SchemaName = "hangfire",
-                PrepareSchemaIfNecessary = true
+                SchemaName = HangfireSchemaBootstrap.SchemaName,
+                PrepareSchemaIfNecessary = true,
+                EnableTransactionScopeEnlistment = true,
             }));
 
         services.AddSingleton<IHangfireJobSync, HangfireJobSync>();

@@ -13,6 +13,8 @@ public interface ISchoolRepository
 
     Task<SchoolEntity?> GetSchoolBySubdomainAsync(string subdomain, CancellationToken cancellationToken = default);
 
+    Task<SchoolEntity?> GetSchoolBySchoolCodeAsync(string schoolCode, CancellationToken cancellationToken = default);
+
     Task<PagedResult<SchoolListModel>> GetAllSchoolsAsync(
         int pageIndex,
         int pageSize,

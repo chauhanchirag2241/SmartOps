@@ -152,8 +152,7 @@ WHERE e.id = @Id{activeFilter}
             }
         }
 
-        var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
-        var orderBy = string.IsNullOrWhiteSpace(sortColumn) ? "e.createdon DESC" : $"e.{sortColumn} {direction}";
+        var orderBy = ResolveListOrderBy(sortColumn, sortDirection);
 
         var countSql = $"""
 SELECT COUNT(*)
@@ -353,6 +352,60 @@ WHERE id = @EmployeeId AND isactive = true
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Maps UI sort keys (e.g. employee / department) to real SQL expressions.
+    /// Never interpolate untrusted column names as e.{"{sortColumn}"}.
+    /// </summary>
+    private static string ResolveListOrderBy(string? sortColumn, string? sortDirection)
+    {
+        var direction = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+
+        if (string.IsNullOrWhiteSpace(sortColumn))
+        {
+            return "e.createdon DESC, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "employee", "name"))
+        {
+            return $"u.firstname {direction}, u.lastname {direction}, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "email"))
+        {
+            return $"u.email {direction}, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "department", "departmentName"))
+        {
+            return $"d.name {direction} NULLS LAST, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "designation"))
+        {
+            return $"e.designation {direction} NULLS LAST, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "employeeType", "userType", "userTypeCode"))
+        {
+            return $"u.usertypeid {direction}, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "isActive", "status"))
+        {
+            return $"e.isactive {direction}, e.id ASC";
+        }
+
+        if (IsSortKey(sortColumn, "employeeCode"))
+        {
+            return $"e.employeecode {direction}, e.id ASC";
+        }
+
+        return "e.createdon DESC, e.id ASC";
+    }
+
+    private static bool IsSortKey(string sortColumn, params string[] keys) =>
+        keys.Any(k => string.Equals(sortColumn, k, StringComparison.OrdinalIgnoreCase));
 
     private sealed class EmployeeDetailRow : EmployeeEntity
     {

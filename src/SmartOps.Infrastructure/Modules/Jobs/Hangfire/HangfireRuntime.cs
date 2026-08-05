@@ -40,8 +40,18 @@ public sealed class HangfireRuntime : IHangfireRuntime, IHostedService, IDisposa
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken) =>
-        ApplyFromDatabaseAsync(cancellationToken);
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ApplyFromDatabaseAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Do not take down the API if Hangfire schema/jobs fail after a fresh DB recreate.
+            _logger.LogError(ex, "Hangfire failed to start; API will continue without background jobs.");
+        }
+    }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {

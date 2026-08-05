@@ -10,7 +10,9 @@ public interface IHomeworkService
         Guid? subjectId,
         string? statusFilter,
         string? searchTerm,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyList<Guid>? classIds = null,
+        IReadOnlyList<Guid>? subjectIds = null);
 
     Task<Result<HomeworkStatsDto>> GetStatsAsync(CancellationToken ct = default);
 

@@ -79,6 +79,16 @@ public sealed class SchoolsController(
         return school is null ? NotFound() : Ok(school.ToBootstrapDto());
     }
 
+    [HttpGet("by-code/{schoolCode}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(SchoolBootstrapDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SchoolBootstrapDto>> GetSchoolBySchoolCode(string schoolCode, CancellationToken cancellationToken)
+    {
+        var school = await schoolRepository.GetSchoolBySchoolCodeAsync(schoolCode, cancellationToken).ConfigureAwait(false);
+        return school is null ? NotFound() : Ok(school.ToBootstrapDto());
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize(Policy = MenuPolicies.Schools.View)]
     [ProducesResponseType(typeof(SchoolEntity), StatusCodes.Status200OK)]

@@ -273,6 +273,26 @@ WHERE id = @Id;
 
 
 
+    public async Task<SchoolEntity?> GetSchoolBySchoolCodeAsync(string schoolCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(schoolCode))
+        {
+            return null;
+        }
+
+        IDbConnection connection = await Context.GetPlatformConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var sql = $@"
+            SELECT * FROM {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools}
+            WHERE LOWER(schoolcode) = LOWER(@SchoolCode) AND isactive = true
+            LIMIT 1";
+
+        return await connection
+            .QuerySingleOrDefaultAsync<SchoolEntity>(sql, new { SchoolCode = schoolCode.Trim() })
+            .ConfigureAwait(false);
+    }
+
+
+
     public async Task<SchoolEntity?> GetSchoolByIdAsync(Guid id, CancellationToken cancellationToken = default)
 
     {

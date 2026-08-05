@@ -26,11 +26,15 @@ public sealed class HomeworkController : ControllerBase
     public async Task<IActionResult> GetList(
         [FromQuery] Guid? classId,
         [FromQuery] Guid? subjectId,
+        [FromQuery] IReadOnlyList<Guid>? classIds,
+        [FromQuery] IReadOnlyList<Guid>? subjectIds,
         [FromQuery] string? status,
         [FromQuery] string? search,
         CancellationToken ct)
     {
-        var result = await _service.GetListAsync(classId, subjectId, status, search, ct).ConfigureAwait(false);
+        var result = await _service
+            .GetListAsync(classId, subjectId, status, search, ct, classIds, subjectIds)
+            .ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

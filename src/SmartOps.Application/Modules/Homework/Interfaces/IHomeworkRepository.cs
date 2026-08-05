@@ -13,7 +13,9 @@ public interface IHomeworkRepository
         Guid? subjectId,
         string? statusFilter,
         string? searchTerm,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyList<Guid>? classIds = null,
+        IReadOnlyList<Guid>? subjectIds = null);
     Task<HomeworkStatsRow> GetStatsAsync(CancellationToken ct = default);
     Task<IList<HomeworkDetailEntity>> GetDetailsByHomeworkIdAsync(Guid homeworkId, CancellationToken ct = default);
     Task<bool> HasSubmissionsAsync(Guid homeworkId, CancellationToken ct = default);

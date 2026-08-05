@@ -148,7 +148,9 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         Guid? subjectId,
         string? statusFilter,
         string? searchTerm,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<Guid>? classIds = null,
+        IReadOnlyList<Guid>? subjectIds = null)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
@@ -160,16 +162,34 @@ public sealed class HomeworkRepository : BaseRepository, IHomeworkRepository
         await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "cg", ct)
             .ConfigureAwait(false);
 
-        if (classId.HasValue && classId.Value != Guid.Empty)
+        Guid[] effectiveClassIds = (classIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (effectiveClassIds.Length == 0 && classId.HasValue && classId.Value != Guid.Empty)
         {
-            where.Append(" AND h.classid = @ClassId");
-            parameters.Add("ClassId", classId.Value);
+            effectiveClassIds = [classId.Value];
         }
 
-        if (subjectId.HasValue && subjectId.Value != Guid.Empty)
+        if (effectiveClassIds.Length > 0)
         {
-            where.Append(" AND h.subjectid = @SubjectId");
-            parameters.Add("SubjectId", subjectId.Value);
+            where.Append(" AND h.classid = ANY(@ClassIds)");
+            parameters.Add("ClassIds", effectiveClassIds);
+        }
+
+        Guid[] effectiveSubjectIds = (subjectIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (effectiveSubjectIds.Length == 0 && subjectId.HasValue && subjectId.Value != Guid.Empty)
+        {
+            effectiveSubjectIds = [subjectId.Value];
+        }
+
+        if (effectiveSubjectIds.Length > 0)
+        {
+            where.Append(" AND h.subjectid = ANY(@SubjectIds)");
+            parameters.Add("SubjectIds", effectiveSubjectIds);
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))

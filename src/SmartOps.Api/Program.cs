@@ -2,6 +2,7 @@ using Serilog;
 using Hangfire;
 using SmartOps.Api.Extensions;
 using SmartOps.Infrastructure.DependencyInjection;
+using SmartOps.Infrastructure.Modules.Jobs.Hangfire;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -30,9 +31,6 @@ WebApplication app = builder.Build();
 
 await app.UseSmartOpsMigrationsAsync();
 
-// Hangfire dashboard (auth can be tightened later).
-app.UseHangfireDashboard("/hangfire");
-
 app.UseExceptionHandlingMiddleware();
 
 app.UseSerilogRequestLogging();
@@ -55,6 +53,13 @@ app.UseMiddleware<SmartOps.Api.Middleware.BranchMiddleware>();
 app.UseMiddleware<SmartOps.Api.Middleware.UserScopeMiddleware>();
 
 app.UseAuthorization();
+
+// Hangfire dashboard — Basic Auth only (browser username/password prompt).
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = [new HangfireDashboardBasicAuthFilter(app.Configuration)],
+    DashboardTitle = "SmartOps Jobs",
+});
 
 app.MapControllers();
 

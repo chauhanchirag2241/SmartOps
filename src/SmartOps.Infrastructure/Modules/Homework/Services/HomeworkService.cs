@@ -35,10 +35,12 @@ public sealed class HomeworkService : IHomeworkService
         Guid? subjectId,
         string? statusFilter,
         string? searchTerm,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<Guid>? classIds = null,
+        IReadOnlyList<Guid>? subjectIds = null)
     {
         IList<HomeworkListRow> rows =
-            await _homeworkRepo.GetListAsync(classId, subjectId, statusFilter, searchTerm, ct)
+            await _homeworkRepo.GetListAsync(classId, subjectId, statusFilter, searchTerm, ct, classIds, subjectIds)
                 .ConfigureAwait(false);
 
         IList<HomeworkListItemDto> items = rows

@@ -40,6 +40,12 @@ public sealed class G006_CreateSchoolsTable : Migration
             .WithColumn("website").AsString(500).Nullable()
             .WithColumn("schemaname").AsString(100).Nullable()
             .WithAuditColumns();
+
+        Execute.Sql($@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_schools_schoolcode_lower
+            ON {DatabaseConfig.Schema_Global}.{DatabaseConfig.TableSchools} (LOWER(schoolcode))
+            WHERE schoolcode IS NOT NULL AND BTRIM(schoolcode) <> '';
+        ");
     }
 
     public override void Down() => Delete.Table(DatabaseConfig.TableSchools).InSchema(DatabaseConfig.Schema_Global);

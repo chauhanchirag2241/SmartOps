@@ -11,6 +11,7 @@ internal static class ApiMiddlewarePaths
 
         return path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase)
             || path.Contains("/schools/by-subdomain/", StringComparison.OrdinalIgnoreCase)
+            || path.Contains("/schools/by-code/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/health", StringComparison.OrdinalIgnoreCase);
     }

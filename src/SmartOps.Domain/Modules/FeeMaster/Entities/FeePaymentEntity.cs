@@ -11,7 +11,7 @@ public sealed class FeePaymentEntity : AuditableEntity
     public Guid StudentId { get; set; }
     public Guid FeeMasterId { get; set; }
     public Guid? AcademicPeriodId { get; set; }
-    public DateTimeOffset PaymentDate { get; set; }
+    public DateTime PaymentDate { get; set; }
     /// <summary>Cash, UPI, Cheque, Card, BankTransfer, Other.</summary>
     public string PaymentMethod { get; set; } = "Cash";
     public decimal TotalAmount { get; set; }

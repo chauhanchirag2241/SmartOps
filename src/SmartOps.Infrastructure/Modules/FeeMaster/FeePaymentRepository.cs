@@ -162,7 +162,7 @@ public sealed class FeePaymentRepository : BaseRepository, IFeePaymentRepository
         }
 
         EnsureInsertAudit(payment, now);
-        payment.PaymentDate = payment.PaymentDate == default ? SchoolLocalTime.Now() : payment.PaymentDate;
+        payment.PaymentDate = payment.PaymentDate == default ? SchoolLocalTime.NowDateTime() : payment.PaymentDate;
 
         var connection = await Context.GetGlobalConnectionAsync(cancellationToken).ConfigureAwait(false);
         var schema = Context.OperationalSchema;

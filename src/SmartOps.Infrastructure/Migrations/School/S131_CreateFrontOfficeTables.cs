@@ -65,8 +65,8 @@ CREATE INDEX ix_visitorpurposes_displayorder ON {S}.{DatabaseConfig.TableVisitor
                 .WithColumn("purposeid").AsGuid().NotNullable()
                     .ForeignKey("fk_visitors_purposeid", S, DatabaseConfig.TableVisitorPurposes, "id")
                 .WithColumn("meetingwith").AsString(200).Nullable()
-                .WithColumn("intime").AsDateTimeOffset().NotNullable()
-                .WithColumn("outtime").AsDateTimeOffset().Nullable()
+                .WithColumn("intime").AsDateTime().NotNullable()
+                .WithColumn("outtime").AsDateTime().Nullable()
                 .WithColumn("note").AsString(1000).Nullable()
                 .WithColumn("documentpath").AsString(1000).Nullable()
                 .WithAuditColumns();

@@ -131,6 +131,11 @@ VALUES
             new() { Key = LeaveSettingKeys.StudentLongLeaveApproverUserTypes, Value = UserTypeCodes.OfficeStaff },
             new() { Key = LeaveSettingKeys.StudentLongLeaveTransferToPrincipal, Value = "true" },
             new() { Key = EmployeeAttendanceSettingKeys.EmployeeType, Value = EmployeeAttendanceTypes.Both },
+            new()
+            {
+                Key = EmployeeAttendanceSettingKeys.DefaultWorkingHours,
+                Value = EmployeeAttendanceSettingKeys.DefaultWorkingHoursValue,
+            },
         ];
 
         return UpsertAsync(schoolId, defaults, cancellationToken);

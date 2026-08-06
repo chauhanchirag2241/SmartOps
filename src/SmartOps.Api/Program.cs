@@ -37,7 +37,12 @@ app.UseSerilogRequestLogging();
 
 app.UseRequestLoggingMiddleware();
 
-app.UseHttpsRedirection();
+// In Development the plain HTTP endpoint must stay usable: a 307 to HTTPS breaks
+// CORS preflight for browser clients (mobile app served over http).
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseRouting();
 

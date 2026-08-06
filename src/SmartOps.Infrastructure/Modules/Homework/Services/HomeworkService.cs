@@ -188,6 +188,12 @@ public sealed class HomeworkService : IHomeworkService
                 "Submissions already recorded. Use update to change statuses.");
         }
 
+        string? marksError = ValidateSubmissionMarks(homework.Marks, request.Students);
+        if (marksError is not null)
+        {
+            return Result<HomeworkDetailResponseDto>.Failure(marksError);
+        }
+
         IList<HomeworkStudentRow> roster =
             await _homeworkRepo.GetClassStudentsForHomeworkAsync(homework.ClassId, ct).ConfigureAwait(false);
 
@@ -267,6 +273,12 @@ public sealed class HomeworkService : IHomeworkService
         {
             return Result<HomeworkDetailResponseDto>.Failure(
                 "No submissions recorded yet. Use submit first.");
+        }
+
+        string? marksError = ValidateSubmissionMarks(homework.Marks, request.Students);
+        if (marksError is not null)
+        {
+            return Result<HomeworkDetailResponseDto>.Failure(marksError);
         }
 
         IList<HomeworkDetailEntity> details = request.Students.Select(item => new HomeworkDetailEntity
@@ -407,5 +419,30 @@ public sealed class HomeworkService : IHomeworkService
             row.Pending,
             row.Late,
             row.Total);
+    }
+
+    private static string? ValidateSubmissionMarks(
+        int? maxMarks,
+        IEnumerable<StudentHomeworkSubmissionItemDto> students)
+    {
+        foreach (StudentHomeworkSubmissionItemDto item in students)
+        {
+            if (!item.Marks.HasValue)
+            {
+                continue;
+            }
+
+            if (item.Marks.Value < 0)
+            {
+                return "Marks cannot be negative.";
+            }
+
+            if (maxMarks.HasValue && item.Marks.Value > maxMarks.Value)
+            {
+                return $"Marks cannot exceed the homework maximum ({maxMarks.Value}).";
+            }
+        }
+
+        return null;
     }
 }

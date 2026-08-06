@@ -21,7 +21,7 @@ public sealed class S142_CreateFeePaymentTables : Migration
                 .WithColumn("studentid").AsGuid().NotNullable()
                 .WithColumn("feemasterid").AsGuid().NotNullable()
                 .WithColumn("academicperiodid").AsGuid().Nullable()
-                .WithColumn("paymentdate").AsDateTimeOffset().NotNullable()
+                .WithColumn("paymentdate").AsDateTime().NotNullable()
                 .WithColumn("paymentmethod").AsString(30).NotNullable().WithDefaultValue("Cash")
                 .WithColumn("totalamount").AsDecimal(18, 2).NotNullable()
                 .WithColumn("remarks").AsString(500).Nullable()

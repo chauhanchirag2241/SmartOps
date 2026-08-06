@@ -17,7 +17,7 @@ namespace SmartOps.Infrastructure.Modules.StaffAttendance.Services;
 public sealed class StaffAttendanceService : IStaffAttendanceService
 {
     private const string FaceBlobContainer = "employee-faces";
-    private static readonly TimeSpan HalfDayThreshold = TimeSpan.FromHours(4);
+    private static readonly TimeSpan FallbackDefaultWorkingDuration = TimeSpan.FromHours(8);
 
     private readonly IStaffAttendanceRepository _attendanceRepo;
     private readonly IEmployeeFaceEnrollmentRepository _faceRepo;
@@ -150,9 +150,9 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
 
         Guid employeeId = employeeResult.Value!;
         DateOnly date = request.AttendanceDate ?? SchoolLocalTime.Today(null);
-        DateTimeOffset punchTime = request.PunchType.Equals(StaffAttendancePunchTypes.CheckOut, StringComparison.OrdinalIgnoreCase)
-            ? (request.CheckOutTime ?? SchoolLocalTime.Now())
-            : (request.CheckInTime ?? SchoolLocalTime.Now());
+        DateTime punchTime = request.PunchType.Equals(StaffAttendancePunchTypes.CheckOut, StringComparison.OrdinalIgnoreCase)
+            ? (request.CheckOutTime ?? SchoolLocalTime.NowDateTime())
+            : (request.CheckInTime ?? SchoolLocalTime.NowDateTime());
 
         return await ApplyPunchAsync(
                 employeeId,
@@ -193,8 +193,14 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         }
 
         EmployeeShiftInfo? info = await _attendanceRepo.GetEmployeeInfoAsync(entity.EmployeeId, ct).ConfigureAwait(false);
+        TimeSpan defaultWorking = await ResolveDefaultWorkingDurationAsync(ct).ConfigureAwait(false);
         entity.Status = request.Status
-            ?? ComputeStatus(entity.CheckInTime, entity.CheckOutTime, info?.ShiftStartTime);
+            ?? ComputeStatus(
+                entity.CheckInTime,
+                entity.CheckOutTime,
+                info?.ShiftStartTime,
+                info?.ShiftEndTime,
+                defaultWorking);
         entity.MarkedByUserId = RequireUserId();
 
         await _attendanceRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
@@ -344,7 +350,7 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
                 match.EmployeeId,
                 today,
                 punchType,
-                SchoolLocalTime.Now(),
+                SchoolLocalTime.NowDateTime(),
                 StaffAttendanceSources.Face,
                 match.Score,
                 remarks: null,
@@ -428,11 +434,71 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
             new StaffAttendanceReportDto(month, year, departmentId, totalWorkingDays, employees));
     }
 
+    public async Task<Result<MyMonthAttendanceDto>> GetMyMonthAsync(
+        int month,
+        int year,
+        CancellationToken ct = default)
+    {
+        if (month is < 1 or > 12)
+        {
+            return Result<MyMonthAttendanceDto>.Failure("Month must be between 1 and 12.");
+        }
+
+        if (year < 2000 || year > 2100)
+        {
+            return Result<MyMonthAttendanceDto>.Failure("Year is out of range.");
+        }
+
+        Guid userId = RequireUserId();
+        Guid? employeeId = await _attendanceRepo.GetEmployeeIdByUserIdAsync(userId, ct).ConfigureAwait(false);
+        if (!employeeId.HasValue)
+        {
+            return Result<MyMonthAttendanceDto>.Failure("No employee profile linked to your account.");
+        }
+
+        IList<StaffAttendanceDayStatusRow> rows = await _attendanceRepo
+            .GetEmployeeMonthStatusesAsync(employeeId.Value, month, year, ct)
+            .ConfigureAwait(false);
+
+        var daily = new Dictionary<int, string>();
+        int present = 0, absent = 0, late = 0, half = 0;
+        foreach (StaffAttendanceDayStatusRow row in rows)
+        {
+            daily[row.AttendanceDate.Day] = row.Status.ToReportCode();
+            switch (row.Status)
+            {
+                case StaffAttendanceStatus.Present: present++; break;
+                case StaffAttendanceStatus.Absent: absent++; break;
+                case StaffAttendanceStatus.Late: late++; break;
+                case StaffAttendanceStatus.HalfDay: half++; break;
+            }
+        }
+
+        await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+        IReadOnlySet<int> nonWorkingDays = await _calendarService
+            .GetNonWorkingDayNumbersAsync(_branchContext.ActiveBranchId, year, month, CalendarAudience.Staff, ct)
+            .ConfigureAwait(false);
+        int totalWorkingDays = await _calendarService
+            .CountWorkingDaysAsync(_branchContext.ActiveBranchId, year, month, CalendarAudience.Staff, ct)
+            .ConfigureAwait(false);
+
+        return Result<MyMonthAttendanceDto>.Success(new MyMonthAttendanceDto(
+            month,
+            year,
+            present,
+            absent,
+            late,
+            half,
+            totalWorkingDays,
+            daily,
+            nonWorkingDays.OrderBy(d => d).ToList()));
+    }
+
     private async Task<Result<StaffAttendanceRowDto>> ApplyPunchAsync(
         Guid employeeId,
         DateOnly date,
         string punchType,
-        DateTimeOffset punchTime,
+        DateTime punchTime,
         string source,
         float? confidence,
         string? remarks,
@@ -503,7 +569,13 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         }
 
         existing.MarkedByUserId = RequireUserId();
-        existing.Status = ComputeStatus(existing.CheckInTime, existing.CheckOutTime, info.ShiftStartTime);
+        TimeSpan defaultWorking = await ResolveDefaultWorkingDurationAsync(ct).ConfigureAwait(false);
+        existing.Status = ComputeStatus(
+            existing.CheckInTime,
+            existing.CheckOutTime,
+            info.ShiftStartTime,
+            info.ShiftEndTime,
+            defaultWorking);
 
         Guid id = await _attendanceRepo.UpsertPunchAsync(existing, ct).ConfigureAwait(false);
         existing.Id = id;
@@ -533,9 +605,11 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
     }
 
     internal static StaffAttendanceStatus ComputeStatus(
-        DateTimeOffset? checkIn,
-        DateTimeOffset? checkOut,
-        string? shiftStartTime)
+        DateTime? checkIn,
+        DateTime? checkOut,
+        string? shiftStartTime,
+        string? shiftEndTime,
+        TimeSpan defaultWorkingHours)
     {
         if (!checkIn.HasValue)
         {
@@ -545,15 +619,22 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         if (checkOut.HasValue)
         {
             TimeSpan worked = checkOut.Value - checkIn.Value;
-            if (worked < HalfDayThreshold)
+            if (worked < TimeSpan.Zero)
+            {
+                worked = TimeSpan.Zero;
+            }
+
+            TimeSpan fullDay = ResolveFullDayDuration(shiftStartTime, shiftEndTime, defaultWorkingHours);
+            TimeSpan halfDay = TimeSpan.FromTicks(fullDay.Ticks / 2);
+            if (worked < halfDay)
             {
                 return StaffAttendanceStatus.HalfDay;
             }
         }
 
-        if (TryParseShiftStart(shiftStartTime, out TimeOnly shiftStart))
+        if (TryParseShiftTime(shiftStartTime, out TimeOnly shiftStart))
         {
-            TimeOnly checkInTime = TimeOnly.FromDateTime(checkIn.Value.LocalDateTime);
+            TimeOnly checkInTime = TimeOnly.FromDateTime(checkIn.Value);
             if (checkInTime > shiftStart)
             {
                 return StaffAttendanceStatus.Late;
@@ -563,15 +644,58 @@ public sealed class StaffAttendanceService : IStaffAttendanceService
         return StaffAttendanceStatus.Present;
     }
 
-    private static bool TryParseShiftStart(string? raw, out TimeOnly shiftStart)
+    internal static TimeSpan ResolveFullDayDuration(
+        string? shiftStartTime,
+        string? shiftEndTime,
+        TimeSpan defaultWorkingHours)
     {
-        shiftStart = default;
+        if (TryParseShiftTime(shiftStartTime, out TimeOnly start)
+            && TryParseShiftTime(shiftEndTime, out TimeOnly end))
+        {
+            TimeSpan duration = end - start;
+            if (duration <= TimeSpan.Zero)
+            {
+                // Overnight shift e.g. 22:00 → 06:00
+                duration = duration.Add(TimeSpan.FromDays(1));
+            }
+
+            if (duration > TimeSpan.Zero)
+            {
+                return duration;
+            }
+        }
+
+        return defaultWorkingHours > TimeSpan.Zero
+            ? defaultWorkingHours
+            : FallbackDefaultWorkingDuration;
+    }
+
+    private async Task<TimeSpan> ResolveDefaultWorkingDurationAsync(CancellationToken ct)
+    {
+        if (!TryGetSchoolId(out Guid schoolId))
+        {
+            return FallbackDefaultWorkingDuration;
+        }
+
+        EmployeeAttendanceTypeSettingDto dto = await _settingsService.GetTypeAsync(schoolId, ct).ConfigureAwait(false);
+        double hours = (double)dto.DefaultWorkingHours;
+        if (hours <= 0)
+        {
+            return FallbackDefaultWorkingDuration;
+        }
+
+        return TimeSpan.FromHours(hours);
+    }
+
+    private static bool TryParseShiftTime(string? raw, out TimeOnly value)
+    {
+        value = default;
         if (string.IsNullOrWhiteSpace(raw))
         {
             return false;
         }
 
-        return TimeOnly.TryParse(raw, out shiftStart);
+        return TimeOnly.TryParse(raw, out value);
     }
 
     private static StaffAttendanceRowDto MapListRow(StaffAttendanceListRow row)

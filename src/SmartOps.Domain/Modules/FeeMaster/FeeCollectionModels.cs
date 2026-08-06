@@ -69,7 +69,7 @@ public sealed class FeeCollectionStudentSummaryModel
 public sealed class FeeCollectionHistoryPaymentModel
 {
     public Guid PaymentId { get; set; }
-    public DateTimeOffset PaymentDate { get; set; }
+    public DateTime PaymentDate { get; set; }
     public decimal TotalAmount { get; set; }
     public string PaymentMethod { get; set; } = "Cash";
     public Guid? AcademicPeriodId { get; set; }

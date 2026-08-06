@@ -54,7 +54,8 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                     WHERE fe.employeeid = e.id AND fe.isactive = true
                 ) AS IsFaceEnrolled,
                 e.photourl AS PhotoUrl,
-                e.shiftstarttime AS ShiftStartTime
+                e.shiftstarttime AS ShiftStartTime,
+                e.shiftendtime AS ShiftEndTime
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
             INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid AND d.isactive = true
@@ -259,6 +260,7 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                 e.departmentid AS DepartmentId,
                 d.name AS DepartmentName,
                 e.shiftstarttime AS ShiftStartTime,
+                e.shiftendtime AS ShiftEndTime,
                 e.photourl AS PhotoUrl,
                 EXISTS (
                     SELECT 1 FROM {Schema}.{DatabaseConfig.TableEmployeeFaceEnrollments} fe
@@ -328,6 +330,33 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
 
         IEnumerable<StaffAttendanceReportSourceRow> rows = await connection.QueryAsync<StaffAttendanceReportSourceRow>(
             new CommandDefinition(sql, new { From = from, To = to, DepartmentId = departmentId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+
+        return rows.ToList();
+    }
+
+    public async Task<IList<StaffAttendanceDayStatusRow>> GetEmployeeMonthStatusesAsync(
+        Guid employeeId,
+        int month,
+        int year,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        DateOnly from = new(year, month, 1);
+        DateOnly to = from.AddMonths(1).AddDays(-1);
+
+        string sql = $"""
+            SELECT attendancedate AS AttendanceDate, status AS Status
+            FROM {Schema}.{DatabaseConfig.TableStaffAttendance}
+            WHERE employeeid = @EmployeeId
+              AND attendancedate >= @From
+              AND attendancedate <= @To
+              AND isactive = true
+            ORDER BY attendancedate ASC;
+            """;
+
+        IEnumerable<StaffAttendanceDayStatusRow> rows = await connection.QueryAsync<StaffAttendanceDayStatusRow>(
+            new CommandDefinition(sql, new { EmployeeId = employeeId, From = from, To = to }, cancellationToken: ct))
             .ConfigureAwait(false);
 
         return rows.ToList();

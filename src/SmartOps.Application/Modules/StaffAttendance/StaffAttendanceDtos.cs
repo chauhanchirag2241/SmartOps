@@ -9,8 +9,8 @@ public record StaffAttendanceRowDto(
     Guid? DepartmentId,
     string? DepartmentName,
     DateOnly AttendanceDate,
-    DateTimeOffset? CheckInTime,
-    DateTimeOffset? CheckOutTime,
+    DateTime? CheckInTime,
+    DateTime? CheckOutTime,
     string? CheckInSource,
     string? CheckOutSource,
     StaffAttendanceStatus Status,
@@ -26,20 +26,21 @@ public record ManualPunchRequestDto(
     Guid? EmployeeId,
     string PunchType,
     DateOnly? AttendanceDate,
-    DateTimeOffset? CheckInTime,
-    DateTimeOffset? CheckOutTime,
+    DateTime? CheckInTime,
+    DateTime? CheckOutTime,
     string? Remarks);
 
 public record UpdateStaffAttendanceRequestDto(
-    DateTimeOffset? CheckInTime,
-    DateTimeOffset? CheckOutTime,
+    DateTime? CheckInTime,
+    DateTime? CheckOutTime,
     StaffAttendanceStatus? Status,
     string? Remarks);
 
 public record EmployeeAttendanceTypeSettingDto(
     string Type,
     bool AllowsManual,
-    bool AllowsFace);
+    bool AllowsFace,
+    decimal DefaultWorkingHours);
 
 public record StaffAttendanceReportDto(
     int Month,
@@ -47,6 +48,18 @@ public record StaffAttendanceReportDto(
     Guid? DepartmentId,
     int TotalWorkingDays,
     IList<StaffAttendanceReportEmployeeDto> Employees);
+
+/// <summary>Own month attendance for the signed-in employee (mobile My Attendance calendar).</summary>
+public record MyMonthAttendanceDto(
+    int Month,
+    int Year,
+    int PresentDays,
+    int AbsentDays,
+    int LateDays,
+    int HalfDayDays,
+    int TotalWorkingDays,
+    IDictionary<int, string> DailyStatus,
+    IReadOnlyList<int> NonWorkingDays);
 
 public record StaffAttendanceReportEmployeeDto(
     Guid EmployeeId,

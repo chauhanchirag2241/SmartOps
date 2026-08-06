@@ -26,6 +26,12 @@ public interface IStaffAttendanceRepository
         int year,
         Guid? departmentId,
         CancellationToken ct = default);
+
+    Task<IList<StaffAttendanceDayStatusRow>> GetEmployeeMonthStatusesAsync(
+        Guid employeeId,
+        int month,
+        int year,
+        CancellationToken ct = default);
 }
 
 public sealed class StaffAttendanceListRow
@@ -36,8 +42,8 @@ public sealed class StaffAttendanceListRow
     public Guid? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
     public DateOnly AttendanceDate { get; set; }
-    public DateTimeOffset? CheckInTime { get; set; }
-    public DateTimeOffset? CheckOutTime { get; set; }
+    public DateTime? CheckInTime { get; set; }
+    public DateTime? CheckOutTime { get; set; }
     public string? CheckInSource { get; set; }
     public string? CheckOutSource { get; set; }
     public StaffAttendanceStatus Status { get; set; }
@@ -47,6 +53,7 @@ public sealed class StaffAttendanceListRow
     public bool IsFaceEnrolled { get; set; }
     public string? PhotoUrl { get; set; }
     public string? ShiftStartTime { get; set; }
+    public string? ShiftEndTime { get; set; }
 }
 
 public sealed class EmployeeShiftInfo
@@ -56,6 +63,7 @@ public sealed class EmployeeShiftInfo
     public Guid? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
     public string? ShiftStartTime { get; set; }
+    public string? ShiftEndTime { get; set; }
     public string? PhotoUrl { get; set; }
     public bool IsFaceEnrolled { get; set; }
 }
@@ -67,4 +75,10 @@ public sealed class StaffAttendanceReportSourceRow
     public string? DepartmentName { get; set; }
     public DateOnly? AttendanceDate { get; set; }
     public StaffAttendanceStatus? Status { get; set; }
+}
+
+public sealed class StaffAttendanceDayStatusRow
+{
+    public DateOnly AttendanceDate { get; set; }
+    public StaffAttendanceStatus Status { get; set; }
 }

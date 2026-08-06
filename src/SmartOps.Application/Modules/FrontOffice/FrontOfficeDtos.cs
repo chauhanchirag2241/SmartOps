@@ -51,8 +51,8 @@ public record VisitorDto(
     Guid PurposeId,
     string? PurposeName,
     string? MeetingWith,
-    DateTimeOffset InTime,
-    DateTimeOffset? OutTime,
+    DateTime InTime,
+    DateTime? OutTime,
     string? Note,
     string? DocumentPath,
     bool IsActive);
@@ -64,8 +64,8 @@ public record CreateVisitorRequestDto(
     string? IdCardNumber,
     Guid PurposeId,
     string? MeetingWith,
-    DateTimeOffset InTime,
-    DateTimeOffset? OutTime,
+    DateTime InTime,
+    DateTime? OutTime,
     string? Note,
     string? DocumentPath);
 
@@ -76,8 +76,8 @@ public record UpdateVisitorRequestDto(
     string? IdCardNumber,
     Guid PurposeId,
     string? MeetingWith,
-    DateTimeOffset InTime,
-    DateTimeOffset? OutTime,
+    DateTime InTime,
+    DateTime? OutTime,
     string? Note,
     string? DocumentPath);
 

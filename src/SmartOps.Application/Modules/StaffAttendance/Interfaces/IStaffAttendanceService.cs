@@ -30,4 +30,6 @@ public interface IStaffAttendanceService
         int year,
         Guid? departmentId,
         CancellationToken ct = default);
+
+    Task<Result<MyMonthAttendanceDto>> GetMyMonthAsync(int month, int year, CancellationToken ct = default);
 }

@@ -53,6 +53,19 @@ public sealed class StaffAttendanceController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    /// <summary>Own month attendance (status per day + non-working days) for the signed-in employee.</summary>
+    [HttpGet("my-month")]
+    [Authorize(Policy = MenuPolicies.StaffAttendance.View)]
+    [ProducesResponseType(typeof(MyMonthAttendanceDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyMonth(
+        [FromQuery] int month,
+        [FromQuery] int year,
+        CancellationToken ct)
+    {
+        var result = await _service.GetMyMonthAsync(month, year, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpPost("manual")]
     [Authorize(Policy = MenuPolicies.StaffAttendance.Edit)]
     [ProducesResponseType(typeof(StaffAttendanceRowDto), StatusCodes.Status200OK)]

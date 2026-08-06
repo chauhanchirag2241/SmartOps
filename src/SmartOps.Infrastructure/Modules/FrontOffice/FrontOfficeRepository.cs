@@ -280,7 +280,7 @@ public sealed class FrontOfficeRepository : BaseRepository, IFrontOfficeReposito
         await SoftDeleteAsync(connection, Schema, DatabaseConfig.TableVisitors, id).ConfigureAwait(false);
     }
 
-    public async Task CheckoutVisitorAsync(Guid id, DateTimeOffset outTime, CancellationToken ct = default)
+    public async Task CheckoutVisitorAsync(Guid id, DateTime outTime, CancellationToken ct = default)
     {
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
         Guid actor = ResolveUpdateActor();

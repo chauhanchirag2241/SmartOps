@@ -258,7 +258,7 @@ public sealed class FrontOfficeService : IFrontOfficeService
             return Result<VisitorDto>.Failure("Visitor already checked out.");
         }
 
-        await _repo.CheckoutVisitorAsync(id, SchoolLocalTime.Now(), ct).ConfigureAwait(false);
+        await _repo.CheckoutVisitorAsync(id, SchoolLocalTime.NowDateTime(), ct).ConfigureAwait(false);
         return await GetVisitorByIdAsync(id, ct).ConfigureAwait(false);
     }
 

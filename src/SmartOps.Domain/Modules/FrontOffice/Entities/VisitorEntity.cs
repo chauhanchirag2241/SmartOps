@@ -18,8 +18,8 @@ public sealed class VisitorEntity : AuditableEntity
     public string? IdCardNumber { get; set; }
     public Guid PurposeId { get; set; }
     public string? MeetingWith { get; set; }
-    public DateTimeOffset InTime { get; set; }
-    public DateTimeOffset? OutTime { get; set; }
+    public DateTime InTime { get; set; }
+    public DateTime? OutTime { get; set; }
     public string? Note { get; set; }
     public string? DocumentPath { get; set; }
 }

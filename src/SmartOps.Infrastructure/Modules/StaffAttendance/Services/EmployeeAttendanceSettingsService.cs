@@ -7,6 +7,10 @@ namespace SmartOps.Infrastructure.Modules.StaffAttendance.Services;
 
 public sealed class EmployeeAttendanceSettingsService : IEmployeeAttendanceSettingsService
 {
+    public const decimal FallbackDefaultWorkingHours = 8m;
+    public const decimal MinDefaultWorkingHours = 1m;
+    public const decimal MaxDefaultWorkingHours = 24m;
+
     private readonly ISchoolSettingsRepository _settings;
 
     public EmployeeAttendanceSettingsService(ISchoolSettingsRepository settings)
@@ -28,9 +32,36 @@ public sealed class EmployeeAttendanceSettingsService : IEmployeeAttendanceSetti
             type = EmployeeAttendanceTypes.Normalize(raw);
         }
 
+        decimal defaultHours = FallbackDefaultWorkingHours;
+        if (map.TryGetValue(EmployeeAttendanceSettingKeys.DefaultWorkingHours, out string? hoursRaw))
+        {
+            defaultHours = NormalizeDefaultWorkingHours(hoursRaw);
+        }
+
         return new EmployeeAttendanceTypeSettingDto(
             type,
             EmployeeAttendanceTypes.AllowsManual(type),
-            EmployeeAttendanceTypes.AllowsFace(type));
+            EmployeeAttendanceTypes.AllowsFace(type),
+            defaultHours);
+    }
+
+    public static decimal NormalizeDefaultWorkingHours(string? raw)
+    {
+        if (!decimal.TryParse(raw, out decimal hours))
+        {
+            return FallbackDefaultWorkingHours;
+        }
+
+        if (hours < MinDefaultWorkingHours)
+        {
+            return MinDefaultWorkingHours;
+        }
+
+        if (hours > MaxDefaultWorkingHours)
+        {
+            return MaxDefaultWorkingHours;
+        }
+
+        return decimal.Round(hours, 2, MidpointRounding.AwayFromZero);
     }
 }

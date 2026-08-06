@@ -170,7 +170,7 @@ public sealed class FeeCollectionsController(
             FeeMasterId = request.FeeMasterId,
             AcademicPeriodId = request.AcademicPeriodId,
             BranchId = master.BranchId,
-            PaymentDate = SchoolLocalTime.Now(),
+            PaymentDate = SchoolLocalTime.NowDateTime(),
             PaymentMethod = paymentMethod,
             TotalAmount = paymentLines.Sum(l => l.PaidAmount),
             Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim(),

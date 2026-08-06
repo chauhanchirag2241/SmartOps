@@ -7,7 +7,15 @@ public static class EmployeeAttendanceSettingKeys
     /// <summary>Manual | Face | Both</summary>
     public const string EmployeeType = "attendance.employee.type";
 
-    public static readonly string[] AllKeys = [EmployeeType];
+    /// <summary>
+    /// Default full working day length in hours when employee has no shift start+end.
+    /// Half-day threshold is half of this value.
+    /// </summary>
+    public const string DefaultWorkingHours = "attendance.employee.defaultWorkingHours";
+
+    public const string DefaultWorkingHoursValue = "8";
+
+    public static readonly string[] AllKeys = [EmployeeType, DefaultWorkingHours];
 }
 
 public static class EmployeeAttendanceTypes

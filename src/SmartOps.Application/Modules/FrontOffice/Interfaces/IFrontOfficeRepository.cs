@@ -29,7 +29,7 @@ public interface IFrontOfficeRepository
     Task<Guid> CreateVisitorAsync(VisitorEntity entity, CancellationToken ct = default);
     Task UpdateVisitorAsync(VisitorEntity entity, CancellationToken ct = default);
     Task SoftDeleteVisitorAsync(Guid id, CancellationToken ct = default);
-    Task CheckoutVisitorAsync(Guid id, DateTimeOffset outTime, CancellationToken ct = default);
+    Task CheckoutVisitorAsync(Guid id, DateTime outTime, CancellationToken ct = default);
 
     // Phone logs
     Task<IList<PhoneLogEntity>> GetPhoneLogsAsync(
@@ -81,8 +81,8 @@ public sealed class VisitorListRow
     public Guid PurposeId { get; set; }
     public string? PurposeName { get; set; }
     public string? MeetingWith { get; set; }
-    public DateTimeOffset InTime { get; set; }
-    public DateTimeOffset? OutTime { get; set; }
+    public DateTime InTime { get; set; }
+    public DateTime? OutTime { get; set; }
     public string? Note { get; set; }
     public string? DocumentPath { get; set; }
     public bool IsActive { get; set; }

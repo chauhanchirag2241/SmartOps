@@ -27,4 +27,14 @@ public interface IAcademicCalendarService
     Task<int> CountWorkingDaysAsync(Guid? branchId, int year, int month, CalendarAudience audience, CancellationToken ct = default, Guid? classId = null);
     Task<IReadOnlySet<int>> GetNonWorkingDayNumbersAsync(Guid? branchId, int year, int month, CalendarAudience audience, CancellationToken ct = default, Guid? classId = null);
     Task<Result<WorkingDaysResponseDto>> GetWorkingDaysAsync(int year, int month, CalendarAudience audience, CancellationToken ct = default);
+
+    /// <summary>
+    /// Holidays/events applicable to the signed-in user (audience + class scope),
+    /// plus exam slots for classes they teach or where they are invigilator.
+    /// </summary>
+    Task<Result<MyCalendarMonthDto>> GetMyMonthAsync(
+        int year,
+        int month,
+        Guid? branchId = null,
+        CancellationToken ct = default);
 }

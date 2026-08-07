@@ -24,6 +24,7 @@ internal static class SchoolSchemaCatalog
         DatabaseConfig.TableClassAcademicPeriods,
         DatabaseConfig.TableSubjects,
         DatabaseConfig.TableEmployees,
+        DatabaseConfig.TableEmployeeShifts,
         DatabaseConfig.TableStudents,
         DatabaseConfig.TableStudentParents,
         DatabaseConfig.TableStudentAcademics,

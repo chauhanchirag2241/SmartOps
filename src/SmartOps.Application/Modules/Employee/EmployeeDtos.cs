@@ -40,8 +40,9 @@ public class CreateEmployeeDto
             Username = Access.Username,
             DepartmentId = Organization.DepartmentId,
             ReportingManagerId = Organization.ReportingManagerId,
-            ShiftStartTime = Schedule.ShiftStartTime,
-            ShiftEndTime = Schedule.ShiftEndTime,
+            ShiftStartTime = Schedule.ShiftIds is { Count: > 0 } ? null : Schedule.ShiftStartTime,
+            ShiftEndTime = Schedule.ShiftIds is { Count: > 0 } ? null : Schedule.ShiftEndTime,
+            ShiftIds = Schedule.ShiftIds ?? [],
             IsActive = true
         };
 
@@ -107,6 +108,7 @@ public class EmployeeOrganizationInfo
 public class EmployeeScheduleInfo
 {
     public List<EmployeeClassAssignmentRowDto> ClassAssignments { get; set; } = [];
+    public List<Guid> ShiftIds { get; set; } = [];
     public string? ShiftStartTime { get; set; }
     public string? ShiftEndTime { get; set; }
 }

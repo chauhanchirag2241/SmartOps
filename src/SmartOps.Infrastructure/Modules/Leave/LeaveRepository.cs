@@ -178,7 +178,12 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    lr.requestedbyuserid AS RequestedByUserId, u.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
                    lr.leavetypeid AS LeaveTypeId, lt.name AS LeaveTypeName,
-                   lr.status AS Status, lr.createdon AS CreatedOn
+                   lr.totaldays AS TotalDays, lr.ishalfday AS IsHalfDay,
+                   lr.status AS Status, lr.createdon AS CreatedOn,
+                   lr.reason AS Reason,
+                   lr.approvedbyuserid AS ApprovedByUserId, au.email AS ApprovedByEmail,
+                   au.firstname AS ApprovedByFirstName, au.lastname AS ApprovedByLastName,
+                   lr.approvedon AS ApprovedOn
             FROM {Schema}.{DatabaseConfig.TableLeaveRequests} lr
             LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} t ON t.id = lr.employeeid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} tu ON tu.id = t.userid
@@ -188,6 +193,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
             LEFT JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sa.classid
             LEFT JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
             LEFT JOIN {G}.{DatabaseConfig.TableUsers} u ON u.id = lr.requestedbyuserid
+            LEFT JOIN {G}.{DatabaseConfig.TableUsers} au ON au.id = lr.approvedbyuserid
             LEFT JOIN {Schema}.{DatabaseConfig.TableLeaveTypes} lt ON lt.id = lr.leavetypeid
             WHERE lr.isactive = true AND lr.requesttype = @RequestType
             """);
@@ -258,6 +264,7 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
                    lr.requestedbyuserid AS RequestedByUserId, ru.email AS RequestedByEmail,
                    lr.fromdate AS FromDate, lr.todate AS ToDate, lr.leavetype AS LeaveType,
                    lr.leavetypeid AS LeaveTypeId, lt.name AS LeaveTypeName,
+                   lr.totaldays AS TotalDays, lr.ishalfday AS IsHalfDay,
                    lr.status AS Status, lr.reason AS Reason,
                    lr.approvedbyuserid AS ApprovedByUserId, au.email AS ApprovedByEmail,
                    lr.approvedon AS ApprovedOn, lr.approverremark AS ApproverRemark,
@@ -430,6 +437,83 @@ public sealed class LeaveRepository : BaseRepository, ILeaveRepository
         return await connection.QuerySingleOrDefaultAsync<SchoolAdminUserRow>(
             new CommandDefinition(sql, new { EmployeeId = employeeId }, cancellationToken: ct))
             .ConfigureAwait(false);
+    }
+
+    public async Task<SchoolAdminUserRow?> GetEmployeeUserByUserIdAsync(Guid userId, CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT e.id AS Id,
+                   COALESCE(
+                       NULLIF(TRIM(CONCAT_WS(' ', u.firstname, u.lastname)), ''),
+                       NULLIF(TRIM(u.username), ''),
+                       u.email
+                   ) AS Name
+            FROM {Schema}.{DatabaseConfig.TableEmployees} e
+            INNER JOIN {G}.{DatabaseConfig.TableUsers} u
+                ON u.id = e.userid AND u.isactive = true
+            WHERE e.userid = @UserId AND e.isactive = true
+            LIMIT 1;
+            """;
+        return await connection.QuerySingleOrDefaultAsync<SchoolAdminUserRow>(
+            new CommandDefinition(sql, new { UserId = userId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    public async Task ReplaceHalfDaysAsync(
+        Guid leaveRequestId,
+        IReadOnlyList<LeaveHalfDayEntity> halfDays,
+        CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"""
+            DELETE FROM {Schema}.{DatabaseConfig.TableLeaveHalfDays}
+            WHERE leaverequestid = @LeaveRequestId;
+            """,
+            new { LeaveRequestId = leaveRequestId },
+            cancellationToken: ct)).ConfigureAwait(false);
+
+        if (halfDays.Count == 0)
+        {
+            return;
+        }
+
+        string insertSql = $"""
+            INSERT INTO {Schema}.{DatabaseConfig.TableLeaveHalfDays}
+                (id, leaverequestid, leavedate, session)
+            VALUES
+                (@Id, @LeaveRequestId, @LeaveDate, @Session);
+            """;
+
+        foreach (LeaveHalfDayEntity row in halfDays)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(insertSql, new
+            {
+                row.Id,
+                row.LeaveRequestId,
+                row.LeaveDate,
+                Session = (short)row.Session
+            }, cancellationToken: ct)).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<IList<LeaveHalfDayEntity>> GetHalfDaysAsync(Guid leaveRequestId, CancellationToken ct = default)
+    {
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+        string sql = $"""
+            SELECT id AS Id,
+                   leaverequestid AS LeaveRequestId,
+                   leavedate AS LeaveDate,
+                   session AS Session
+            FROM {Schema}.{DatabaseConfig.TableLeaveHalfDays}
+            WHERE leaverequestid = @LeaveRequestId
+            ORDER BY leavedate;
+            """;
+        var rows = await connection.QueryAsync<LeaveHalfDayEntity>(
+            new CommandDefinition(sql, new { LeaveRequestId = leaveRequestId }, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return rows.ToList();
     }
 
     public Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default)

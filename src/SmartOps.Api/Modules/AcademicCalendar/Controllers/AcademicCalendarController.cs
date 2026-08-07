@@ -170,4 +170,20 @@ public sealed class AcademicCalendarController(IAcademicCalendarService calendar
         var result = await calendarService.GetWorkingDaysAsync(year, month, audience, ct).ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
+
+    /// <summary>
+    /// Own scoped calendar (holidays/events + exams) for mobile — any authenticated user.
+    /// </summary>
+    [HttpGet("my-month")]
+    [Authorize]
+    [ProducesResponseType(typeof(MyCalendarMonthDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyMonth(
+        [FromQuery] int year,
+        [FromQuery] int month,
+        [FromQuery] Guid? branchId = null,
+        CancellationToken ct = default)
+    {
+        var result = await calendarService.GetMyMonthAsync(year, month, branchId, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
 }

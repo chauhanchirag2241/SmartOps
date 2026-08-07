@@ -54,8 +54,20 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                     WHERE fe.employeeid = e.id AND fe.isactive = true
                 ) AS IsFaceEnrolled,
                 e.photourl AS PhotoUrl,
-                e.shiftstarttime AS ShiftStartTime,
-                e.shiftendtime AS ShiftEndTime
+                COALESCE(
+                    (SELECT MIN(s.starttime)
+                     FROM {Schema}.{DatabaseConfig.TableEmployeeShifts} es
+                     INNER JOIN {Schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+                     WHERE es.employeeid = e.id AND es.isactive = true),
+                    e.shiftstarttime
+                ) AS ShiftStartTime,
+                COALESCE(
+                    (SELECT MAX(s.endtime)
+                     FROM {Schema}.{DatabaseConfig.TableEmployeeShifts} es
+                     INNER JOIN {Schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+                     WHERE es.employeeid = e.id AND es.isactive = true),
+                    e.shiftendtime
+                ) AS ShiftEndTime
             FROM {Schema}.{DatabaseConfig.TableEmployees} e
             INNER JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} u ON u.id = e.userid
             LEFT JOIN {Schema}.{DatabaseConfig.TableDepartments} d ON d.id = e.departmentid AND d.isactive = true
@@ -259,8 +271,20 @@ public sealed class StaffAttendanceRepository : BaseRepository, IStaffAttendance
                 TRIM(u.firstname || ' ' || u.lastname) AS EmployeeName,
                 e.departmentid AS DepartmentId,
                 d.name AS DepartmentName,
-                e.shiftstarttime AS ShiftStartTime,
-                e.shiftendtime AS ShiftEndTime,
+                COALESCE(
+                    (SELECT MIN(s.starttime)
+                     FROM {Schema}.{DatabaseConfig.TableEmployeeShifts} es
+                     INNER JOIN {Schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+                     WHERE es.employeeid = e.id AND es.isactive = true),
+                    e.shiftstarttime
+                ) AS ShiftStartTime,
+                COALESCE(
+                    (SELECT MAX(s.endtime)
+                     FROM {Schema}.{DatabaseConfig.TableEmployeeShifts} es
+                     INNER JOIN {Schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+                     WHERE es.employeeid = e.id AND es.isactive = true),
+                    e.shiftendtime
+                ) AS ShiftEndTime,
                 e.photourl AS PhotoUrl,
                 EXISTS (
                     SELECT 1 FROM {Schema}.{DatabaseConfig.TableEmployeeFaceEnrollments} fe

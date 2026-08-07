@@ -98,7 +98,7 @@ public sealed class ClassesController(
     }
 
     [HttpGet("/api/classGroups/{id:guid}/subjects")]
-    [Authorize(Policy = MenuPolicies.Classes.View)]
+    [Authorize(Policy = MenuPolicies.Classes.ListForAttendanceDropdown)]
     [ProducesResponseType(typeof(IReadOnlyList<ClassGroupSubjectListModel>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetClassGroupSubjects(Guid id, CancellationToken cancellationToken)
     {

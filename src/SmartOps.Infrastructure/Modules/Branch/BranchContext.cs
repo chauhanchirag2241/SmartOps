@@ -79,7 +79,7 @@ public sealed class BranchContext : IBranchContext
         // identity schema is man, so usertype lookup returns null. JWT Admin role still
         // authorizes full branch access for school setup endpoints.
         CanViewAllBranches = UserTypeCodes.IsGlobalScope(userTypeCode)
-            || (string.IsNullOrWhiteSpace(userTypeCode) && IsPlatformAdmin());
+            || IsPlatformAdmin();
 
         if (CanViewAllBranches)
         {
@@ -93,6 +93,28 @@ public sealed class BranchContext : IBranchContext
             AllowedBranchIds = await _branchRepository
                 .GetUserBranchIdsAsync(userId.Value, schoolId, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        // Users without user_branch_mappings (common on mobile) still need a branch for
+        // branch-scoped modules. Accept X-Branch-Id when it belongs to this school, else
+        // fall back to head-office / first school branch.
+        if (AllowedBranchIds.Count == 0)
+        {
+            IReadOnlyList<BranchDropdownItemDto> schoolBranches = await _branchRepository
+                .GetBranchesBySchoolAsync(schoolId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (TryReadHeaderBranchId(out Guid headerBranchId)
+                && schoolBranches.Any(b => b.Id == headerBranchId))
+            {
+                AllowedBranchIds = [headerBranchId];
+            }
+            else if (schoolBranches.Count > 0)
+            {
+                BranchDropdownItemDto fallback =
+                    schoolBranches.FirstOrDefault(b => b.IsHeadOffice) ?? schoolBranches[0];
+                AllowedBranchIds = [fallback.Id];
+            }
         }
 
         ActiveBranchId = ResolveActiveBranchId();
@@ -109,7 +131,8 @@ public sealed class BranchContext : IBranchContext
     {
         ClaimsPrincipal? user = _httpContextAccessor.HttpContext?.User;
         return user?.IsInRole(RoleNames.SmartOpsAdmin) == true
-            || user?.IsInRole(RoleNames.SchoolAdmin) == true;
+            || user?.IsInRole(RoleNames.SchoolAdmin) == true
+            || user?.IsInRole(RoleNames.Principal) == true;
     }
 
     private Guid? ResolveActiveBranchId()

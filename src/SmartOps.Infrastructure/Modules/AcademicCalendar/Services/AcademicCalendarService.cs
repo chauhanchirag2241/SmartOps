@@ -1,9 +1,19 @@
+using SmartOps.Application.Abstractions;
 using SmartOps.Application.Modules.AcademicCalendar;
 using SmartOps.Application.Modules.AcademicCalendar.Interfaces;
+using SmartOps.Application.Modules.Authorization.Interfaces;
 using SmartOps.Application.Modules.Branch;
+using SmartOps.Application.Modules.Exam.Interfaces;
+using SmartOps.Application.Modules.Leave;
+using SmartOps.Application.Modules.Leave.Interfaces;
+using SmartOps.Application.Modules.StaffAttendance;
+using SmartOps.Application.Modules.StaffAttendance.Interfaces;
 using SmartOps.Domain.Common;
+using SmartOps.Domain.Common.Enums;
 using SmartOps.Domain.Modules.AcademicCalendar;
 using SmartOps.Domain.Modules.AcademicCalendar.Entities;
+using SmartOps.Domain.Modules.Leave;
+using SmartOps.Domain.Modules.StaffAttendance;
 
 namespace SmartOps.Infrastructure.Modules.AcademicCalendar.Services;
 
@@ -11,11 +21,28 @@ public sealed class AcademicCalendarService : IAcademicCalendarService
 {
     private readonly IAcademicCalendarRepository _repo;
     private readonly IBranchContext _branchContext;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IUserScopeContext _scope;
+    private readonly IExamRepository _examRepo;
+    private readonly IStaffAttendanceRepository _attendanceRepo;
+    private readonly ILeaveService _leaveService;
 
-    public AcademicCalendarService(IAcademicCalendarRepository repo, IBranchContext branchContext)
+    public AcademicCalendarService(
+        IAcademicCalendarRepository repo,
+        IBranchContext branchContext,
+        ICurrentUserService currentUser,
+        IUserScopeContext scope,
+        IExamRepository examRepo,
+        IStaffAttendanceRepository attendanceRepo,
+        ILeaveService leaveService)
     {
         _repo = repo;
         _branchContext = branchContext;
+        _currentUser = currentUser;
+        _scope = scope;
+        _examRepo = examRepo;
+        _attendanceRepo = attendanceRepo;
+        _leaveService = leaveService;
     }
 
     public async Task<Result<IReadOnlyList<CalendarEventTypeDto>>> GetEventTypesAsync(CancellationToken ct = default)
@@ -368,6 +395,295 @@ public sealed class AcademicCalendarService : IAcademicCalendarService
             NonWorkingDays = nonWorking.OrderBy(d => d).ToList()
         });
     }
+
+    public async Task<Result<MyCalendarMonthDto>> GetMyMonthAsync(
+        int year,
+        int month,
+        Guid? branchId = null,
+        CancellationToken ct = default)
+    {
+        if (month is < 1 or > 12)
+        {
+            return Result<MyCalendarMonthDto>.Failure("Month must be between 1 and 12.");
+        }
+
+        if (year < 2000 || year > 2100)
+        {
+            return Result<MyCalendarMonthDto>.Failure("Year is out of range.");
+        }
+
+        if (!_currentUser.IsAuthenticated || _currentUser.UserId == Guid.Empty)
+        {
+            return Result<MyCalendarMonthDto>.Failure("User is not authenticated.");
+        }
+
+        await _branchContext.EnsureResolvedAsync(ct).ConfigureAwait(false);
+
+        Guid resolvedBranchId;
+        if (branchId is Guid requested && requested != Guid.Empty && _branchContext.HasBranchAccess(requested))
+        {
+            resolvedBranchId = requested;
+        }
+        else if (_branchContext.ActiveBranchId is Guid active)
+        {
+            resolvedBranchId = active;
+        }
+        else if (branchId is Guid fallback && fallback != Guid.Empty)
+        {
+            // BranchContext had no mappings; still allow an explicit school branch from the client.
+            resolvedBranchId = fallback;
+        }
+        else
+        {
+            return Result<MyCalendarMonthDto>.Failure("Active branch is required.");
+        }
+
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+
+        DateOnly from = new(year, month, 1);
+        DateOnly to = from.AddMonths(1).AddDays(-1);
+
+        Guid? employeeId = await _attendanceRepo
+            .GetEmployeeIdByUserIdAsync(_currentUser.UserId, ct)
+            .ConfigureAwait(false);
+
+        bool isStudent = _scope.OwnStudentId.HasValue;
+        // Exams only for students (own class) and teachers (class rights / invigilator) — not admins/other staff.
+        bool includeExams = isStudent
+            || _scope.ScopeType is DataScopeType.Class or DataScopeType.SubjectClass;
+        IReadOnlyList<Guid> allowedClasses = _scope.AllowedClassIds ?? [];
+        bool isGlobal = !_scope.ScopesEnabled || _scope.IsGlobalScope;
+
+        var items = new List<MyCalendarItemDto>();
+
+        // ── Weekend offs (Academic Calendar weekend settings) ──
+        CalendarWeekendSettingEntity? weekend = await _repo
+            .GetWeekendSettingsAsync(resolvedBranchId, ct)
+            .ConfigureAwait(false);
+        for (DateOnly d = from; d <= to; d = d.AddDays(1))
+        {
+            if (!IsWeekendOff(weekend, d))
+            {
+                continue;
+            }
+
+            items.Add(new MyCalendarItemDto
+            {
+                Kind = "weekend",
+                Id = Guid.Empty,
+                Title = "Weekend / Day off",
+                Description = $"{d.DayOfWeek} is configured as an off day for this branch.",
+                StartDate = d,
+                EndDate = d,
+                Color = "#ECEFF1",
+                EventTypeName = "Weekend",
+                IsNonWorkingDay = true,
+                StatusLabel = "Day off"
+            });
+        }
+
+        // ── Holidays / events ──
+        var events = await _repo
+            .GetEventsForRangeAsync(resolvedBranchId, _scope.ActiveAcademicYearId, from, to, ct)
+            .ConfigureAwait(false);
+
+        foreach (CalendarEventDto ev in events)
+        {
+            // Exam-synced spanning events are shown as per-slot exam items below.
+            if (ev.SourceExamId.HasValue && ev.SourceExamId.Value != Guid.Empty)
+            {
+                continue;
+            }
+
+            bool audienceOk = isStudent
+                ? ev.AppliesToStudents
+                : (ev.AppliesToTeachers || ev.AppliesToStaff);
+
+            if (!audienceOk)
+            {
+                continue;
+            }
+
+            if (!isGlobal && !isStudent && ev.ClassIds is { Count: > 0 })
+            {
+                bool overlaps = ev.ClassIds.Any(c => allowedClasses.Contains(c));
+                if (!overlaps)
+                {
+                    continue;
+                }
+            }
+
+            if (isStudent && ev.ClassIds is { Count: > 0 })
+            {
+                bool overlaps = ev.ClassIds.Any(c => allowedClasses.Contains(c));
+                if (!overlaps)
+                {
+                    continue;
+                }
+            }
+
+            string kind = ev.IsNonWorkingDay ? "holiday" : "event";
+            items.Add(new MyCalendarItemDto
+            {
+                Kind = kind,
+                Id = ev.Id,
+                Title = ev.Title,
+                Description = ev.Description,
+                StartDate = ev.StartDate,
+                EndDate = ev.EndDate,
+                Color = ev.Color,
+                EventTypeName = ev.EventTypeName,
+                IsNonWorkingDay = ev.IsNonWorkingDay,
+                ClassNames = ev.ClassNames ?? [],
+                StatusLabel = kind == "holiday" ? "Holiday" : "Event"
+            });
+        }
+
+        // ── Exams (teacher / student only) ──
+        if (includeExams)
+        {
+            IList<ExamScheduleRow> schedules = await _examRepo
+                .GetSchedulesForMyCalendarAsync(
+                    from,
+                    to,
+                    isStudent ? null : employeeId,
+                    allowedClasses,
+                    isGlobalScope: false,
+                    ct)
+                .ConfigureAwait(false);
+
+            foreach (ExamScheduleRow slot in schedules)
+            {
+                items.Add(new MyCalendarItemDto
+                {
+                    Kind = "exam",
+                    Id = slot.Id,
+                    Title = string.IsNullOrWhiteSpace(slot.SubjectName)
+                        ? slot.ExamName
+                        : $"{slot.ExamName} · {slot.SubjectName}",
+                    Description = null,
+                    StartDate = slot.ExamDate,
+                    EndDate = slot.ExamDate,
+                    Color = "#FB8C00",
+                    EventTypeName = "Exam",
+                    IsNonWorkingDay = false,
+                    ClassNames = string.IsNullOrWhiteSpace(slot.ClassName) ? [] : [slot.ClassName],
+                    SubjectName = slot.SubjectName,
+                    StartTime = slot.StartTime,
+                    EndTime = slot.EndTime,
+                    RoomNo = slot.RoomNo,
+                    InvigilatorName = slot.InvigilatorName,
+                    ExamName = slot.ExamName,
+                    StatusLabel = "Exam"
+                });
+            }
+        }
+
+        // ── Own staff attendance + leave ──
+        if (employeeId.HasValue)
+        {
+            var leaveDays = new HashSet<DateOnly>();
+            Result<IList<LeaveListItemDto>> leaveResult = await _leaveService
+                .GetStaffMineAsync(ct)
+                .ConfigureAwait(false);
+            if (leaveResult.IsSuccess && leaveResult.Value is not null)
+            {
+                foreach (LeaveListItemDto leave in leaveResult.Value)
+                {
+                    if (leave.Status is not (LeaveRequestStatus.Approved or LeaveRequestStatus.Submitted))
+                    {
+                        continue;
+                    }
+
+                    DateOnly leaveFrom = leave.FromDate < from ? from : leave.FromDate;
+                    DateOnly leaveTo = leave.ToDate > to ? to : leave.ToDate;
+                    for (DateOnly d = leaveFrom; d <= leaveTo; d = d.AddDays(1))
+                    {
+                        leaveDays.Add(d);
+                        items.Add(new MyCalendarItemDto
+                        {
+                            Kind = "leave",
+                            Id = leave.Id,
+                            Title = leave.LeaveTypeName ?? leave.LeaveTypeLabel ?? "Leave",
+                            Description = leave.StatusLabel,
+                            StartDate = d,
+                            EndDate = d,
+                            Color = "#E3F2FD",
+                            EventTypeName = "Leave",
+                            IsNonWorkingDay = false,
+                            StatusLabel = "Leave"
+                        });
+                    }
+                }
+            }
+
+            IList<StaffAttendanceDayStatusRow> attendanceRows = await _attendanceRepo
+                .GetEmployeeMonthStatusesAsync(employeeId.Value, month, year, ct)
+                .ConfigureAwait(false);
+
+            foreach (StaffAttendanceDayStatusRow row in attendanceRows)
+            {
+                if (leaveDays.Contains(row.AttendanceDate))
+                {
+                    continue;
+                }
+
+                string kind = row.Status switch
+                {
+                    StaffAttendanceStatus.Present => "present",
+                    StaffAttendanceStatus.Absent => "absent",
+                    StaffAttendanceStatus.Late => "late",
+                    StaffAttendanceStatus.HalfDay => "halfday",
+                    _ => "present"
+                };
+
+                items.Add(new MyCalendarItemDto
+                {
+                    Kind = kind,
+                    Id = Guid.Empty,
+                    Title = row.Status.ToDisplayString(),
+                    Description = "Your attendance for this day.",
+                    StartDate = row.AttendanceDate,
+                    EndDate = row.AttendanceDate,
+                    Color = kind switch
+                    {
+                        "present" => "#C8E6C9",
+                        "absent" => "#FFCDD2",
+                        "late" => "#FFE082",
+                        "halfday" => "#B2DFDB",
+                        _ => "#C8E6C9"
+                    },
+                    EventTypeName = "Attendance",
+                    IsNonWorkingDay = false,
+                    StatusLabel = row.Status.ToDisplayString()
+                });
+            }
+        }
+
+        items = items
+            .OrderBy(i => i.StartDate)
+            .ThenBy(i => KindSortOrder(i.Kind))
+            .ThenBy(i => i.StartTime ?? string.Empty)
+            .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Result<MyCalendarMonthDto>.Success(new MyCalendarMonthDto
+        {
+            Year = year,
+            Month = month,
+            Items = items
+        });
+    }
+
+    private static int KindSortOrder(string kind) => kind.ToLowerInvariant() switch
+    {
+        "leave" => 0,
+        "present" or "late" or "halfday" or "absent" => 1,
+        "exam" => 2,
+        "holiday" => 3,
+        "weekend" => 4,
+        _ => 5
+    };
 
     private async Task<Result> ValidateEventDtoAsync(CreateCalendarEventDto dto, CancellationToken ct)
     {

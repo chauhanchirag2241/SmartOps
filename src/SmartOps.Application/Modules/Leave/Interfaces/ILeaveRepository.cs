@@ -22,6 +22,9 @@ public interface ILeaveRepository
     Task<IList<Guid>> GetActiveTeacherUserIdsAsync(CancellationToken ct = default);
     Task<Guid?> GetReportingManagerUserIdAsync(Guid employeeId, CancellationToken ct = default);
     Task<SchoolAdminUserRow?> GetReportingManagerUserAsync(Guid employeeId, CancellationToken ct = default);
+    Task<SchoolAdminUserRow?> GetEmployeeUserByUserIdAsync(Guid userId, CancellationToken ct = default);
+    Task ReplaceHalfDaysAsync(Guid leaveRequestId, IReadOnlyList<LeaveHalfDayEntity> halfDays, CancellationToken ct = default);
+    Task<IList<LeaveHalfDayEntity>> GetHalfDaysAsync(Guid leaveRequestId, CancellationToken ct = default);
     Task<IList<Guid>> GetParentUserIdsForClassAsync(Guid classId, CancellationToken ct = default);
     Task<LeaveDetailRow?> GetDetailRowAsync(Guid id, CancellationToken ct = default);
     Task<IList<LinkedStudentRow>> GetLinkedStudentsForParentAsync(Guid parentUserId, CancellationToken ct = default);
@@ -59,15 +62,19 @@ public class LeaveListRow
     public short? LeaveType { get; set; }
     public Guid? LeaveTypeId { get; set; }
     public string? LeaveTypeName { get; set; }
+    public decimal TotalDays { get; set; }
+    public bool IsHalfDay { get; set; }
     public short Status { get; set; }
     public DateTime CreatedOn { get; set; }
+    public string? Reason { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
+    public string? ApprovedByEmail { get; set; }
+    public string? ApprovedByFirstName { get; set; }
+    public string? ApprovedByLastName { get; set; }
+    public DateTime? ApprovedOn { get; set; }
 }
 
 public sealed class LeaveDetailRow : LeaveListRow
 {
-    public string? Reason { get; set; }
-    public Guid? ApprovedByUserId { get; set; }
-    public string? ApprovedByEmail { get; set; }
-    public DateTime? ApprovedOn { get; set; }
     public string? ApproverRemark { get; set; }
 }

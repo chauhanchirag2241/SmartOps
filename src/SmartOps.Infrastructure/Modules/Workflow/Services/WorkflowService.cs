@@ -99,7 +99,7 @@ public sealed class WorkflowService : IWorkflowService
             LeaveDetailRow? row = await _leaveRepo.GetDetailRowAsync(item.ReferenceId, ct).ConfigureAwait(false);
             if (row is not null)
             {
-                leave = MapLeaveDetail(row);
+                leave = await MapLeaveDetailAsync(row, ct).ConfigureAwait(false);
             }
         }
         else if (item.ReferenceType == WorkflowReferenceType.Notice)
@@ -343,7 +343,10 @@ public sealed class WorkflowService : IWorkflowService
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
 
-        Result deduct = await _leaveBalanceService.DeductForApprovedLeaveAsync(entity, ct).ConfigureAwait(false);
+        // Balance already reserved on submit; this is a no-op when DeductedFromBalance is true.
+        Result deduct = await _leaveBalanceService
+            .DeductForApprovedLeaveAsync(entity, "Leave approved — balance confirmed", ct)
+            .ConfigureAwait(false);
         if (!deduct.IsSuccess)
         {
             return Result<LeaveDetailDto>.Failure(deduct.Error!);
@@ -355,7 +358,7 @@ public sealed class WorkflowService : IWorkflowService
         LeaveDetailRow? row = await _leaveRepo.GetDetailRowAsync(leaveId, ct).ConfigureAwait(false);
         return row is null
             ? Result<LeaveDetailDto>.Failure("Leave request not found.")
-            : Result<LeaveDetailDto>.Success(MapLeaveDetail(row));
+            : Result<LeaveDetailDto>.Success(await MapLeaveDetailAsync(row, ct).ConfigureAwait(false));
     }
 
     private async Task<Result<LeaveDetailDto>> RejectLeaveFromWorkflowAsync(Guid leaveId, string? remark, CancellationToken ct)
@@ -382,13 +385,25 @@ public sealed class WorkflowService : IWorkflowService
         entity.ApprovedOn = SchoolLocalTime.NowDateTime();
         entity.ApproverRemark = remark;
         await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+
+        if (entity.DeductedFromBalance)
+        {
+            Result reverse = await _leaveBalanceService
+                .ReverseForCancelledLeaveAsync(entity, "Leave rejected — balance restored", ct)
+                .ConfigureAwait(false);
+            if (!reverse.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(reverse.Error!);
+            }
+        }
+
         await _workflowRepo.CancelPendingForReferenceAsync(WorkflowReferenceType.LeaveRequest, leaveId, ct)
             .ConfigureAwait(false);
 
         LeaveDetailRow? row = await _leaveRepo.GetDetailRowAsync(leaveId, ct).ConfigureAwait(false);
         return row is null
             ? Result<LeaveDetailDto>.Failure("Leave request not found.")
-            : Result<LeaveDetailDto>.Success(MapLeaveDetail(row));
+            : Result<LeaveDetailDto>.Success(await MapLeaveDetailAsync(row, ct).ConfigureAwait(false));
     }
 
     private async Task CompleteItemAsync(
@@ -527,13 +542,19 @@ public sealed class WorkflowService : IWorkflowService
         return LeaveApprovalModes.AnyOne;
     }
 
-    private static LeaveDetailDto MapLeaveDetail(LeaveDetailRow r)
+    private async Task<LeaveDetailDto> MapLeaveDetailAsync(LeaveDetailRow r, CancellationToken ct)
     {
-        int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
+        decimal days = r.TotalDays > 0
+            ? r.TotalDays
+            : r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
         string? EmployeeName = string.Join(" ", new[] { r.TeacherFirstName, r.TeacherLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         string? studentName = string.Join(" ", new[] { r.StudentFirstName, r.StudentLastName }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
         string? typeLabel = r.LeaveTypeName
             ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
+        IList<LeaveHalfDayEntity> halfDayEntities = await _leaveRepo.GetHalfDaysAsync(r.Id, ct).ConfigureAwait(false);
+        IReadOnlyList<LeaveHalfDayDto> halfDays = halfDayEntities
+            .Select(h => new LeaveHalfDayDto(h.LeaveDate, h.Session))
+            .ToList();
         return new LeaveDetailDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
@@ -553,6 +574,8 @@ public sealed class WorkflowService : IWorkflowService
             r.LeaveTypeId,
             r.LeaveTypeName ?? typeLabel,
             r.Reason,
+            r.IsHalfDay,
+            halfDays,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),
             r.ApprovedByUserId,

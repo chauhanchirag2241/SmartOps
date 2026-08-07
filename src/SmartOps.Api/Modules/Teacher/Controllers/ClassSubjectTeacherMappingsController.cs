@@ -29,7 +29,7 @@ public sealed class ClassSubjectTeacherMappingsController(
 
     [HttpGet("by-class/{classId:guid}")]
     [HttpGet("by-class-group/{classId:guid}")]
-    [Authorize(Policy = MenuPolicies.Teachers.View)]
+    [Authorize(Policy = MenuPolicies.Teachers.ListForTimetableMappings)]
     [ProducesResponseType(typeof(IReadOnlyList<ClassSubjectTeacherMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ClassSubjectTeacherMappingDto>>> GetByClass(
         Guid classId,

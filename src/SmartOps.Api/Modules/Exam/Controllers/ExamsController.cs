@@ -28,9 +28,12 @@ public sealed class ExamsController : ControllerBase
         [FromQuery] Guid? classId,
         [FromQuery] int? status,
         [FromQuery] string? search,
-        CancellationToken ct)
+        [FromQuery] bool inactiveOnly = false,
+        CancellationToken ct = default)
     {
-        var result = await _service.GetExamsAsync(groupId, classId, status, search, ct).ConfigureAwait(false);
+        var result = await _service
+            .GetExamsAsync(groupId, classId, status, search, inactiveOnly, ct)
+            .ConfigureAwait(false);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 

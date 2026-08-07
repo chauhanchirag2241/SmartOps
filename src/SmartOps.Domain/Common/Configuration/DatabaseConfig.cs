@@ -66,6 +66,7 @@ public static class DatabaseConfig
 
     // Employee Module
     public const string TableEmployees = "employees";
+    public const string TableEmployeeShifts = "employeeshifts";
     public const string TableDepartments = "departments";
     public const string TableClassSubjectTeacherMappings = "classsubjectteachermappings";
     public const string TableClassSettings = "classsettings";
@@ -96,6 +97,7 @@ public static class DatabaseConfig
     public const string TableLeaveBalances = "leavebalances";
     public const string TableLeaveLedger = "leaveledger";
     public const string TableLeaveAccrualRuns = "leaveaccrualruns";
+    public const string TableLeaveHalfDays = "leavehalfdays";
     public const string TableWorkflowItems = "workflowitems";
     public const string TableWorkflowItemActions = "workflowitemactions";
 

@@ -598,12 +598,16 @@ WHERE c.id = ANY(@ClassIds)
         Guid? classId,
         int? status,
         string? search,
+        bool inactiveOnly = false,
         CancellationToken ct = default)
     {
         await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
         IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
 
-        var where = new StringBuilder($"e.isactive = true{YearFilter("e")}");
+        var where = new StringBuilder(
+            inactiveOnly
+                ? $"e.isactive = false{YearFilter("e")}"
+                : $"e.isactive = true{YearFilter("e")}");
         var parameters = new DynamicParameters();
         parameters.Add("ScopeAcademicYearId", _scope.ActiveAcademicYearId);
         await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "e", ct)
@@ -615,9 +619,12 @@ WHERE c.id = ANY(@ClassIds)
             parameters.Add("GroupId", groupId.Value);
         }
 
+        string examClassActiveClause = inactiveOnly ? "xc.isactive = false" : "xc.isactive = true";
+
         if (classId.HasValue && classId.Value != Guid.Empty)
         {
-            where.Append($" AND EXISTS (SELECT 1 FROM {Schema}.{DatabaseConfig.TableExamClasses} xc WHERE xc.examid = e.id AND xc.classid = @ClassId AND xc.isactive = true)");
+            where.Append(
+                $" AND EXISTS (SELECT 1 FROM {Schema}.{DatabaseConfig.TableExamClasses} xc WHERE xc.examid = e.id AND xc.classid = @ClassId AND {examClassActiveClause})");
             parameters.Add("ClassId", classId.Value);
         }
 
@@ -642,13 +649,14 @@ WHERE c.id = ANY(@ClassIds)
 
             // Teacher sees an exam when they have a section on the exam, or (for exams
             // still without classes) when their sections fall under the exam group's mapped class groups.
+            // Soft-deleted exams use inactive exam-class rows for the first branch.
             where.Append($"""
                  AND (
                     EXISTS (
                         SELECT 1
                         FROM {Schema}.{DatabaseConfig.TableExamClasses} xc
                         WHERE xc.examid = e.id
-                          AND xc.isactive = true
+                          AND {examClassActiveClause}
                           AND xc.classid = ANY(@ScopeClassIds))
                     OR (
                         NOT EXISTS (
@@ -680,10 +688,11 @@ WHERE c.id = ANY(@ClassIds)
                    e.status::int AS Status,
                    e.resultdeclared AS ResultDeclared,
                    e.description AS Description,
+                   e.isactive AS IsActive,
                    COALESCE((SELECT SUM(mc.maxmarks) FROM {Schema}.{DatabaseConfig.TableExamMarkComponents} mc
-                             WHERE mc.examid = e.id AND mc.isactive = true), 0) AS TotalMaxMarks,
+                             WHERE mc.examid = e.id AND mc.isactive = {(inactiveOnly ? "false" : "true")}), 0) AS TotalMaxMarks,
                    COALESCE((SELECT COUNT(DISTINCT es.subjectid) FROM {Schema}.{DatabaseConfig.TableExamSchedules} es
-                             WHERE es.examid = e.id AND es.isactive = true), 0)::int AS SubjectCount
+                             WHERE es.examid = e.id AND es.isactive = {(inactiveOnly ? "false" : "true")}), 0)::int AS SubjectCount
             FROM {Schema}.{DatabaseConfig.TableExams} e
             LEFT JOIN {Schema}.{DatabaseConfig.TableExamGroups} g ON g.id = e.examgroupid
             WHERE {where}
@@ -716,6 +725,7 @@ WHERE c.id = ANY(@ClassIds)
 
     public async Task<IList<ExamClassRow>> GetExamClassesAsync(
         IReadOnlyCollection<Guid> examIds,
+        bool includeInactive = false,
         CancellationToken ct = default)
     {
         if (examIds.Count == 0)
@@ -740,6 +750,8 @@ WHERE c.id = ANY(@ClassIds)
             parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
         }
 
+        string activeFilter = includeInactive ? "xc.isactive = false" : "xc.isactive = true";
+
         string sql = $"""
             SELECT xc.examid AS ExamId,
                    xc.classid AS ClassId,
@@ -749,7 +761,7 @@ WHERE c.id = ANY(@ClassIds)
             FROM {Schema}.{DatabaseConfig.TableExamClasses} xc
             INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = xc.classid
             INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
-            WHERE xc.examid = ANY(@ExamIds) AND xc.isactive = true{scopeFilter}
+            WHERE xc.examid = ANY(@ExamIds) AND {activeFilter}{scopeFilter}
             ORDER BY cg.classname, c.section;
             """;
 
@@ -1041,6 +1053,94 @@ WHERE c.id = ANY(@ClassIds)
             // (stale/missing mappings were hiding Class 1 schedules for teachers who had rights).
             where.Append(" AND sc.classid = ANY(@ScopeClassIds)");
             parameters.Add("ScopeClassIds", _scope.AllowedClassIds.ToArray());
+        }
+
+        string sql = $"""
+            SELECT sc.id AS Id,
+                   sc.examid AS ExamId,
+                   COALESCE(e.name, '') AS ExamName,
+                   sc.classid AS ClassId,
+                   COALESCE({DashboardClassLabel.DisplayNameSql}, '') AS ClassName,
+                   sc.subjectid AS SubjectId,
+                   COALESCE(s.subjectname, '') AS SubjectName,
+                   sc.examdate AS ExamDate,
+                   sc.starttime AS StartTime,
+                   sc.endtime AS EndTime,
+                   sc.roomno AS RoomNo,
+                   sc.invigilatorid AS InvigilatorId,
+                   CASE WHEN emp.id IS NULL THEN NULL
+                        ELSE TRIM(COALESCE(empu.firstname, '') || ' ' || COALESCE(empu.lastname, ''))
+                   END AS InvigilatorName,
+                   COALESCE((SELECT SUM(mc.maxmarks) FROM {Schema}.{DatabaseConfig.TableExamMarkComponents} mc
+                             WHERE mc.examid = sc.examid AND mc.isactive = true), 0) AS MaxMarks
+            FROM {Schema}.{DatabaseConfig.TableExamSchedules} sc
+            INNER JOIN {Schema}.{DatabaseConfig.TableExams} e ON e.id = sc.examid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClasses} c ON c.id = sc.classid
+            INNER JOIN {Schema}.{DatabaseConfig.TableClassGroups} cg ON cg.id = c.classgroupid
+            INNER JOIN {Schema}.{DatabaseConfig.TableSubjects} s
+                ON s.id = sc.subjectid
+               AND s.isactive = true
+               AND s.classgroupid = c.classgroupid
+            LEFT JOIN {Schema}.{DatabaseConfig.TableEmployees} emp ON emp.id = sc.invigilatorid
+            LEFT JOIN {IdentitySchema}.{DatabaseConfig.TableUsers} empu ON empu.id = emp.userid
+            WHERE {where}
+            ORDER BY sc.examdate, sc.starttime NULLS LAST;
+            """;
+
+        IEnumerable<ExamScheduleRow> rows = await connection.QueryAsync<ExamScheduleRow>(
+                new CommandDefinition(sql, parameters, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<IList<ExamScheduleRow>> GetSchedulesForMyCalendarAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? employeeId,
+        IReadOnlyList<Guid> classIds,
+        bool isGlobalScope,
+        CancellationToken ct = default)
+    {
+        await _scope.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        IDbConnection connection = await Context.GetGlobalConnectionAsync(ct).ConfigureAwait(false);
+
+        var where = new StringBuilder($"sc.isactive = true AND e.isactive = true{YearFilter("e")}");
+        var parameters = new DynamicParameters();
+        parameters.Add("ScopeAcademicYearId", _scope.ActiveAcademicYearId);
+        parameters.Add("From", from);
+        parameters.Add("To", to);
+        await BranchSqlBuilder.AppendActiveBranchFilterAsync(_branchContext, where, parameters, "e", ct)
+            .ConfigureAwait(false);
+
+        where.Append(" AND sc.examdate >= @From AND sc.examdate <= @To");
+
+        if (!isGlobalScope)
+        {
+            var classIdArray = (classIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray();
+            bool hasClasses = classIdArray.Length > 0;
+            bool hasEmployee = employeeId.HasValue && employeeId.Value != Guid.Empty;
+
+            if (!hasClasses && !hasEmployee)
+            {
+                return [];
+            }
+
+            if (hasClasses && hasEmployee)
+            {
+                where.Append(" AND (sc.classid = ANY(@ScopeClassIds) OR sc.invigilatorid = @EmployeeId)");
+                parameters.Add("ScopeClassIds", classIdArray);
+                parameters.Add("EmployeeId", employeeId!.Value);
+            }
+            else if (hasClasses)
+            {
+                where.Append(" AND sc.classid = ANY(@ScopeClassIds)");
+                parameters.Add("ScopeClassIds", classIdArray);
+            }
+            else
+            {
+                where.Append(" AND sc.invigilatorid = @EmployeeId");
+                parameters.Add("EmployeeId", employeeId!.Value);
+            }
         }
 
         string sql = $"""

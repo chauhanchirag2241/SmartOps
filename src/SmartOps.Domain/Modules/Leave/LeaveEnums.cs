@@ -21,3 +21,9 @@ public enum LeaveType : short
     Sick = 2,
     Other = 3
 }
+
+public enum LeaveHalfDaySession : short
+{
+    FirstHalf = 1,
+    SecondHalf = 2
+}

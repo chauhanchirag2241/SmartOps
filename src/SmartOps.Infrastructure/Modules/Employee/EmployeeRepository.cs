@@ -65,8 +65,15 @@ public sealed class EmployeeRepository : BaseRepository, IEmployeeRepository
                 .ConfigureAwait(false);
             employee.UserId = provisionedUserId;
 
-            return await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx)
+            ApplySchedulePersistenceRules(employee);
+
+            var employeeId = await InsertAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx)
                 .ConfigureAwait(false);
+
+            await ReplaceEmployeeShiftsAsync(conn, tx, employeeId, employee.ShiftIds ?? [], cancellationToken)
+                .ConfigureAwait(false);
+
+            return employeeId;
         }).ConfigureAwait(false);
     }
 
@@ -94,6 +101,7 @@ WHERE e.id = @Id{activeFilter}
         }
 
         row.UserTypeCode = UserTypeCodes.GetName(row.UserTypeId) ?? row.UserTypeCode;
+        await AttachShiftScheduleAsync(connection, row, cancellationToken).ConfigureAwait(false);
         return row;
     }
 
@@ -316,8 +324,21 @@ SELECT EXISTS (
                     .ConfigureAwait(false);
             }
 
+            // ShiftIds null = client omitted mappings (legacy) — leave employeeshifts unchanged.
+            // Non-null (including empty) = replace-set; master clears stored times, custom clears mappings.
+            if (employee.ShiftIds is not null)
+            {
+                ApplySchedulePersistenceRules(employee);
+            }
+
             await UpdateAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, employee, tx, "Id")
                 .ConfigureAwait(false);
+
+            if (employee.ShiftIds is not null)
+            {
+                await ReplaceEmployeeShiftsAsync(conn, tx, employee.Id, employee.ShiftIds, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
     }
 
@@ -351,6 +372,113 @@ WHERE id = @EmployeeId AND isactive = true
             await SoftDeleteAsync(conn, Context.OperationalSchema, DatabaseConfig.TableEmployees, id, tx)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+    private static void ApplySchedulePersistenceRules(EmployeeEntity employee)
+    {
+        var shiftIds = (employee.ShiftIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        employee.ShiftIds = shiftIds;
+
+        if (shiftIds.Count > 0)
+        {
+            employee.ShiftStartTime = null;
+            employee.ShiftEndTime = null;
+        }
+    }
+
+    private async Task AttachShiftScheduleAsync(
+        IDbConnection connection,
+        EmployeeEntity employee,
+        CancellationToken cancellationToken)
+    {
+        var schema = Context.OperationalSchema;
+        var shiftIdsSql = $"""
+            SELECT es.shiftid
+            FROM {schema}.{DatabaseConfig.TableEmployeeShifts} es
+            INNER JOIN {schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+            WHERE es.employeeid = @EmployeeId AND es.isactive = true
+            ORDER BY s.displayorder ASC, s.starttime ASC, s.shiftname ASC;
+            """;
+
+        var shiftIds = (await connection.QueryAsync<Guid>(
+                new CommandDefinition(shiftIdsSql, new { EmployeeId = employee.Id }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
+
+        employee.ShiftIds = shiftIds;
+
+        if (shiftIds.Count == 0)
+        {
+            return;
+        }
+
+        var windowSql = $"""
+            SELECT
+                MIN(s.starttime) AS ShiftStartTime,
+                MAX(s.endtime) AS ShiftEndTime
+            FROM {schema}.{DatabaseConfig.TableEmployeeShifts} es
+            INNER JOIN {schema}.{DatabaseConfig.TableShifts} s ON s.id = es.shiftid AND s.isactive = true
+            WHERE es.employeeid = @EmployeeId AND es.isactive = true;
+            """;
+
+        var window = await connection.QuerySingleOrDefaultAsync<ShiftWindowRow>(
+                new CommandDefinition(windowSql, new { EmployeeId = employee.Id }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        if (window is not null)
+        {
+            employee.ShiftStartTime = window.ShiftStartTime;
+            employee.ShiftEndTime = window.ShiftEndTime;
+        }
+    }
+
+    private async Task ReplaceEmployeeShiftsAsync(
+        IDbConnection connection,
+        IDbTransaction tx,
+        Guid employeeId,
+        IReadOnlyList<Guid> shiftIds,
+        CancellationToken cancellationToken)
+    {
+        var schema = Context.OperationalSchema;
+        var table = DatabaseConfig.TableEmployeeShifts;
+        var now = SchoolLocalTime.NowDateTime();
+        var actorId = ResolveUpdateActor();
+
+        var distinctIds = shiftIds.Where(id => id != Guid.Empty).Distinct().ToList();
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                $"""
+                UPDATE {schema}.{table}
+                SET isactive = false,
+                    updatedby = @ActorId,
+                    updatedon = @Now,
+                    versionno = versionno + 1
+                WHERE employeeid = @EmployeeId AND isactive = true;
+                """,
+                new { EmployeeId = employeeId, ActorId = actorId, Now = now },
+                transaction: tx,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        foreach (var shiftId in distinctIds)
+        {
+            var entity = new EmployeeShiftEntity
+            {
+                Id = Guid.NewGuid(),
+                EmployeeId = employeeId,
+                ShiftId = shiftId,
+            };
+            EnsureInsertAudit(entity, now);
+            await InsertAsync(connection, schema, table, entity, tx).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class ShiftWindowRow
+    {
+        public string? ShiftStartTime { get; set; }
+        public string? ShiftEndTime { get; set; }
     }
 
     /// <summary>

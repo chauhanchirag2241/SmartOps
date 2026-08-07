@@ -28,7 +28,7 @@ public sealed class ExamSchedulesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = MenuPolicies.ExamSchedule.Add)]
+    [Authorize(Policy = MenuPolicies.ExamSchedule.CreateOrExamsWrite)]
     [ProducesResponseType(typeof(ExamScheduleItemDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromBody] SaveExamScheduleRequestDto request, CancellationToken ct)
     {
@@ -37,7 +37,7 @@ public sealed class ExamSchedulesController : ControllerBase
     }
 
     [HttpPost("bulk")]
-    [Authorize(Policy = MenuPolicies.ExamSchedule.Add)]
+    [Authorize(Policy = MenuPolicies.ExamSchedule.CreateOrExamsWrite)]
     [ProducesResponseType(typeof(BulkCreateExamSchedulesResultDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> BulkCreate([FromBody] BulkCreateExamSchedulesRequestDto request, CancellationToken ct)
     {

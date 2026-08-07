@@ -37,6 +37,12 @@ public sealed class EmployeesController(
             return BadRequest("School context is required.");
         }
 
+        var scheduleError = ValidateSchedule(request.Schedule);
+        if (scheduleError is not null)
+        {
+            return BadRequest(scheduleError);
+        }
+
         var entity = request.ToEntity();
         if (entity.ReportingManagerId == entity.Id)
         {
@@ -126,6 +132,20 @@ public sealed class EmployeesController(
             return BadRequest("Reporting manager cannot be the same employee.");
         }
 
+        if (employee.ShiftIds is not null)
+        {
+            var scheduleError = ValidateSchedule(new EmployeeScheduleInfo
+            {
+                ShiftIds = employee.ShiftIds,
+                ShiftStartTime = employee.ShiftStartTime,
+                ShiftEndTime = employee.ShiftEndTime,
+            });
+            if (scheduleError is not null)
+            {
+                return BadRequest(scheduleError);
+            }
+        }
+
         await employeeRepository.UpdateEmployeeAsync(employee, cancellationToken).ConfigureAwait(false);
 
         return NoContent();
@@ -179,6 +199,8 @@ public sealed class EmployeesController(
             .ConfigureAwait(false);
 
         employee.PhotoUrl = url;
+        // Do not replace shift mappings on photo-only updates.
+        employee.ShiftIds = null;
         await employeeRepository.UpdateEmployeeAsync(employee, cancellationToken).ConfigureAwait(false);
         return Ok(new { Url = url });
     }
@@ -205,5 +227,35 @@ public sealed class EmployeesController(
         schoolId = Guid.Empty;
         string? raw = tenantProvider.GetCurrentSchoolId();
         return !string.IsNullOrWhiteSpace(raw) && Guid.TryParse(raw, out schoolId);
+    }
+
+    /// <summary>
+    /// Exactly one schedule mode: mapped shift IDs, or custom start/end times.
+    /// </summary>
+    private static string? ValidateSchedule(EmployeeScheduleInfo? schedule)
+    {
+        if (schedule is null)
+        {
+            return "Work schedule is required. Select shift master shifts or enter custom shift times.";
+        }
+
+        var shiftIds = (schedule.ShiftIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        var hasStart = !string.IsNullOrWhiteSpace(schedule.ShiftStartTime);
+        var hasEnd = !string.IsNullOrWhiteSpace(schedule.ShiftEndTime);
+
+        if (shiftIds.Count > 0)
+        {
+            return null;
+        }
+
+        if (hasStart && hasEnd)
+        {
+            return null;
+        }
+
+        return "Select at least one shift from Shift Master, or enter both custom shift start and end times.";
     }
 }

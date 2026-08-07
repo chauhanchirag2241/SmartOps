@@ -80,7 +80,8 @@ public record ExamListItemDto(
     bool ResultDeclared,
     decimal TotalMaxMarks,
     int SubjectCount,
-    IList<ExamClassInfoDto> Classes
+    IList<ExamClassInfoDto> Classes,
+    bool IsActive = true
 );
 
 public record ExamDetailDto(

@@ -8,6 +8,7 @@ public interface ILeaveService
     Task<Result<IList<LeaveListItemDto>>> GetStaffMineAsync(CancellationToken ct = default);
     Task<Result<LeaveDetailDto>> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Result<IList<LeaveApproverDto>>> GetStaffApproversAsync(CancellationToken ct = default);
+    Task<Result<LeaveApplicantDto>> GetStaffApplicantAsync(CancellationToken ct = default);
     Task<Result<LeaveDetailDto>> CreateStaffAsync(CreateLeaveRequestDto request, CancellationToken ct = default);
     Task<Result<LeaveDetailDto>> SubmitStaffAsync(Guid id, CancellationToken ct = default);
     Task<Result<LeaveDetailDto>> CancelAsync(Guid id, CancellationToken ct = default);

@@ -104,6 +104,39 @@ public sealed class WorkingDaysResponseDto
     public IReadOnlyList<int> NonWorkingDays { get; set; } = [];
 }
 
+/// <summary>Mobile/self calendar: scoped holidays, events, exams, attendance, weekends.</summary>
+public sealed class MyCalendarMonthDto
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public IReadOnlyList<MyCalendarItemDto> Items { get; set; } = [];
+}
+
+public sealed class MyCalendarItemDto
+{
+    /// <summary>
+    /// holiday | event | exam | weekend | present | leave | late | halfday | absent
+    /// </summary>
+    public string Kind { get; set; } = "event";
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public string? Color { get; set; }
+    public string? EventTypeName { get; set; }
+    public bool IsNonWorkingDay { get; set; }
+    public IReadOnlyList<string> ClassNames { get; set; } = [];
+    public string? SubjectName { get; set; }
+    public string? StartTime { get; set; }
+    public string? EndTime { get; set; }
+    public string? RoomNo { get; set; }
+    public string? InvigilatorName { get; set; }
+    public string? ExamName { get; set; }
+    /// <summary>Attendance / leave status label for popup (e.g. Present, Half Day).</summary>
+    public string? StatusLabel { get; set; }
+}
+
 public sealed record CreateCalendarEventTypeResponse(string Message, Guid Id);
 public sealed record CreateCalendarEventResponse(string Message, Guid Id);
 

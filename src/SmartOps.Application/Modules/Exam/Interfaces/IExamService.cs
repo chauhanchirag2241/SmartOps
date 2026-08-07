@@ -19,7 +19,13 @@ public interface IExamService
     Task<Result<bool>> DeleteGroupAsync(Guid id, CancellationToken ct = default);
 
     // Exams
-    Task<Result<IList<ExamListItemDto>>> GetExamsAsync(Guid? groupId, Guid? classId, int? status, string? search, CancellationToken ct = default);
+    Task<Result<IList<ExamListItemDto>>> GetExamsAsync(
+        Guid? groupId,
+        Guid? classId,
+        int? status,
+        string? search,
+        bool inactiveOnly = false,
+        CancellationToken ct = default);
     Task<Result<ExamStatsDto>> GetExamStatsAsync(CancellationToken ct = default);
     Task<Result<ExamDetailDto>> GetExamAsync(Guid id, CancellationToken ct = default);
     Task<Result<ExamDetailDto>> CreateExamAsync(SaveExamRequestDto request, CancellationToken ct = default);

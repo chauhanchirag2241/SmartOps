@@ -135,6 +135,27 @@ public sealed class S150_CreateLeaveBalanceTables : Migration
             }
         }
 
+        if (!Schema.Schema(S).Table(DatabaseConfig.TableLeaveHalfDays).Exists())
+        {
+            Create.Table(DatabaseConfig.TableLeaveHalfDays).InSchema(S)
+                .WithColumn("id").AsGuid().PrimaryKey().NotNullable().WithDefaultValue(RawSql.Insert("gen_random_uuid()"))
+                .WithColumn("leaverequestid").AsGuid().NotNullable()
+                .WithColumn("leavedate").AsDate().NotNullable()
+                .WithColumn("session").AsInt16().NotNullable();
+
+            Create.ForeignKey("fk_leavehalfdays_leaverequest")
+                .FromTable(DatabaseConfig.TableLeaveHalfDays).InSchema(S).ForeignColumn("leaverequestid")
+                .ToTable(DatabaseConfig.TableLeaveRequests).InSchema(S).PrimaryColumn("id");
+
+            Create.UniqueConstraint("uq_leavehalfdays_request_date")
+                .OnTable(DatabaseConfig.TableLeaveHalfDays).WithSchema(S)
+                .Columns("leaverequestid", "leavedate");
+
+            Create.Index("ix_leavehalfdays_leaverequestid")
+                .OnTable(DatabaseConfig.TableLeaveHalfDays).InSchema(S)
+                .OnColumn("leaverequestid");
+        }
+
         DateTime now = SchoolLocalTime.NowDateTime();
         Execute.Sql($"""
 INSERT INTO {S}.{DatabaseConfig.TableLeaveTypes}

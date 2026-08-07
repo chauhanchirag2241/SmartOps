@@ -329,11 +329,14 @@ public sealed class ExamService : IExamService
         Guid? classId,
         int? status,
         string? search,
+        bool inactiveOnly = false,
         CancellationToken ct = default)
     {
-        IList<ExamRow> rows = await _repo.GetExamsAsync(groupId, classId, status, search, ct).ConfigureAwait(false);
+        IList<ExamRow> rows = await _repo
+            .GetExamsAsync(groupId, classId, status, search, inactiveOnly, ct)
+            .ConfigureAwait(false);
         IList<ExamClassRow> classes = await _repo
-            .GetExamClassesAsync(rows.Select(r => r.Id).ToList(), ct)
+            .GetExamClassesAsync(rows.Select(r => r.Id).ToList(), includeInactive: inactiveOnly, ct)
             .ConfigureAwait(false);
 
         ILookup<Guid, ExamClassRow> classesByExam = classes.ToLookup(c => c.ExamId);
@@ -350,14 +353,15 @@ public sealed class ExamService : IExamService
             row.SubjectCount,
             classesByExam[row.Id]
                 .Select(c => new ExamClassInfoDto(c.ClassId, c.ClassName, c.ClassGroupId, c.ClassGroupName))
-                .ToList())).ToList();
+                .ToList(),
+            row.IsActive)).ToList();
 
         return Result<IList<ExamListItemDto>>.Success(result);
     }
 
     public async Task<Result<ExamStatsDto>> GetExamStatsAsync(CancellationToken ct = default)
     {
-        IList<ExamRow> rows = await _repo.GetExamsAsync(null, null, null, null, ct).ConfigureAwait(false);
+        IList<ExamRow> rows = await _repo.GetExamsAsync(null, null, null, null, inactiveOnly: false, ct).ConfigureAwait(false);
 
         int ongoing = rows.Count(r => (ExamStatus)r.Status == ExamStatus.Ongoing);
         int completed = rows.Count(r => (ExamStatus)r.Status is ExamStatus.Completed or ExamStatus.ResultDeclared);
@@ -579,7 +583,7 @@ public sealed class ExamService : IExamService
     private async Task<ExamDetailDto> BuildExamDetailAsync(ExamEntity exam, CancellationToken ct)
     {
         ExamGroupEntity? group = await _repo.GetGroupByIdAsync(exam.ExamGroupId, ct).ConfigureAwait(false);
-        IList<ExamClassRow> classes = await _repo.GetExamClassesAsync([exam.Id], ct).ConfigureAwait(false);
+        IList<ExamClassRow> classes = await _repo.GetExamClassesAsync([exam.Id], ct: ct).ConfigureAwait(false);
         IList<ExamMarkComponentEntity> components = await _repo.GetComponentsAsync([exam.Id], ct).ConfigureAwait(false);
 
         return new ExamDetailDto(

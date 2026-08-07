@@ -37,9 +37,18 @@ public interface IExamRepository
         CancellationToken ct = default);
 
     // Exams
-    Task<IList<ExamRow>> GetExamsAsync(Guid? groupId, Guid? classId, int? status, string? search, CancellationToken ct = default);
+    Task<IList<ExamRow>> GetExamsAsync(
+        Guid? groupId,
+        Guid? classId,
+        int? status,
+        string? search,
+        bool inactiveOnly = false,
+        CancellationToken ct = default);
     Task<ExamEntity?> GetExamByIdAsync(Guid id, CancellationToken ct = default);
-    Task<IList<ExamClassRow>> GetExamClassesAsync(IReadOnlyCollection<Guid> examIds, CancellationToken ct = default);
+    Task<IList<ExamClassRow>> GetExamClassesAsync(
+        IReadOnlyCollection<Guid> examIds,
+        bool includeInactive = false,
+        CancellationToken ct = default);
     Task<IList<ExamMarkComponentEntity>> GetComponentsAsync(IReadOnlyCollection<Guid> examIds, CancellationToken ct = default);
     Task<Guid> CreateExamAsync(ExamEntity exam, IList<Guid> classIds, IList<ExamMarkComponentEntity> components, CancellationToken ct = default);
     Task UpdateExamAsync(ExamEntity exam, IList<Guid> classIds, IList<ExamMarkComponentEntity> components, CancellationToken ct = default);
@@ -49,6 +58,17 @@ public interface IExamRepository
 
     // Schedules
     Task<IList<ExamScheduleRow>> GetSchedulesAsync(Guid? examId, Guid? classId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Exam slots in date range for personal calendar: global, allowed classes, or invigilator.
+    /// </summary>
+    Task<IList<ExamScheduleRow>> GetSchedulesForMyCalendarAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? employeeId,
+        IReadOnlyList<Guid> classIds,
+        bool isGlobalScope,
+        CancellationToken ct = default);
     Task<ExamScheduleEntity?> GetScheduleByIdAsync(Guid id, CancellationToken ct = default);
     Task<Guid> CreateScheduleAsync(ExamScheduleEntity schedule, CancellationToken ct = default);
     Task CreateSchedulesAsync(IList<ExamScheduleEntity> schedules, CancellationToken ct = default);
@@ -84,6 +104,7 @@ public sealed class ExamRow
     public string? Description { get; init; }
     public decimal TotalMaxMarks { get; init; }
     public int SubjectCount { get; init; }
+    public bool IsActive { get; init; } = true;
 }
 
 public sealed class ExamClassRow

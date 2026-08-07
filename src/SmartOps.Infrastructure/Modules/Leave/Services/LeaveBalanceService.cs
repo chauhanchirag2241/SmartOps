@@ -127,7 +127,10 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             : Result<LeaveBalanceDto>.Success(MapBalance(row));
     }
 
-    public async Task<Result> DeductForApprovedLeaveAsync(LeaveRequestEntity leave, CancellationToken ct = default)
+    public async Task<Result> DeductForApprovedLeaveAsync(
+        LeaveRequestEntity leave,
+        string? remark = null,
+        CancellationToken ct = default)
     {
         if (leave.RequestType != LeaveRequestType.Staff
             || !leave.EmployeeId.HasValue
@@ -167,7 +170,12 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
         balance.ClosingBalance = balance.OpeningBalance + balance.Accrued - balance.Used + balance.Adjusted;
         await _balanceRepo.UpsertBalanceAsync(balance, ct).ConfigureAwait(false);
 
-        Guid actorId = leave.ApprovedByUserId ?? Guid.Parse(DatabaseConfig.SystemUserId);
+        Guid actorId = _currentUser.IsAuthenticated && _currentUser.UserId != Guid.Empty
+            ? _currentUser.UserId
+            : leave.RequestedByUserId != Guid.Empty
+                ? leave.RequestedByUserId
+                : Guid.Parse(DatabaseConfig.SystemUserId);
+
         await _balanceRepo.InsertLedgerAsync(new LeaveLedgerEntity
         {
             EmployeeId = leave.EmployeeId.Value,
@@ -177,7 +185,7 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             Days = -days,
             BalanceAfter = balance.ClosingBalance,
             ReferenceId = leave.Id,
-            Remark = "Leave approved",
+            Remark = string.IsNullOrWhiteSpace(remark) ? "Leave applied — balance deducted" : remark.Trim(),
             TxnDate = SchoolLocalTime.Today(null),
             CreatedBy = actorId,
             CreatedOn = SchoolLocalTime.NowDateTime()
@@ -188,7 +196,10 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
         return Result.Success();
     }
 
-    public async Task<Result> ReverseForCancelledLeaveAsync(LeaveRequestEntity leave, CancellationToken ct = default)
+    public async Task<Result> ReverseForCancelledLeaveAsync(
+        LeaveRequestEntity leave,
+        string? remark = null,
+        CancellationToken ct = default)
     {
         if (!leave.DeductedFromBalance
             || !leave.EmployeeId.HasValue
@@ -247,7 +258,7 @@ public sealed class LeaveBalanceService : ILeaveBalanceService
             Days = days,
             BalanceAfter = balance.ClosingBalance,
             ReferenceId = leave.Id,
-            Remark = "Leave cancelled — balance restored",
+            Remark = string.IsNullOrWhiteSpace(remark) ? "Leave cancelled — balance restored" : remark.Trim(),
             TxnDate = SchoolLocalTime.Today(null),
             CreatedBy = actorId,
             CreatedOn = SchoolLocalTime.NowDateTime()

@@ -35,6 +35,12 @@ public class EmployeeEntity : AuditableEntity
     public string? BankName { get; set; }
     public string? ShiftStartTime { get; set; }
     public string? ShiftEndTime { get; set; }
+
+    /// <summary>Mapped shift master IDs; transport only — stored in employeeshifts. Null on update = leave mappings unchanged.</summary>
+    [DbIgnore]
+    [TrackHistoryIgnore]
+    public List<Guid>? ShiftIds { get; set; }
+
     public string PortalRoleName { get; set; } = "Teacher";
     public bool PortalAccess { get; set; } = true;
     public Guid? DepartmentId { get; set; }

@@ -36,6 +36,14 @@ public sealed class StaffLeaveController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
+    [HttpGet("applicant")]
+    [Authorize(Policy = MenuPolicies.LeaveStaff.View)]
+    public async Task<IActionResult> GetApplicant(CancellationToken ct)
+    {
+        var result = await _service.GetStaffApplicantAsync(ct).ConfigureAwait(false);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
+    }
+
     [HttpGet("mine")]
     [Authorize(Policy = MenuPolicies.LeaveStaff.View)]
     public async Task<IActionResult> GetMine(CancellationToken ct)

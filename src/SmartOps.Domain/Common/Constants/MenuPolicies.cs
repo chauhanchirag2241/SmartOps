@@ -153,6 +153,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:TEACHERS:Edit";
         public const string Delete = "Menu:TEACHERS:Delete";
         public const string Export = "Menu:TEACHERS:Export";
+
+        /// <summary>TEACHERS.View or CLASS_TIMETABLE.View — CST rows for timetable assign filtering.</summary>
+        public const string ListForTimetableMappings = "Menu:TEACHERS:ViewOrClassTimetableView";
     }
 
     public static class Classes
@@ -434,6 +437,9 @@ public static class MenuPolicies
         public const string Edit = "Menu:EXAM_SCHEDULE:Edit";
         public const string Delete = "Menu:EXAM_SCHEDULE:Delete";
         public const string Export = "Menu:EXAM_SCHEDULE:Export";
+
+        /// <summary>Create schedule slots when user can write Exam Schedule or Exams.</summary>
+        public const string CreateOrExamsWrite = "Menu:EXAM_SCHEDULE:AddOrExamsWrite";
     }
 
     public static class ExamMarksEntry

@@ -67,6 +67,27 @@ public sealed class LeaveService : ILeaveService
         return Result<IList<LeaveApproverDto>>.Success(list);
     }
 
+    public async Task<Result<LeaveApplicantDto>> GetStaffApplicantAsync(CancellationToken ct = default)
+    {
+        Guid userId = RequireUserId();
+        SchoolAdminUserRow? employee = await _leaveRepo.GetEmployeeUserByUserIdAsync(userId, ct).ConfigureAwait(false);
+        if (employee is null)
+        {
+            return Result<LeaveApplicantDto>.Failure("No employee profile linked to your account.");
+        }
+
+        SchoolAdminUserRow? manager = await _leaveRepo
+            .GetReportingManagerUserAsync(employee.Id, ct)
+            .ConfigureAwait(false);
+
+        LeaveApproverDto? reportingManager = manager is null
+            ? null
+            : new LeaveApproverDto(manager.Id, manager.Name);
+
+        return Result<LeaveApplicantDto>.Success(
+            new LeaveApplicantDto(employee.Id, employee.Name, reportingManager));
+    }
+
     public async Task<Result<IList<LeaveListItemDto>>> GetStaffListAsync(
         string? status, Guid? employeeid, DateOnly? from, DateOnly? to, CancellationToken ct = default)
     {
@@ -90,9 +111,13 @@ public sealed class LeaveService : ILeaveService
     public async Task<Result<LeaveDetailDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         LeaveDetailRow? row = await _leaveRepo.GetDetailRowAsync(id, ct).ConfigureAwait(false);
-        return row is null
-            ? Result<LeaveDetailDto>.Failure("Leave request not found.")
-            : Result<LeaveDetailDto>.Success(MapDetail(row));
+        if (row is null)
+        {
+            return Result<LeaveDetailDto>.Failure("Leave request not found.");
+        }
+
+        IList<LeaveHalfDayEntity> halfDays = await _leaveRepo.GetHalfDaysAsync(id, ct).ConfigureAwait(false);
+        return Result<LeaveDetailDto>.Success(MapDetail(row, halfDays));
     }
 
     public async Task<Result<LeaveDetailDto>> CreateStaffAsync(CreateLeaveRequestDto request, CancellationToken ct = default)
@@ -101,6 +126,11 @@ public sealed class LeaveService : ILeaveService
         if (!validation.IsSuccess)
         {
             return Result<LeaveDetailDto>.Failure(validation.Error!);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return Result<LeaveDetailDto>.Failure("Reason is required.");
         }
 
         Guid userId = RequireUserId();
@@ -123,16 +153,36 @@ public sealed class LeaveService : ILeaveService
             leaveTypeId = LeaveTypeSeedIds.CasualLeave;
         }
 
+        LeaveTypeEntity? leaveType = null;
         if (leaveTypeId.HasValue)
         {
-            LeaveTypeEntity? leaveType = await _leaveTypeRepo.GetByIdAsync(leaveTypeId.Value, ct).ConfigureAwait(false);
+            leaveType = await _leaveTypeRepo.GetByIdAsync(leaveTypeId.Value, ct).ConfigureAwait(false);
             if (leaveType is null || !leaveType.IsActive)
             {
                 return Result<LeaveDetailDto>.Failure("Leave type not found.");
             }
         }
 
-        decimal totalDays = request.ToDate.DayNumber - request.FromDate.DayNumber + 1;
+        IReadOnlyList<LeaveHalfDayDto> halfDays = NormalizeHalfDays(
+            request.FromDate,
+            request.ToDate,
+            request.IsHalfDay,
+            request.HalfDays);
+
+        if (request.IsHalfDay)
+        {
+            if (halfDays.Count == 0)
+            {
+                return Result<LeaveDetailDto>.Failure("Select at least one half-day date.");
+            }
+
+            if (leaveType is not null && !leaveType.AllowHalfDay)
+            {
+                return Result<LeaveDetailDto>.Failure("Selected leave type does not allow half day.");
+            }
+        }
+
+        decimal totalDays = CalculateTotalDays(request.FromDate, request.ToDate, request.IsHalfDay, halfDays);
 
         var entity = new LeaveRequestEntity
         {
@@ -144,13 +194,26 @@ public sealed class LeaveService : ILeaveService
             LeaveType = request.LeaveType,
             LeaveTypeId = leaveTypeId,
             TotalDays = totalDays,
-            IsHalfDay = false,
+            IsHalfDay = request.IsHalfDay && halfDays.Count > 0,
             DeductedFromBalance = false,
-            Reason = request.Reason,
+            Reason = request.Reason.Trim(),
             Status = LeaveRequestStatus.Draft
         };
 
         Guid id = await _leaveRepo.CreateAsync(entity, ct).ConfigureAwait(false);
+
+        if (entity.IsHalfDay)
+        {
+            IReadOnlyList<LeaveHalfDayEntity> halfDayEntities = halfDays.Select(h => new LeaveHalfDayEntity
+            {
+                Id = Guid.NewGuid(),
+                LeaveRequestId = id,
+                LeaveDate = h.Date,
+                Session = h.Session
+            }).ToList();
+            await _leaveRepo.ReplaceHalfDaysAsync(id, halfDayEntities, ct).ConfigureAwait(false);
+        }
+
         if (request.SubmitImmediately)
         {
             return await SubmitInternalAsync(id, ct).ConfigureAwait(false);
@@ -175,9 +238,11 @@ public sealed class LeaveService : ILeaveService
             return Result<LeaveDetailDto>.Failure("Leave request cannot be cancelled in its current status.");
         }
 
-        if (entity.Status == LeaveRequestStatus.Approved && entity.DeductedFromBalance)
+        if (entity.DeductedFromBalance)
         {
-            Result reverse = await _balanceService.ReverseForCancelledLeaveAsync(entity, ct).ConfigureAwait(false);
+            Result reverse = await _balanceService
+                .ReverseForCancelledLeaveAsync(entity, "Leave cancelled — balance restored", ct)
+                .ConfigureAwait(false);
             if (!reverse.IsSuccess)
             {
                 return Result<LeaveDetailDto>.Failure(reverse.Error!);
@@ -190,11 +255,7 @@ public sealed class LeaveService : ILeaveService
                 return Result<LeaveDetailDto>.Failure("Leave request not found.");
             }
         }
-        else if (entity.Status is LeaveRequestStatus.Approved)
-        {
-            // Approved but never deducted — allow cancel without reverse
-        }
-        else if (entity.Status is not (LeaveRequestStatus.Draft or LeaveRequestStatus.Submitted))
+        else if (entity.Status is not (LeaveRequestStatus.Draft or LeaveRequestStatus.Submitted or LeaveRequestStatus.Approved))
         {
             return Result<LeaveDetailDto>.Failure("Leave request cannot be cancelled in its current status.");
         }
@@ -317,6 +378,21 @@ public sealed class LeaveService : ILeaveService
             {
                 return Result<LeaveDetailDto>.Failure(balanceCheck.Error!);
             }
+
+            // Reserve balance as soon as leave is pending (submitted).
+            Result deduct = await _balanceService
+                .DeductForApprovedLeaveAsync(entity, "Leave submitted — balance reserved", ct)
+                .ConfigureAwait(false);
+            if (!deduct.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(deduct.Error!);
+            }
+
+            entity = await _leaveRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
+            if (entity is null)
+            {
+                return Result<LeaveDetailDto>.Failure("Leave request not found.");
+            }
         }
 
         entity.Status = LeaveRequestStatus.Submitted;
@@ -326,6 +402,20 @@ public sealed class LeaveService : ILeaveService
         if (!workflow.IsSuccess)
         {
             _logger.LogWarning("Workflow creation failed for leave {Id}: {Error}", id, workflow.Error);
+            if (entity.DeductedFromBalance)
+            {
+                await _balanceService
+                    .ReverseForCancelledLeaveAsync(entity, "Leave submit failed — balance restored", ct)
+                    .ConfigureAwait(false);
+                entity = await _leaveRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
+            }
+
+            if (entity is not null)
+            {
+                entity.Status = LeaveRequestStatus.Draft;
+                await _leaveRepo.UpdateAsync(entity, ct).ConfigureAwait(false);
+            }
+
             return Result<LeaveDetailDto>.Failure(workflow.Error ?? "Failed to create approval tasks.");
         }
 
@@ -363,10 +453,23 @@ public sealed class LeaveService : ILeaveService
 
         if (status == LeaveRequestStatus.Approved)
         {
-            Result deduct = await _balanceService.DeductForApprovedLeaveAsync(entity, ct).ConfigureAwait(false);
+            // Already deducted on submit for balance types; no-op if DeductedFromBalance.
+            Result deduct = await _balanceService
+                .DeductForApprovedLeaveAsync(entity, "Leave approved — balance confirmed", ct)
+                .ConfigureAwait(false);
             if (!deduct.IsSuccess)
             {
                 return Result<LeaveDetailDto>.Failure(deduct.Error!);
+            }
+        }
+        else if (status == LeaveRequestStatus.Rejected && entity.DeductedFromBalance)
+        {
+            Result reverse = await _balanceService
+                .ReverseForCancelledLeaveAsync(entity, "Leave rejected — balance restored", ct)
+                .ConfigureAwait(false);
+            if (!reverse.IsSuccess)
+            {
+                return Result<LeaveDetailDto>.Failure(reverse.Error!);
             }
         }
 
@@ -383,6 +486,47 @@ public sealed class LeaveService : ILeaveService
         return Result.Success();
     }
 
+    private static IReadOnlyList<LeaveHalfDayDto> NormalizeHalfDays(
+        DateOnly from,
+        DateOnly to,
+        bool isHalfDay,
+        IReadOnlyList<LeaveHalfDayDto>? halfDays)
+    {
+        if (!isHalfDay || halfDays is null || halfDays.Count == 0)
+        {
+            return [];
+        }
+
+        return halfDays
+            .Where(h => h.Date >= from && h.Date <= to)
+            .GroupBy(h => h.Date)
+            .Select(g => g.Last())
+            .OrderBy(h => h.Date)
+            .ToList();
+    }
+
+    private static decimal CalculateTotalDays(
+        DateOnly from,
+        DateOnly to,
+        bool isHalfDay,
+        IReadOnlyList<LeaveHalfDayDto> halfDays)
+    {
+        int span = to.DayNumber - from.DayNumber + 1;
+        if (!isHalfDay || halfDays.Count == 0)
+        {
+            return span;
+        }
+
+        HashSet<DateOnly> halfSet = halfDays.Select(h => h.Date).ToHashSet();
+        decimal total = 0m;
+        for (DateOnly d = from; d <= to; d = d.AddDays(1))
+        {
+            total += halfSet.Contains(d) ? 0.5m : 1m;
+        }
+
+        return total;
+    }
+
     private Guid RequireUserId()
     {
         if (!_currentUser.IsAuthenticated || _currentUser.UserId == Guid.Empty)
@@ -395,7 +539,9 @@ public sealed class LeaveService : ILeaveService
 
     private static LeaveListItemDto MapList(LeaveListRow r)
     {
-        int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
+        decimal days = r.TotalDays > 0
+            ? r.TotalDays
+            : r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
         string? typeLabel = r.LeaveTypeName
             ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
         return new LeaveListItemDto(
@@ -418,14 +564,23 @@ public sealed class LeaveService : ILeaveService
             r.LeaveTypeName ?? typeLabel,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),
-            r.CreatedOn);
+            r.CreatedOn,
+            r.IsHalfDay,
+            r.Reason,
+            FormatName(r.ApprovedByFirstName, r.ApprovedByLastName) ?? r.ApprovedByEmail,
+            r.ApprovedOn);
     }
 
-    private static LeaveDetailDto MapDetail(LeaveDetailRow r)
+    private static LeaveDetailDto MapDetail(LeaveDetailRow r, IList<LeaveHalfDayEntity> halfDays)
     {
-        int days = r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
+        decimal days = r.TotalDays > 0
+            ? r.TotalDays
+            : r.ToDate.DayNumber - r.FromDate.DayNumber + 1;
         string? typeLabel = r.LeaveTypeName
             ?? (r.LeaveType.HasValue ? ((LeaveType)r.LeaveType).ToString() : null);
+        IReadOnlyList<LeaveHalfDayDto> halfDayDtos = halfDays
+            .Select(h => new LeaveHalfDayDto(h.LeaveDate, h.Session))
+            .ToList();
         return new LeaveDetailDto(
             r.Id,
             (LeaveRequestType)r.RequestType,
@@ -445,6 +600,8 @@ public sealed class LeaveService : ILeaveService
             r.LeaveTypeId,
             r.LeaveTypeName ?? typeLabel,
             r.Reason,
+            r.IsHalfDay,
+            halfDayDtos,
             (LeaveRequestStatus)r.Status,
             ((LeaveRequestStatus)r.Status).ToString(),
             r.ApprovedByUserId,

@@ -193,7 +193,7 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamStudentRosterRow> roster = await _marksRepo.GetClassStudentsAsync(classId, ct).ConfigureAwait(false);
         Dictionary<Guid, ExamStudentRosterRow> rosterById = roster.ToDictionary(r => r.StudentId);
 
-        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct).ConfigureAwait(false);
+        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct: ct).ConfigureAwait(false);
         string className = classes.FirstOrDefault(c => c.ClassId == classId)?.ClassName ?? string.Empty;
 
         decimal sheetMaxMarks = subjectMax * schedules.Count;
@@ -320,7 +320,7 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamStudentRosterRow> roster = await _marksRepo.GetClassStudentsAsync(result.ClassId, ct).ConfigureAwait(false);
         ExamStudentRosterRow? student = roster.FirstOrDefault(r => r.StudentId == studentId);
 
-        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct).ConfigureAwait(false);
+        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct: ct).ConfigureAwait(false);
         string className = classes.FirstOrDefault(c => c.ClassId == result.ClassId)?.ClassName ?? string.Empty;
 
         IList<ExamResultEntity> allResults = await _resultRepo.GetResultsAsync(examId, result.ClassId, ct).ConfigureAwait(false);
@@ -525,7 +525,7 @@ public sealed class ExamResultService : IExamResultService
         IList<ExamStudentRosterRow> roster = await _marksRepo.GetClassStudentsAsync(classId, ct).ConfigureAwait(false);
         Dictionary<Guid, ExamStudentRosterRow> rosterById = roster.ToDictionary(r => r.StudentId);
 
-        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct).ConfigureAwait(false);
+        IList<ExamClassRow> classes = await _examRepo.GetExamClassesAsync([examId], ct: ct).ConfigureAwait(false);
         string className = classes.FirstOrDefault(c => c.ClassId == classId)?.ClassName ?? string.Empty;
 
         IList<HallTicketScheduleDto> scheduleDtos = schedules

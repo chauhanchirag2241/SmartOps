@@ -89,6 +89,12 @@ public static class AuthorizationExtensions
 
             RegisterAnyPolicy(
                 options,
+                MenuPolicies.Teachers.ListForTimetableMappings,
+                (MenuCodes.Teachers, MenuPermissionAction.View),
+                (MenuCodes.ClassTimetable, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
                 MenuPolicies.FrontOfficeEmployeeLookup,
                 (MenuCodes.Complaints, MenuPermissionAction.View),
                 (MenuCodes.AdmissionInquiries, MenuPermissionAction.View),
@@ -113,6 +119,14 @@ public static class AuthorizationExtensions
                 (MenuCodes.ExamSchedule, MenuPermissionAction.View),
                 (MenuCodes.ExamMarksEntry, MenuPermissionAction.View),
                 (MenuCodes.ExamResults, MenuPermissionAction.View));
+
+            RegisterAnyPolicy(
+                options,
+                MenuPolicies.ExamSchedule.CreateOrExamsWrite,
+                (MenuCodes.ExamSchedule, MenuPermissionAction.Add),
+                (MenuCodes.ExamSchedule, MenuPermissionAction.Edit),
+                (MenuCodes.Exams, MenuPermissionAction.Add),
+                (MenuCodes.Exams, MenuPermissionAction.Edit));
         });
 
         return services;
